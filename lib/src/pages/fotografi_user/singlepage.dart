@@ -345,13 +345,23 @@ class OfferCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(price, style: const TextStyle(fontSize: 14)),
+          Text(
+            price,
+            style: const TextStyle(fontSize: 14),
+          ),
           const SizedBox(height: 12),
-          const Text("Rincian", style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            "Rincian",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 4),
           ...includes.map((item) => Padding(
                 padding: const EdgeInsets.only(bottom: 2),
@@ -360,12 +370,12 @@ class OfferCard extends StatelessWidget {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            height: 44,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
+            child: TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 backgroundColor: Constants.primaryColor,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
               onPressed: () {
@@ -379,8 +389,14 @@ class OfferCard extends StatelessWidget {
                       targetTabIndex: 1,
                     );
               },
-              child: const Text("Atur Jadwal",
-                  style: TextStyle(color: Colors.white)),
+              child: const Text(
+                "Atur Jadwal",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
         ],
