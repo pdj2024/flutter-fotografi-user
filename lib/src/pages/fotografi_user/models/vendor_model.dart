@@ -12,7 +12,7 @@ class VendorModel {
   final int hargaMinPaket;
   final int hargaMaxPaket;
   final DateTime tglCreated;
-  final int idMedia;
+  final String idMedia;
 
   VendorModel({
     required this.noId,
@@ -44,7 +44,7 @@ class VendorModel {
         hargaMaxPaket: json['Harga_Max_Paket'] ?? 0,
         tglCreated:
             DateTime.tryParse(json['Tgl_Created'] ?? '') ?? DateTime(2000),
-        idMedia: json['Id_Media'] ?? 0,
+        idMedia: json['Id_Media'] ??  '',
       );
 
       Map<String, dynamic> toJson() {

@@ -32,15 +32,25 @@ class VendorService {
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((e) => VendorModel.fromJson(e)).toList();
-      } else {
-        throw Exception('Gagal load $entity (${response.statusCode})');
-      }
-    } catch (e) {
-      throw Exception('Error saat mengambil $entity: $e');
+      print('==============================');
+  print('Response Body: ${response.body}');
+  print('Status Code: ${response.statusCode}');
+  print('==============================');
+
+
+     if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+    
+     final List<dynamic> data = json['Data'];
+
+
+      return data.map((e) => VendorModel.fromJson(e)).toList();
+    } else {
+      throw Exception('Gagal load $entity (${response.statusCode})');
     }
+  } catch (e) {
+    throw Exception('Error saat mengambil $entity: $e');
+  }
   }
 
   /// CREATE
