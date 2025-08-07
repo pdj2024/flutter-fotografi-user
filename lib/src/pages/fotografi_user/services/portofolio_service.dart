@@ -15,6 +15,7 @@ class PortofolioService {
   /// GET ALL
   Future<List<PortofolioModel>> getAll({
     String? noId,
+     String? status,
     String? id_customer,
     String? idVendor,
     String? idMedia,
@@ -33,6 +34,7 @@ class PortofolioService {
         '/$controller/getAll',
         queryParameters: {
           if (noId != null) 'no_id': noId,
+           if (status != null) 'status': status,
           if (id_customer != null) 'id_customer': id_customer,
           if (idVendor != null) 'id_vendor': idVendor,
           if (idMedia != null) 'id_media': idMedia,

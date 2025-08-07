@@ -20,7 +20,7 @@ class ApiClient {
   /// GET request
   Future<http.Response> get(
     String path, {
-    Map<String, String>? queryParameters,
+    Map<String,  dynamic>? queryParameters,
   }) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
     final headers = await _headers();

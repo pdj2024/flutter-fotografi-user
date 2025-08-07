@@ -15,40 +15,44 @@ class PaketService {
 
   /// GET ALL
   Future<List<PaketModel>> getAll({
-    String? noId,
-    String? namaPaket,
-    String? idVendor,
-    int? hargaMin,
-    int? hargaMax,
-    String? status,
-    String? orderBy,
-    String? orderDir,
-  }) async {
-    try {
-      final response = await apiClient.get(
-        '/$controller/getAll',
-        queryParameters: {
-          if (noId != null) 'no_id': noId,
-          if (namaPaket != null) 'nama_paket': namaPaket,
-          if (idVendor != null) 'id_vendor': idVendor,
-          if (hargaMin != null) 'harga_min': hargaMin.toString(),
-          if (hargaMax != null) 'harga_max': hargaMax.toString(),
-          if (status != null) 'status': status,
-          if (orderBy != null) 'orderBy': orderBy,
-          if (orderDir != null) 'orderDir': orderDir,
-        },
-      );
+  String? noId,
+  String? namaPaket,
+  String? idVendor,
+  int? hargaMin,
+  int? hargaMax,
+  String? status,
+  String? orderBy,
+  String? orderDir,
+  List<String>? idList, // ✅ Tambahkan ini
+}) async {
+  try {
+    final response = await apiClient.get(
+      '/$controller/getAll',
+      queryParameters: {
+        if (noId != null) 'no_id': noId,
+        if (namaPaket != null) 'nama_paket': namaPaket,
+        if (idVendor != null) 'id_vendor': idVendor,
+        if (hargaMin != null) 'harga_min': hargaMin.toString(),
+        if (hargaMax != null) 'harga_max': hargaMax.toString(),
+        if (status != null) 'status': status,
+        if (orderBy != null) 'orderBy': orderBy,
+        if (orderDir != null) 'orderDir': orderDir,
+        if (idList != null && idList.isNotEmpty)
+          'idList': idList, // ✅ biarkan ini list, dio akan handle jadi idList=..&idList=..
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((e) => PaketModel.fromJson(e)).toList();
-      } else {
-        throw Exception('Gagal load $entity (${response.statusCode})');
-      }
-    } catch (e) {
-      throw Exception('Error saat mengambil $entity: $e');
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => PaketModel.fromJson(e)).toList();
+    } else {
+      throw Exception('Gagal load $entity (${response.statusCode})');
     }
+  } catch (e) {
+    throw Exception('Error saat mengambil $entity: $e');
   }
+}
+
 
   /// CREATE
   Future<void> create(PaketModel model) async {
