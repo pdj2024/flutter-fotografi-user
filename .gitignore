@@ -1,0 +1,71 @@
+# ====================================
+# Flutter Project Git Ignore Template
+# ====================================
+
+# 1. General Unwanted Files
+*.log
+*.swp
+.DS_Store
+.history
+.svn/
+migrate_working_dir/
+
+# 2. IDEs
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# Atom
+.atom/
+
+# 3. Dart & Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+.metadata
+generated_plugin_registrant.dart
+
+# 4. Dependency Lock
+# Do NOT ignore pubspec.lock for apps!
+# (Keep this file to ensure consistent dependency versions across all machines)
+
+# 5. Build Output
+build/
+ios/Flutter/.last_build_id
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+ios/.symlinks/
+ios/Pods/
+ios/.dart_tool/
+
+# Optional platforms (if using multiplatform support)
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# 6. Symbolication & Obfuscation Files
+app.*.symbols
+app.*.map.json
+
+# 7. Android-specific
+android/local.properties
+android/key.properties
+
+# 8. OS-specific trash
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+._*
+.Spotlight-V100
+.Trashes

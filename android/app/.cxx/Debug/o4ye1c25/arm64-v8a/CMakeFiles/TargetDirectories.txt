@@ -1,0 +1,2 @@
+D:/FlutterPapi/User Fotografi/Mpj/mpjnew/android/app/.cxx/Debug/o4ye1c25/arm64-v8a/CMakeFiles/edit_cache.dir
+D:/FlutterPapi/User Fotografi/Mpj/mpjnew/android/app/.cxx/Debug/o4ye1c25/arm64-v8a/CMakeFiles/rebuild_cache.dir

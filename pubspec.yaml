@@ -1,0 +1,97 @@
+name: mpjnew
+description: "Sales Order"
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  sqflite:
+  connectivity_plus: ^5.0.1
+  fluttertoast:
+  multiselect:
+
+  date_format: ^2.0.4
+
+  nil: ^1.1.1
+
+  # On - Off Switch
+  flutter_switch: ^0.3.2
+
+  # Unique ID
+  uuid: ^4.2.1
+
+  # For Formating Numbers
+  intl: ^0.19.0
+  # intl: ^0.20.2
+  decimal: ^3.0.2
+  flutter_masked_text2: ^0.9.1
+
+  firebase_core: ^3.2.0
+
+  provider: ^6.1.2
+  saver_gallery: ^4.0.1
+  device_info_plus: ^9.1.2
+
+  # midtrans_sdk: ^0.4.0
+  midtrans_sdk: 1.0.0
+  fl_chart: ^0.68.0
+  shimmer: ^3.0.0
+  shared_preferences: ^2.2.2
+  dropdown_search: ^5.0.3
+  photo_manager: ^3.0.0
+  video_player: ^2.8.1
+
+  cached_network_image:
+
+  # For Firestore
+  cloud_firestore:
+
+  flutter:
+    sdk: flutter
+
+  flutter_localizations:
+    sdk: flutter
+
+  google_maps_flutter: ^2.5.0
+  geolocator: ^13.0.1
+  geocoding: ^3.0.0
+
+  #image_gallery_saver: ^2.0.3
+
+  firebase_storage: ^12.1.1
+  permission_handler: ^11.0.1
+  # camera: ^0.5.7+2
+  image_cropper: ^9.1.0
+  image_picker: ^1.0.4
+  dotted_border:
+  image: ^4.1.3
+  path_provider:
+  path:
+
+  cupertino_icons: ^1.0.8
+  firebase_auth: ^5.1.2
+  google_sign_in: ^6.1.6
+  font_awesome_flutter:
+  cloud_firestore_web: ^4.3.2
+  connectivity_plus_web: ^1.2.5
+  firebase_messaging:
+
+  video_editor: ^3.0.0
+  fraction:
+  http_parser:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+# The following section is specific to Flutter packages.
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/

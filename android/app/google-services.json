@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "1017834593569",
+    "project_id": "fotografi-01",
+    "storage_bucket": "fotografi-01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1017834593569:android:c4c80fc89e2afe87d2b260",
+        "android_client_info": {
+          "package_name": "fotografi.pdj01"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1017834593569-3t4720meijgp7i3jv3f94q3hvin5pkmi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "fotografi.pdj01",
+            "certificate_hash": "ae665918b662aafa8fafa2f6e5cce7750a7a9af0"
+          }
+        },
+        {
+          "client_id": "1017834593569-pfnuq1ja43vv14ua1tm1ga72kvbvds58.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "fotografi.pdj01",
+            "certificate_hash": "d15a130fb3b24aca529593fec626bc19f54bf3b5"
+          }
+        },
+        {
+          "client_id": "1017834593569-vdlo9ngapn8u46n5quecvipas6dov9du.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDt1lilE-WWVrKgb_suC-Bus3WevHAED0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1017834593569-lb4aqlsc67kcbajdotroqdrkseb4bisl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
