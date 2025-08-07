@@ -128,6 +128,8 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         _buildVendorHeader(portofolioData!),
                         _buildImage(portofolioData!),
                         _buildLikeSaveRow(),
+                       // ✅ Sembunyikan likes jika null atau 0
+                      if (portofolioData!['Likes'] != null && portofolioData!['Likes'] != 0)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
@@ -135,7 +137,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         if (isLoadingPaket)
                           const Center(child: CircularProgressIndicator())
                         else if (errorPaket != null)
@@ -147,7 +149,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         else if (paketList.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: Text("Belum ada paket aktif yang tersedia."),
+                            child: Text(""),
                           )
                         else
                           ...paketList.map((paket) => OfferCard(
@@ -209,13 +211,18 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(width: 6),
-                  const Icon(Icons.star, color: Colors.amber, size: 16),
-                  const SizedBox(width: 2),
-                  Text(
-                    (data['Rating_Vendor'] ?? 0).toString(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                 // Tambahkan rating hanya jika tidak null dan tidak 0
+                    if (data['Rating_Vendor'] != null && data['Rating_Vendor'] != 0) ...[
+                      const Icon(Icons.star, color: Colors.amber, size: 16),
+                      const SizedBox(width: 2),
+                      Text(
+                        data['Rating_Vendor'].toString(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
                 ],
               ),
             ),
