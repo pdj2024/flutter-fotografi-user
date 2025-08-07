@@ -6,11 +6,11 @@ import '../providers/constants.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
 
-
 import 'fotographerbio.dart';
 import 'models/portofolio_model.dart';
-import 'providers/paket_provider.dart';
-import 'providers/portofolio_provider.dart';
+import 'models/paket_model.dart';
+import 'services/portofolio_service.dart';
+import 'services/paket_service.dart';
 import 'single_chat.dart';
 
 class SinglePostPage extends StatefulWidget {
@@ -28,46 +28,65 @@ class _SinglePostPageState extends State<SinglePostPage> {
   final ScrollController _scrollController = ScrollController();
 
   Map<String, dynamic>? portofolioData;
+  List<PaketModel> paketList = [];
+
   bool isLoading = true;
+  bool isLoadingPaket = false;
   String? error;
+  String? errorPaket;
 
   Future<void> _fetchData() async {
-  setState(() {
-    isLoading = true;
-    error = null;
-  });
+    setState(() {
+      isLoading = true;
+      error = null;
+      paketList.clear();
+      errorPaket = null;
+    });
 
-  try {
-    final List<PortofolioModel> dataList =
-    await context.read<PortofolioProvider>().service.getAll(noId: widget.noId, status: 'aktif');
+    try {
+      final portofolioDataList = await PortofolioService().getAll(
+            noId: widget.noId,
+            status: "aktif",
+          );
 
-    if (dataList.isNotEmpty) {
-      portofolioData = dataList[0].toJson(); // konversi ke Map jika kamu butuh akses by key
+      if (portofolioDataList.isEmpty) {
+        error = "Portofolio tidak ditemukan.";
+        return;
+      }
 
-     final idPaketList = List<String>.from(portofolioData?['Id_Paket'] ?? []);
+      final portofolio = portofolioDataList.first;
+      portofolioData = portofolio.toJson();
+
+      final List<String> idPaketList = List<String>.from(portofolio.idPaket ?? []);
 
       if (idPaketList.isNotEmpty) {
-        await context.read<PaketProvider>().service.getAll(
-          idList: idPaketList,
-          status: 'aktif',
-        );
-}
+        setState(() {
+          isLoadingPaket = true;
+        });
 
+        try {
+          final paketData = await PaketService().getAll(
+                idList: idPaketList,
+                status: "aktif",
+              );
 
-    } else {
-      error = 'Portofolio tidak ditemukan.';
+          setState(() {
+            paketList = paketData;
+          });
+        } catch (e) {
+          errorPaket = "Gagal memuat paket: $e";
+        } finally {
+          isLoadingPaket = false;
+        }
+      }
+    } catch (e) {
+      error = "Terjadi kesalahan saat memuat data. $e";
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
-
-
-  } catch (e) {
-    error = 'Terjadi kesalahan saat memuat data.';
-  } finally {
-    setState(() {
-      isLoading = false;
-    });
   }
-}
-
 
   @override
   void initState() {
@@ -83,16 +102,16 @@ class _SinglePostPageState extends State<SinglePostPage> {
 
   @override
   Widget build(BuildContext context) {
-    final paketProvider = context.watch<PaketProvider>();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
         leading: CustomBackButton(),
-        title: const Text("Portofolio",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Portofolio",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -111,43 +130,40 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         _buildLikeSaveRow(),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text("${portofolioData!['Likes']} likes",
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text(
+                            "${portofolioData!['Likes']} likes",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(height: 12),
-                        if (paketProvider.isLoading)
+                        if (isLoadingPaket)
                           const Center(child: CircularProgressIndicator())
-                        else if (paketProvider.error != null)
+                        else if (errorPaket != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              "Gagal memuat paket: ${paketProvider.error}",
-                              style: const TextStyle(color: Colors.red),
-                            ),
+                            child: Text(errorPaket!,
+                                style: const TextStyle(color: Colors.red)),
                           )
-                        else if (paketProvider.paketList.isEmpty)
+                        else if (paketList.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(""),
+                            child: Text("Belum ada paket aktif yang tersedia."),
                           )
                         else
-                          ...paketProvider.paketList.map((paket) {
-                            return OfferCard(
-                              title: paket.nama_paket,
-                              price: Constants.formatCurrency(paket.harga),
-                              includes: [
-                                if (paket.rincian.isNotEmpty) paket.rincian,
-                                "Aktif: ${paket.aktif ? 'Ya' : 'Tidak'}",
-                              ],
-                            );
-                          }).toList(),
+                          ...paketList.map((paket) => OfferCard(
+                                title: paket.nama_paket,
+                                price: Constants.formatCurrency(paket.harga),
+                                includes: [
+                                  if (paket.rincian.isNotEmpty) paket.rincian,
+                                  "Aktif: ${paket.aktif ? 'Ya' : 'Tidak'}",
+                                ],
+                              )),
                         const SizedBox(height: 20),
                       ],
                     ),
                   ),
                 ),
-      floatingActionButton: (!isLoading &&
-              paketProvider.paketList.length > 1)
+      floatingActionButton: (!isLoading && paketList.length > 1)
           ? FloatingActionButton(
               onPressed: _fetchData,
               backgroundColor: Constants.primaryColor,
@@ -218,9 +234,10 @@ class _SinglePostPageState extends State<SinglePostPage> {
                 context.read<NavigationProvider>().navigateToPage(
                       context,
                       SingleChat(
-                          receiverUserName: data['Username_Vendor'] ?? '',
-                          receiverEmail: "",
-                          receiverID: data['Id_Vendor']),
+                        receiverUserName: data['Username_Vendor'] ?? '',
+                        receiverEmail: "",
+                        receiverID: data['Id_Vendor'],
+                      ),
                       targetTabIndex: 1,
                     );
               },
@@ -348,9 +365,10 @@ class OfferCard extends StatelessWidget {
                 context.read<NavigationProvider>().navigateToPage(
                       context,
                       SingleChat(
-                          receiverUserName: 'helooo',
-                          receiverEmail: "hello@gmail.com",
-                          receiverID: '123'),
+                        receiverUserName: 'helooo',
+                        receiverEmail: "hello@gmail.com",
+                        receiverID: '123',
+                      ),
                       targetTabIndex: 1,
                     );
               },

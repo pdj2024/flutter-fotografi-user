@@ -42,6 +42,12 @@ class PaketService {
       },
     );
 
+    print('==============================');
+  print('Response Body: ${response.body}');
+  print('Status Code: ${response.statusCode}');
+  print('==============================');
+
+
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => PaketModel.fromJson(e)).toList();
