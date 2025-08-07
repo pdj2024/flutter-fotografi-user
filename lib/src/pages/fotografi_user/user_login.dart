@@ -94,36 +94,19 @@ class _UserLoginState extends State<UserLogin> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 30),
-                      Image.network(
-                        context.read<NavigationProvider>().ambilGambar(
-                            'ae07e42b-33e3-4bfa-837f-7227bf92fe93-camera_icon_transparent.png',
-                            umum: true),
+                       Image.asset(
+                        'assets/camera_icon_transparent.png',
                         height: availableHeight * 0.07,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Icon(Icons.camera_alt,
-                              size: availableHeight * 0.07, color: Colors.grey);
-                        },
                       ),
                       const SizedBox(height: 20),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0),
-                        child: Image.network(
-                          context.read<NavigationProvider>().ambilGambar(
-                              '5595a36d-1307-4a11-83d7-247e5974139b-user_login_image.png',
-                              umum: true),
+                        child: Image.asset(
+                          'assets/user_login_image.png',
                           width: screenWidth,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: screenWidth,
-                              height: screenWidth * 0.6, // misal 3:2 ratio
-                              color: Colors.grey[300],
-                              child: const Center(
-                                  child: Icon(Icons.broken_image,
-                                      size: 48, color: Colors.grey)),
-                            );
-                          },
                         ),
+                        
                       ),
                       const SizedBox(height: 30),
                       Column(
@@ -156,16 +139,10 @@ class _UserLoginState extends State<UserLogin> {
                                 tabIndex, noIdPortofolio, noIdVendor);
                                 
                           },
-                          icon: Image.network(
-                            context.read<NavigationProvider>().ambilGambar(
-                                '6642a042-f49a-4f1a-bca7-543457859644-google_icon.png',
-                                umum: true),
-                            height: 24,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(Icons.account_circle,
-                                  size: 24, color: Colors.grey);
-                            },
-                          ),
+                           icon: Image.asset(
+                              'assets/google_icon.png',
+                              height: 24,
+                            ),
                           label: const Text(
                             'Masuk dengan Gmail',
                             style: TextStyle(fontSize: 16, color: Colors.black),

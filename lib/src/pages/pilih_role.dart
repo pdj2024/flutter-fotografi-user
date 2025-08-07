@@ -33,16 +33,16 @@ class PilihRole extends StatelessWidget {
             final imageHeight = availableHeight * 0.07;
             final spacingAfterImage = availableHeight * 0.07;
             final cardHeight = availableHeight * 0.48;
-             final String imgUrl = context.read<NavigationProvider>().ambilGambar('camera_icon_transparent.png');
+             final String imgUrl = 'assets/camera_icon_transparent.png';
 
             return Column(
               children: [
                 const SizedBox(height: 30),
-              Image.network(
-  imgUrl,
-  height: imageHeight,
-),
-
+             
+                  Image.asset(
+                        imgUrl,
+                        height: imageHeight,
+                      ),
                 SizedBox(height: spacingAfterImage),
                 const Text(
                   'Pilih Peran Anda',
@@ -57,7 +57,7 @@ class PilihRole extends StatelessWidget {
                   children: [
                     _buildRoleCard(
                        context: context,
-                      image: 'fotografer_editted.jpg',
+                      image: 'assets/fotografer_editted.jpg',
                       title: 'Sebagai\nFotografer',
                       width: cardWidth,
                       height: cardHeight,
@@ -76,7 +76,7 @@ class PilihRole extends StatelessWidget {
                     SizedBox(width: spacing),
                     _buildRoleCard(
                       context: context,
-                      image: 'family3.png',
+                      image: 'assets/family3.png',
                       title: 'Sebagai\nPengguna',
                       width: cardWidth,
                       height: cardHeight,
@@ -143,7 +143,7 @@ class PilihRole extends StatelessWidget {
     required double height,
     required VoidCallback onTap,
   }) {
-    final String imgUrl = context.read<NavigationProvider>().ambilGambar(image);
+    final String imgUrl = image; 
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -152,7 +152,7 @@ class PilihRole extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           image: DecorationImage(
-            image: NetworkImage(imgUrl),
+            image: AssetImage(image),
             fit: BoxFit.cover,
           ),
         ),
