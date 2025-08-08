@@ -422,7 +422,7 @@ class _SearchPageState extends State<SearchPage> {
     String noId,
     String idVendor,
   ) {
-    final imgUrl = '${Constants.baseUrl}/api/media/${idVendor}/${imagePath}';
+    final imgUrl = '$imagePath';
     // final String imgUrl =
     //     context.read<NavigationProvider>().ambilGambar(imagePath);
     final String imgAvatarUrl =
@@ -549,8 +549,8 @@ class _SearchPageState extends State<SearchPage> {
     final vendorList = vendorProvider.vendorList;
 
 // KATEGORI & KOTA dari semua vendor
-    final categories = kategoriList.map((v) => v.nama_kategori).toList();
-    final locations = vendorList.map((v) => v.kota).toList();
+    // final categories = kategoriList.map((v) => v.nama_kategori).toList();
+    // final locations = vendorList.map((v) => v.kota).toList();
 
     // Fotografer dari portofolio yang sedang tampil
     final photographers = portofolios
@@ -564,24 +564,7 @@ class _SearchPageState extends State<SearchPage> {
               'rating': e.ratingVendor.toString(),
             })
         .toList();
-    // final kategoriIdSet = portofolios.map((e) => e.idKategori).toSet();
-    // final categories = kategoriIdSet
-    //     .map((id) => kategoriNameFromId(id, kategoriList))
-    //     .where((nama) => nama.isNotEmpty)
-    //     .toList();
-
-    // final locations = portofolios.map((e) => e.kota).toSet().toList();
-
-    // final photographers = portofolios
-    //     .map((e) => {
-    //           'name': e.usernameVendor,
-    //           'avatar': e.idMediaVendor.toString(),
-    //           'image': e.idMedia.toString(),
-    //           'noId': e.noId.toString(),
-    //           'idVendor': e.idVendor.toString(),
-    //         })
-    //     .toSet()
-    //     .toList();
+   
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -776,9 +759,9 @@ class _SearchPageState extends State<SearchPage> {
               if (_showFilterOverlay)
                 Positioned.fill(
                   child: FilterOverlay(
-                    categories: categories,
-                    photographers: photographers,
-                    locations: locations,
+                    // categories: categories,
+                    // photographers: photographers,
+                    // locations: locations,
                     selectedCategory: tempFilters['category'] ?? '',
                     selectedLocation: tempFilters['location'] ?? '',
                     selectedPhotographer: tempFilters['photographer'] ?? '',

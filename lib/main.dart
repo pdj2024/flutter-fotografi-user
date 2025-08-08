@@ -6,6 +6,7 @@ import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
+
 import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
@@ -61,6 +62,11 @@ void main() async {
           ),
         ),
        
+       
+        
+
+
+
         ChangeNotifierProvider(
           create: (_) => KategoriProvider(
             service: KategoriService(),
