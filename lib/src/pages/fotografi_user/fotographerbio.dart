@@ -141,8 +141,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                         backgroundColor: Colors.grey[200],
                         child: ClipOval(
                           child: CachedNetworkImage(
-                            imageUrl: NavigationProvider().ambilGambar(
-                                vendor!.idMedia.toString()),
+                            imageUrl: vendor!.id_media.toString(),
                             width: 60,
                             height: 60,
                             fit: BoxFit.cover,
@@ -172,27 +171,33 @@ class _PhotographerBioState extends State<PhotographerBio> {
                           ],
                         ),
                       ),
-                      Row(
-                        children: [
-                          const Icon(Icons.star,
-                              color: Colors.amber, size: 18),
-                          const SizedBox(width: 4),
-                          Text(
-                            vendor!.rating.toString(),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                    vendor?.rating != null && vendor!.rating! > 0
+  ? Row(
+      children: [
+        const Icon(Icons.star, color: Colors.amber, size: 18),
+        const SizedBox(width: 4),
+        Text(
+          vendor!.rating!.toString(), // Sudah pasti tidak null
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ],
+    )
+  : const SizedBox.shrink(),
+
+
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Harga Min Paket: ${Constants.formatCurrency(vendor!.hargaMinPaket)}\n"
-                    "Harga Max Paket: ${Constants.formatCurrency(vendor!.hargaMaxPaket)}",
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.black87),
-                  ),
+                  if (vendor?.deskripsi_bio != null && vendor!.deskripsi_bio!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        vendor!.deskripsi_bio!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+
                   const SizedBox(height: 20),
 
                   // Tombol Aksi
@@ -219,7 +224,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                     ratingVendor: vendor!.rating,
                                     idVendor: vendor!.noId,
                                     fotoProfil:
-                                        vendor!.idMedia.toString(),
+                                        vendor!.id_media.toString(),
                                   ),
                                 ),
                               );

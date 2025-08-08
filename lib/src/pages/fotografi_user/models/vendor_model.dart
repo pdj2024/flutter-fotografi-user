@@ -12,7 +12,8 @@ class VendorModel {
   final int hargaMinPaket;
   final int hargaMaxPaket;
   final DateTime tglCreated;
-  final String idMedia;
+  final String id_media;
+  final String deskripsi_bio;
 
   VendorModel({
     required this.noId,
@@ -26,7 +27,8 @@ class VendorModel {
     required this.hargaMinPaket,
     required this.hargaMaxPaket,
     required this.tglCreated,
-    required this.idMedia,
+    required this.id_media,
+    required this.deskripsi_bio,
   });
 
   factory VendorModel.fromJson(Map<String, dynamic> json) => VendorModel(
@@ -44,7 +46,8 @@ class VendorModel {
         hargaMaxPaket: json['Harga_Max_Paket'] ?? 0,
         tglCreated:
             DateTime.tryParse(json['Tgl_Created'] ?? '') ?? DateTime(2000),
-        idMedia: json['Id_Media'] ??  '',
+        id_media: json['Id_Media'] ??  '',
+         deskripsi_bio: json['Deskripsi_Bio'] ??  '',
       );
 
       Map<String, dynamic> toJson() {
@@ -60,7 +63,8 @@ class VendorModel {
     'Harga_Min_Paket': hargaMinPaket,
     'Harga_Max_Paket': hargaMaxPaket,
     'Tgl_Created': tglCreated.toIso8601String(),
-    'Id_Media': idMedia,
+    'Id_Media': id_media,
+    'Deskripsi_Bio': deskripsi_bio,
   };
 }
 
