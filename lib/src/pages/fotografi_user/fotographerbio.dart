@@ -33,6 +33,9 @@ class _PhotographerBioState extends State<PhotographerBio> {
   String? errorVendor;
   String? errorPorto;
 
+  String notFoundUsername = 'notfound';
+
+
   VendorModel? vendor;
   List<PortofolioModel> portofolioList = [];
 
@@ -57,10 +60,27 @@ class _PhotographerBioState extends State<PhotographerBio> {
         status: 'aktif',
       );
 
-      setState(() {
-        vendor = vendorData.isNotEmpty ? vendorData.first : null;
-        isLoadingVendor = false;
-      });
+    setState(() {
+  vendor = vendorData.isNotEmpty
+      ? vendorData.first
+      : VendorModel(
+          noId: widget.idVendor,
+          userName: notFoundUsername,
+          namaDisplay: 'Username Not Found',
+          email: '',
+          kota: '-',
+          rating: 0,
+          portofolio: [],
+          paket: [],
+          hargaMinPaket: 0,
+          hargaMaxPaket: 0,
+          tglCreated: DateTime(2000), // atau DateTime.now()
+          id_media: '',
+          deskripsi_bio: '',
+        );
+  isLoadingVendor = false;
+});
+
     } catch (e) {
       setState(() {
         errorVendor = e.toString();
@@ -201,6 +221,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                   const SizedBox(height: 20),
 
                   // Tombol Aksi
+                    if (vendor?.userName != notFoundUsername) ...[
                   Row(
                     children: [
                       Expanded(
@@ -218,7 +239,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => PilihanPaket(
-                                    namaVendor: vendor!.namaDisplay,
+                                    namaVendor: vendor!.namaDisplay                                                                                                                                                                                                                                  ,
                                     userName: vendor!.userName,
                                     kotaVendor: vendor!.kota,
                                     ratingVendor: vendor!.rating,
@@ -265,6 +286,8 @@ class _PhotographerBioState extends State<PhotographerBio> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                ]
+
                 ],
 
                 // ---------- PORTOFOLIO ----------
