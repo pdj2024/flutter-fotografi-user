@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mpjnew/src/pages/fotografi_user/models/portofolio_model.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/portofolio_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:provider/provider.dart';
 
-import '../providers/constants.dart';
+import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
+import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
+import 'package:mpjnew/src/pages/providers/constants.dart';
+import 'package:shimmer/shimmer.dart';
+import '../providers/navigation_provider.dart';
+import '../providers/custom_back_button.dart';
 import 'models/vendor_model.dart';
-import 'services/portofolio_service.dart';
-import 'services/vendor_service.dart';
 import 'singlepage.dart';
 import 'pilihan_paket.dart';
-import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
 import 'single_chat.dart';
 
 class PhotographerBio extends StatefulWidget {
@@ -27,20 +24,15 @@ class PhotographerBio extends StatefulWidget {
 class _PhotographerBioState extends State<PhotographerBio> {
   final ScrollController _scrollController = ScrollController();
 
- // State
   bool isLoadingVendor = true;
   bool isLoadingPorto = true;
-  String? errorVendor;
-  String? errorPorto;
 
-  String notFoundUsername = 'notfound';
-
+  final String notFoundUsername = 'vendor-not-found';
 
   VendorModel? vendor;
   List<PortofolioModel> portofolioList = [];
 
-
- @override
+  @override
   void initState() {
     super.initState();
     _fetchData();
@@ -50,8 +42,6 @@ class _PhotographerBioState extends State<PhotographerBio> {
     setState(() {
       isLoadingVendor = true;
       isLoadingPorto = true;
-      errorVendor = null;
-      errorPorto = null;
     });
 
     try {
@@ -60,57 +50,63 @@ class _PhotographerBioState extends State<PhotographerBio> {
         status: 'aktif',
       );
 
-    setState(() {
-  vendor = vendorData.isNotEmpty
-      ? vendorData.first
-      : VendorModel(
-          noId: widget.idVendor,
-          userName: notFoundUsername,
-          namaDisplay: 'Username Not Found',
-          email: '',
-          kota: '-',
-          rating: 0,
-          portofolio: [],
-          paket: [],
-          hargaMinPaket: 0,
-          hargaMaxPaket: 0,
-          tglCreated: DateTime(2000), // atau DateTime.now()
-          id_media: '',
-          deskripsi_bio: '',
-        );
-  isLoadingVendor = false;
-});
-
-    } catch (e) {
-      setState(() {
-        errorVendor = e.toString();
-        isLoadingVendor = false;
-      });
-    }
-
-    try {
-      final portoData = await PortofolioService().getAll(
-        idVendor: widget.idVendor,
-        status: 'aktif',
-        orderBy: 'tgl_created',
-        orderDir: 'desc',
+      vendor = vendorData.isNotEmpty
+          ? vendorData.first
+          : VendorModel(
+              noId: widget.idVendor,
+              userName: notFoundUsername,
+              namaDisplay: 'Vendor Tidak Ditemukan',
+              email: '',
+              kota: '-',
+              rating: 0,
+              portofolio: [],
+              paket: [],
+              hargaMinPaket: 0,
+              hargaMaxPaket: 0,
+              tglCreated: DateTime(2000),
+              id_media: '',
+              deskripsi_bio: '',
+            );
+    } catch (_) {
+      vendor = VendorModel(
+        noId: widget.idVendor,
+        userName: notFoundUsername,
+        namaDisplay: 'Vendor Tidak Ditemukan',
+        email: '',
+        kota: '-',
+        rating: 0,
+        portofolio: [],
+        paket: [],
+        hargaMinPaket: 0,
+        hargaMaxPaket: 0,
+        tglCreated: DateTime(2000),
+        id_media: '',
+        deskripsi_bio: '',
       );
-
-      setState(() {
-        portofolioList = portoData;
-        isLoadingPorto = false;
-      });
-    } catch (e) {
-      setState(() {
-        errorPorto = e.toString();
-        isLoadingPorto = false;
-      });
     }
+
+    if(vendor?.userName == notFoundUsername) {
+
+    } else {
+        try {
+            portofolioList = await PortofolioService().getAll(
+            idVendor: widget.idVendor,
+            status: 'aktif',
+            orderBy: 'tgl_created',
+            orderDir: 'desc',
+          );
+        } catch (_) {
+          portofolioList = [];
+        }
+    }
+   
+
+    setState(() {
+      isLoadingVendor = false;
+      isLoadingPorto = false;
+    });
   }
 
-  
-
-  /// Shimmer util
   Widget _shimmerBox({double? w, double? h, double r = 0}) =>
       Shimmer.fromColors(
         baseColor: Colors.grey[300]!,
@@ -125,7 +121,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
         ),
       );
 
-   @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -151,9 +147,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
               children: [
                 if (isLoadingVendor)
                   Row(children: [_shimmerBox(w: 60, h: 60, r: 30)])
-                else if (errorVendor != null)
-                  Text("Error: $errorVendor")
-                else if (vendor != null) ...[
+                else ...[
                   Row(
                     children: [
                       CircleAvatar(
@@ -161,7 +155,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                         backgroundColor: Colors.grey[200],
                         child: ClipOval(
                           child: CachedNetworkImage(
-                            imageUrl: vendor!.id_media.toString(),
+                            imageUrl: vendor!.id_media ?? '',
                             width: 60,
                             height: 60,
                             fit: BoxFit.cover,
@@ -191,115 +185,106 @@ class _PhotographerBioState extends State<PhotographerBio> {
                           ],
                         ),
                       ),
-                    vendor?.rating != null && vendor!.rating! > 0
-  ? Row(
-      children: [
-        const Icon(Icons.star, color: Colors.amber, size: 18),
-        const SizedBox(width: 4),
-        Text(
-          vendor!.rating!.toString(), // Sudah pasti tidak null
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ],
-    )
-  : const SizedBox.shrink(),
-
-
+                      if (vendor!.rating != null && vendor!.rating! > 0)
+                        Row(
+                          children: [
+                            const Icon(Icons.star,
+                                color: Colors.amber, size: 18),
+                            const SizedBox(width: 4),
+                            Text(
+                              vendor!.rating!.toString(),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        )
                     ],
                   ),
-                  if (vendor?.deskripsi_bio != null && vendor!.deskripsi_bio!.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        vendor!.deskripsi_bio!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
+                  if (vendor!.deskripsi_bio != null &&
+                      vendor!.deskripsi_bio!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      vendor!.deskripsi_bio!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
                       ),
-                    ],
-
+                    ),
+                  ],
                   const SizedBox(height: 20),
-
-                  // Tombol Aksi
-                    if (vendor?.userName != notFoundUsername) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Constants.primaryColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
+                  if (vendor!.userName != notFoundUsername) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 44,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Constants.primaryColor,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
                               ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PilihanPaket(
+                                      namaVendor: vendor!.namaDisplay,
+                                      userName: vendor!.userName,
+                                      kotaVendor: vendor!.kota,
+                                      ratingVendor: vendor!.rating,
+                                      idVendor: vendor!.noId,
+                                      fotoProfil: vendor!.id_media ?? '',
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: const Text("Lihat Pilihan Paket",
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 44,
+                          width: 44,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                  color: Constants.primaryColor),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
-                              Navigator.push(
+                              NavigationProvider().navigateToPage(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) => PilihanPaket(
-                                    namaVendor: vendor!.namaDisplay                                                                                                                                                                                                                                  ,
-                                    userName: vendor!.userName,
-                                    kotaVendor: vendor!.kota,
-                                    ratingVendor: vendor!.rating,
-                                    idVendor: vendor!.noId,
-                                    fotoProfil:
-                                        vendor!.id_media.toString(),
-                                  ),
+                                SingleChat(
+                                  receiverUserName: vendor!.userName,
+                                  receiverEmail: vendor!.email,
+                                  receiverID: vendor!.noId.toString(),
                                 ),
+                                targetTabIndex: 1,
                               );
                             },
-                            child: const Text("Lihat Pilihan Paket",
-                                style: TextStyle(color: Colors.white)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        height: 44,
-                        width: 44,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(
+                            child: const Icon(Icons.chat_outlined,
                                 color: Constants.primaryColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: EdgeInsets.zero,
                           ),
-                          onPressed: () {
-                            NavigationProvider().navigateToPage(
-                              context,
-                              SingleChat(
-                                receiverUserName: vendor!.userName,
-                                receiverEmail: vendor!.email,
-                                receiverID: vendor!.noId.toString(),
-                              ),
-                              targetTabIndex: 1,
-                            );
-                          },
-                          child: const Icon(Icons.chat_outlined,
-                              color: Constants.primaryColor),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ]
-
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ]
                 ],
-
-                // ---------- PORTOFOLIO ----------
                 if (isLoadingPorto)
                   const Center(child: CircularProgressIndicator())
-                else if (errorPorto != null)
-                  Text("Error: $errorPorto")
                 else if (portofolioList.isNotEmpty) ...[
                   const Text(
                     "Portofolio",
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   GridView.count(
@@ -310,21 +295,19 @@ class _PhotographerBioState extends State<PhotographerBio> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: portofolioList.map((p) {
-                        final List<MediaItem> mediaList = p.mediaUrls ?? [];
-                        final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-                        final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
-                        final String? mediaUrl = isVideo
-                            ? (firstMedia?.thumbUrl ?? firstMedia?.url)
-                            : firstMedia?.url;
+                      final List<MediaItem> mediaList = p.mediaUrls ?? [];
+                      final firstMedia =
+                          mediaList.isNotEmpty ? mediaList.first : null;
+                      final isVideo =
+                          (firstMedia?.contentType ?? '').startsWith('video');
+                      final String? mediaUrl = isVideo
+                          ? (firstMedia?.thumbUrl ?? firstMedia?.url)
+                          : firstMedia?.url;
 
-                         if (mediaUrl == null) {
-                          return const Icon(Icons.broken_image_outlined);
-                        }
-                        
-                        
+                      if (mediaUrl == null) {
+                        return const Icon(Icons.broken_image_outlined);
+                      }
 
-
-          
                       return GestureDetector(
                         onTap: () => NavigationProvider().navigateToPage(
                           context,
@@ -354,33 +337,3 @@ class _PhotographerBioState extends State<PhotographerBio> {
     );
   }
 }
-
-
-  // ---------- Item Portofolio ----------
-  Widget buildPortfolioItem(BuildContext context, String imagePath, String noId) {
-    final String imgUrl = imagePath;
-        //context.read<NavigationProvider>().ambilGambar(imagePath);
-
-    return GestureDetector(
-      onTap: () => context.read<NavigationProvider>().navigateToPage(
-            context,
-            SinglePostPage(noId: noId),
-            targetTabIndex: 0,
-          ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: CachedNetworkImage(
-          imageUrl: imgUrl,
-          fit: BoxFit.cover,
-          placeholder: (context, url) => Shimmer.fromColors(
-            baseColor: Colors.grey[300]!,
-            highlightColor: Colors.grey[100]!,
-            child: Container(color: Colors.white),
-          ),
-          errorWidget: (context, url, error) =>
-              const Icon(Icons.broken_image_outlined),
-        ),
-      ),
-    );
-  }
-
