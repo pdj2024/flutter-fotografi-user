@@ -6,6 +6,9 @@ import 'package:shimmer/shimmer.dart';
 
 import '../providers/constants.dart';
 import '../providers/navigation_provider.dart';
+import 'services/kategori_service.dart';
+import 'services/kota_service.dart';
+import 'services/vendor_service.dart';
 
 class FilterOverlay extends StatefulWidget {
   final String? selectedCategory;
@@ -35,146 +38,195 @@ class FilterOverlay extends StatefulWidget {
 
 class _FilterOverlayState extends State<FilterOverlay> {
   // List fetched dari API
-   List<String> kategoriList = [];
-  List<String> locationList = [];
+  List<Map<String, String>> kategoriList = [];
+  List<Map<String, String>> locationList = [];
   List<Map<String, String>> photographerList = [];
 
-  // Filtered lists for autocomplete
-  List<String> filteredCategories = [];
-  List<String> filteredLocations = [];
+  // Filtered for autocomplete
+  List<Map<String, String>> filteredCategories = [];
+  List<Map<String, String>> filteredLocations = [];
   List<Map<String, String>> filteredPhotographers = [];
 
-  // Controller
+  // Controllers
   final TextEditingController categoryController = TextEditingController();
   final TextEditingController locationController = TextEditingController();
   final TextEditingController photographerController = TextEditingController();
   final TextEditingController minPriceController = TextEditingController();
   final TextEditingController maxPriceController = TextEditingController();
 
-  // Focus nodes
+  // Focus Nodes
   final FocusNode categoryFocusNode = FocusNode();
   final FocusNode locationFocusNode = FocusNode();
   final FocusNode photographerFocusNode = FocusNode();
   final FocusNode minPriceFocusNode = FocusNode();
   final FocusNode maxPriceFocusNode = FocusNode();
 
-  // Validation flags
+  // Error flags
   bool categoryHasError = false;
   bool locationHasError = false;
   bool photographerHasError = false;
 
-@override
-void initState() {
-  super.initState();
+  // Selected ID
+  String? selectedCategoryId;
+  String? selectedLocationId;
+  String? selectedPhotographerId;
 
-  // Set default ke controller dari widget
-  categoryController.text = widget.selectedCategory ?? '';
-  locationController.text = widget.selectedLocation ?? '';
-  photographerController.text = widget.selectedPhotographer ?? '';
-  minPriceController.text = widget.minPrice ?? '';
-  maxPriceController.text = widget.maxPrice ?? '';
+  @override
+  void initState() {
+    super.initState();
 
-  // Pasang listener autocomplete
-  categoryController.addListener(filterCategories);
-  locationController.addListener(filterLocations);
-  photographerController.addListener(filterPhotographers);
+    // Set min/max price
+    minPriceController.text = widget.minPrice ?? '';
+    maxPriceController.text = widget.maxPrice ?? '';
 
-  // Focus out logic
-  categoryFocusNode.addListener(() {
-    if (!categoryFocusNode.hasFocus) {
-      if (categoryController.text.isNotEmpty && filteredCategories.isNotEmpty) {
-        categoryController.text = filteredCategories.first;
-        categoryHasError = false;
-      }
-      setState(() {});
-    }
-  });
+    // Listeners
+    categoryController.addListener(filterCategories);
+    locationController.addListener(filterLocations);
+    photographerController.addListener(filterPhotographers);
 
-  locationFocusNode.addListener(() {
-    if (!locationFocusNode.hasFocus) {
-      if (locationController.text.isNotEmpty && filteredLocations.isNotEmpty) {
-        locationController.text = filteredLocations.first;
-        locationHasError = false;
-      }
-      setState(() {});
-    }
-  });
+    // categoryFocusNode.addListener(() {
+    //   if (!categoryFocusNode.hasFocus && filteredCategories.isNotEmpty) {
+    //     categoryController.text = filteredCategories.first['label']!;
+    //     selectedCategoryId = filteredCategories.first['id']!;
+    //     categoryHasError = false;
+    //     setState(() {});
+    //   }
+    // });
 
-  photographerFocusNode.addListener(() {
-    if (!photographerFocusNode.hasFocus) {
-      if (photographerController.text.isNotEmpty && filteredPhotographers.isNotEmpty) {
-        photographerController.text = filteredPhotographers.first['name']!;
-        photographerHasError = false;
-      }
-      setState(() {});
-    }
-  });
+    // locationFocusNode.addListener(() {
+    //   if (!locationFocusNode.hasFocus && filteredLocations.isNotEmpty) {
+    //     locationController.text = filteredLocations.first['label']!;
+    //     selectedLocationId = filteredLocations.first['id']!;
+    //     locationHasError = false;
+    //     setState(() {});
+    //   }
+    // });
 
-  minPriceFocusNode.addListener(() => setState(() {}));
-  maxPriceFocusNode.addListener(() => setState(() {}));
+    // photographerFocusNode.addListener(() {
+    //   if (!photographerFocusNode.hasFocus && filteredPhotographers.isNotEmpty) {
+    //     photographerController.text = filteredPhotographers.first['label']!;
+    //     selectedPhotographerId = filteredPhotographers.first['id']!;
+    //     photographerHasError = false;
+    //     setState(() {});
+    //   }
+    // });
 
-  // Jalankan fetch dan filter setelah frame pertama
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    await fetchFilterData();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await fetchFilterData();
+      // Pre-fill text field dari selected ID
+      applySelectedIdsToController();
+      // filterCategories();
+      // filterLocations();
+      // filterPhotographers();
+    });
+  }
 
-    // Filter berdasarkan isi awal controller
-    filterCategories();
-    filterLocations();
-    filterPhotographers();
+Future<void> fetchFilterData() async {
+  List<Map<String, String>> kategori = [];
+  List<Map<String, String>> lokasi = [];
+  List<Map<String, String>> fotografer = [];
+
+  try {
+    final categoryRes = await KategoriService().getAll(orderBy: 'nama_kategori');
+    kategori = categoryRes.map((e) => {
+      'id': e.no_id,
+      'label': e.nama_kategori,
+    }).toList();
+    print("===== KATEGORI LIST: $kategori");
+  } catch (e) {
+    print('====== Error fetching kategori: $e');
+  }
+
+  try {
+    final locationRes = await KotaService().getAll(orderBy: 'nama_kota');
+    lokasi = locationRes.map((e) => {
+      'id': e.no_id,
+      'label': e.nama_kota,
+    }).toList();
+  } catch (e) {
+    print('====== Error fetching lokasi: $e');
+  }
+
+  try {
+    final photographerRes = await VendorService().getAll(orderBy: 'username_vendor');
+  fotografer = photographerRes.map((e) => {
+    'id': e.noId,              // "ven_1", "ven_2"
+    'username': e.userName,    // "vendA", "brandon.honanta"
+    'name': e.namaDisplay,     // "Vendor A", "Brandon H"
+    'avatar': e.id_media,       // URL avatar (nullable)
+  }).toList();
+  } catch (e) {
+    print('====== Error fetching fotografer: $e');
+  }
+
+  setState(() {
+    kategoriList = kategori;
+    locationList = lokasi;
+    photographerList = fotografer;
   });
 }
 
 
-  Future<void> fetchFilterData() async {
-    try {
-    final categoryRes = ["Coba 1", "Coba 2"]; // await ApiService.getCategoryList(); // Sesuaikan dengan implementasi API kamu
-    final locationRes = null; // await ApiService.getLocationList();
-    final photographerRes = null; // await ApiService.getPhotographerList();
+  void applySelectedIdsToController() {
+    if (widget.selectedCategory != null) {
+      final match = kategoriList.firstWhere(
+        (item) => item['id'] == widget.selectedCategory,
+        orElse: () => {'label': ''},
+      );
+      categoryController.text = match['label']!;
+      selectedCategoryId = widget.selectedCategory;
+    }
 
-    setState(() {
-      kategoriList = categoryRes;
-      locationList = locationRes;
-      photographerList = photographerRes;
-    });
-  } catch (e) {
-    print('Error fetching data: $e');
-  }
+    if (widget.selectedLocation != null) {
+      final match = locationList.firstWhere(
+        (item) => item['id'] == widget.selectedLocation,
+        orElse: () => {'label': ''},
+      );
+      locationController.text = match['label']!;
+      selectedLocationId = widget.selectedLocation;
+    }
+
+    if (widget.selectedPhotographer != null) {
+      final match = photographerList.firstWhere(
+        (item) => item['id'] == widget.selectedPhotographer,
+        orElse: () => {'label': ''},
+      );
+      photographerController.text = match['label']!;
+      selectedPhotographerId = widget.selectedPhotographer;
+    }
   }
 
   void filterCategories() {
     final query = categoryController.text.toLowerCase();
-    
     setState(() {
+      filteredCategories = kategoriList
+          .where((item) => item['label']!.toLowerCase().contains(query))
+          .toList();
 
-      filteredCategories = kategoriList;
-      // filteredCategories = kategoriList
-      //     .where((item) => item.toLowerCase().contains(query))
-      //     .toList();
-      // categoryHasError = query.isNotEmpty && filteredCategories.isEmpty;
+      print("=========== FILTERED CATEGORY: " + filteredCategories.toString());
+      categoryHasError = query.isNotEmpty && filteredCategories.isEmpty;
     });
   }
 
   void filterLocations() {
     final query = locationController.text.toLowerCase();
     setState(() {
-      filteredLocations = locationList;
-      // filteredLocations = locationList
-      //     .where((item) => item.toLowerCase().contains(query))
-      //     .toList();
-      // locationHasError = query.isNotEmpty && filteredLocations.isEmpty;
+      filteredLocations = locationList
+          .where((item) => item['label']!.toLowerCase().contains(query))
+          .toList();
+      locationHasError = query.isNotEmpty && filteredLocations.isEmpty;
     });
   }
 
-  void filterPhotographers() {
-    final query = photographerController.text.toLowerCase();
-    setState(() {
-       filteredPhotographers = photographerList;
-      // filteredPhotographers = photographerList
-      //     .where((item) => item['name']!.toLowerCase().contains(query))
-      //     .toList();
-      // photographerHasError = query.isNotEmpty && filteredPhotographers.isEmpty;
-    });
-  }
+ void filterPhotographers() {
+  final query = photographerController.text.toLowerCase();
+  setState(() {
+    filteredPhotographers = photographerList
+        .where((item) => (item['name'] ?? '').toLowerCase().contains(query))
+        .toList();
+    photographerHasError = query.isNotEmpty && filteredPhotographers.isEmpty;
+  });
+}
 
 
   @override
@@ -361,205 +413,226 @@ void initState() {
   }
 
   // Build functions (buildSearchableDropdown, buildPhotographerSearch, buildTextInput) aku lanjutkan di bawah (karena kepanjangan limit post)...
-  Widget buildSearchableDropdown(
-      {required TextEditingController controller,
-      required FocusNode focusNode,
-      required String hint,
-      required List<String> items,
-      required List<String> allItems,
-      required bool hasError,
-      required ValueChanged<String> onSelected}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: controller,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            hintText: hint,
-            suffixIcon: controller.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      controller.clear();
-                      focusNode.unfocus();
-                    },
-                  )
-                : null,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Constants.primaryColor,
-                width: 2,
-              ),
+Widget buildSearchableDropdown({
+  required TextEditingController controller,
+  required FocusNode focusNode,
+  required String hint,
+  required List<Map<String, String>> items,
+  required List<Map<String, String>> allItems,
+  required bool hasError,
+  required ValueChanged<Map<String, String>> onSelected,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      TextField(
+        controller: controller,
+        focusNode: focusNode,
+        decoration: InputDecoration(
+          hintText: hint,
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    controller.clear();
+                    focusNode.unfocus();
+                  },
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Colors.grey,
             ),
           ),
-          style: TextStyle(
-            color: hasError ? Colors.red : Colors.black,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Colors.grey,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Constants.primaryColor,
+              width: 2,
+            ),
           ),
         ),
-        if (focusNode.hasFocus)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: items.isEmpty
-                ? Text(
-                    'Pencarian tidak ada',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                  )
-                : Scrollbar(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: items.map((item) {
-                        return ListTile(
-                          title: Text(item),
-                          onTap: () {
-                            controller.text = item;
-                            onSelected(item);
-                            FocusScope.of(context).unfocus();
-                          },
-                        );
-                      }).toList(),
-                    ),
+        style: TextStyle(
+          color: hasError ? Colors.red : Colors.black,
+        ),
+      ),
+      if (focusNode.hasFocus)
+        Container(
+          margin: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: items.isEmpty
+              ? Text(
+                  'Pencarian tidak ada',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
                   ),
-          
-          ),
-      ],
-    );
-  }
+                )
+              : Scrollbar(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: items.map((item) {
+                      return ListTile(
+                        title: Text(item['label'] ?? ''),
+                        onTap: () {
+                          controller.text = item['label']!;
+                          onSelected(item); // return full map: {id, label}
+                          FocusScope.of(context).unfocus();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+        ),
+    ],
+  );
+}
 
-  Widget buildPhotographerSearch() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: photographerController,
-          focusNode: photographerFocusNode,
-          decoration: InputDecoration(
-            hintText: 'Cari Nama Fotografer',
-            suffixIcon: photographerController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      photographerController.clear();
-                      photographerFocusNode.unfocus();
-                    },
-                  )
-                : null,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: photographerHasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: photographerHasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color:
-                    photographerHasError ? Colors.red : Constants.primaryColor,
-                width: 2,
-              ),
+
+Widget buildPhotographerSearch() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      TextField(
+        controller: photographerController,
+        focusNode: photographerFocusNode,
+        onChanged: (value) {
+          
+        },
+        decoration: InputDecoration(
+          hintText: 'Cari Nama Fotografer',
+          suffixIcon: photographerController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    photographerController.clear();
+                    // Reset filter juga kalau perlu
+                    setState(() {
+                      filteredPhotographers = List.from(photographerList);
+                    });
+                    photographerFocusNode.unfocus();
+                  },
+                )
+              : null,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: photographerHasError ? Colors.red : Colors.grey,
             ),
           ),
-          style: TextStyle(
-            color: photographerHasError ? Colors.red : Colors.black,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: photographerHasError ? Colors.red : Colors.grey,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: photographerHasError ? Colors.red : Constants.primaryColor,
+              width: 2,
+            ),
           ),
         ),
-        if (photographerFocusNode.hasFocus)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: filteredPhotographers.isEmpty
-                ? Text(
-                    'Pencarian tidak ada',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                  )
-                : Scrollbar(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: filteredPhotographers.map((photographer) {
-                        final String avatarUrl = context
-                            .read<NavigationProvider>()
-                            .ambilGambar(photographer['avatar']!);
-                        return ListTile(
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: CachedNetworkImage(
-                              imageUrl: avatarUrl,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Shimmer.fromColors(
-                                baseColor: Colors.grey.shade300,
-                                highlightColor: Colors.grey.shade100,
-                                child: Container(
+        style: TextStyle(
+          color: photographerHasError ? Colors.red : Colors.black,
+        ),
+      ),
+      if (photographerFocusNode.hasFocus)
+        Container(
+          margin: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          constraints: BoxConstraints(
+            maxHeight: 200, // batas tinggi supaya list bisa scroll
+          ),
+          child: filteredPhotographers.isEmpty
+              ? Text(
+                  'Pencarian tidak ada',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                  ),
+                )
+              : Scrollbar(
+                  thumbVisibility: true, // agar scrollbar selalu muncul saat scroll
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: filteredPhotographers.length,
+                    itemBuilder: (context, index) {
+                      final photographer = filteredPhotographers[index];
+                      // Amanin null dengan ?? '' supaya gak error
+                      final String avatarUrl = 
+                         photographer['avatar'] ?? '';
+                      final String name = photographer['name'] ?? '';
+
+                      return ListTile(
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: avatarUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: avatarUrl,
                                   width: 40,
                                   height: 40,
-                                  color: Colors.white,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) =>
+                                      Shimmer.fromColors(
+                                    baseColor: Colors.grey.shade300,
+                                    highlightColor: Colors.grey.shade100,
+                                    child: Container(
+                                      width: 40,
+                                      height: 40,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) =>
+                                      CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: Colors.grey.shade200,
+                                    child: const Icon(Icons.person,
+                                        color: Colors.grey),
+                                  ),
+                                )
+                              : CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: Colors.grey.shade200,
+                                  child:
+                                      const Icon(Icons.person, color: Colors.grey),
                                 ),
-                              ),
-                              errorWidget: (context, url, error) =>
-                                  CircleAvatar(
-                                radius: 20,
-                                backgroundColor: Colors.grey.shade200,
-                                child: const Icon(Icons.person,
-                                    color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                          title: Text(photographer['name']!),
-                          onTap: () {
-                            photographerController.text = photographer['name']!;
-                            // tempPhotographer = photographer['name']!;
-                            FocusScope.of(context).unfocus();
-                          },
-                        );
-                      }).toList(),
-                    ),
+                        ),
+                        title: Text(name),
+                        onTap: () {
+                          photographerController.text = name;
+                          FocusScope.of(context).unfocus();
+                        },
+                      );
+                    },
                   ),
-           
-          ),
-      ],
-    );
-  }
+                ),
+        ),
+    ],
+  );
+}
+
 
   Widget buildTextInput({
     required TextEditingController controller,
