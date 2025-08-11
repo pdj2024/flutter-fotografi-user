@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -71,55 +72,82 @@ class _FilterOverlayState extends State<FilterOverlay> {
   String? selectedLocationId;
   String? selectedPhotographerId;
 
+  // Error flags
+  bool isCategoryOpen= false;
+  bool isLocationOpen = false;
+  bool isPhotographerOpen = false;
+
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
 
-    // Set min/max price
-    minPriceController.text = widget.minPrice ?? '';
-    maxPriceController.text = widget.maxPrice ?? '';
+  // Set min/max price
+  minPriceController.text = widget.minPrice ?? '';
+  maxPriceController.text = widget.maxPrice ?? '';
 
-    // Listeners
-    categoryController.addListener(filterCategories);
-    locationController.addListener(filterLocations);
-    photographerController.addListener(filterPhotographers);
+  // Listeners untuk filter pencarian
+  categoryController.addListener(filterCategories);
+  locationController.addListener(filterLocations);
+  photographerController.addListener(filterPhotographers);
 
-    // categoryFocusNode.addListener(() {
-    //   if (!categoryFocusNode.hasFocus && filteredCategories.isNotEmpty) {
-    //     categoryController.text = filteredCategories.first['label']!;
-    //     selectedCategoryId = filteredCategories.first['id']!;
-    //     categoryHasError = false;
-    //     setState(() {});
-    //   }
-    // });
+  // ====== Tambah focus listener global ======
+  categoryFocusNode.addListener(() {
+    if (categoryFocusNode.hasFocus) {
+      _closeAllExcept('category');
+      setState(() => isCategoryOpen = true);
+    } else {
+      setState(() => isCategoryOpen = false);
+    }
+  });
 
-    // locationFocusNode.addListener(() {
-    //   if (!locationFocusNode.hasFocus && filteredLocations.isNotEmpty) {
-    //     locationController.text = filteredLocations.first['label']!;
-    //     selectedLocationId = filteredLocations.first['id']!;
-    //     locationHasError = false;
-    //     setState(() {});
-    //   }
-    // });
+  locationFocusNode.addListener(() {
+    if (locationFocusNode.hasFocus) {
+      _closeAllExcept('location');
+      setState(() => isLocationOpen = true);
+    } else {
+      setState(() => isLocationOpen = false);
+    }
+  });
 
-    // photographerFocusNode.addListener(() {
-    //   if (!photographerFocusNode.hasFocus && filteredPhotographers.isNotEmpty) {
-    //     photographerController.text = filteredPhotographers.first['label']!;
-    //     selectedPhotographerId = filteredPhotographers.first['id']!;
-    //     photographerHasError = false;
-    //     setState(() {});
-    //   }
-    // });
+  photographerFocusNode.addListener(() {
+    if (photographerFocusNode.hasFocus) {
+      _closeAllExcept('photographer');
+      setState(() => isPhotographerOpen = true);
+    } else {
+      setState(() => isPhotographerOpen = false);
+    }
+  });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await fetchFilterData();
-      // Pre-fill text field dari selected ID
-      applySelectedIdsToController();
-      // filterCategories();
-      // filterLocations();
-      // filterPhotographers();
-    });
-  }
+  minPriceFocusNode.addListener(() {
+    if (minPriceFocusNode.hasFocus) _closeAllExcept();
+  });
+
+  maxPriceFocusNode.addListener(() {
+    if (maxPriceFocusNode.hasFocus) _closeAllExcept();
+  });
+
+  // Jalankan setelah frame build pertama
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await fetchFilterData();
+    // Pre-fill text field dari selected ID
+    applySelectedIdsToController();
+  });
+}
+
+void _closeAllExcept([String? except]) {
+  if (except != 'category') categoryFocusNode.unfocus();
+  if (except != 'location') locationFocusNode.unfocus();
+  if (except != 'photographer') photographerFocusNode.unfocus();
+
+
+  setState(() {
+    if (except != 'category') isCategoryOpen = false;
+    if (except != 'location') isLocationOpen = false;
+    if (except != 'photographer') isPhotographerOpen = false;
+  });
+}
+
+
 
 Future<void> fetchFilterData() async {
   List<Map<String, String>> kategori = [];
@@ -257,127 +285,133 @@ Future<void> fetchFilterData() async {
         widget.onClose();
         return false;
       },
-      child: Scaffold(
-        backgroundColor: Colors.white.withOpacity(0.96),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildHeader(),
-            Expanded(
-              child: ListView(
+      child: GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+        child: Scaffold(
+          backgroundColor: Colors.white.withOpacity(0.96),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              buildHeader(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    buildLabel('Kategori'),
+                    const SizedBox(height: 8),
+                    buildSearchableDropdown(
+                      controller: categoryController,
+                      focusNode: categoryFocusNode,
+                      hint: 'Pilih Kategori',
+                      items: filteredCategories,
+                      allItems: kategoriList,
+                      hasError: categoryHasError,
+                      onSelected: (value) {
+                       // tempCategory = value;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    buildLabel('Lokasi'),
+                    const SizedBox(height: 8),
+                    buildSearchableDropdown(
+                      controller: locationController,
+                      focusNode: locationFocusNode,
+                      hint: 'Cari Lokasi',
+                      items: filteredLocations,
+                      allItems: locationList,
+                      hasError: locationHasError,
+                      onSelected: (value) {
+                        // tempLocation = value;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    buildLabel('Harga (Rp)'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: buildTextInput(
+                            controller: minPriceController,
+                            focusNode: minPriceFocusNode,
+                            hint: 'Min',
+                            onChanged: (value) => {} // tempMinPrice = value,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: buildTextInput(
+                            controller: maxPriceController,
+                            focusNode: maxPriceFocusNode,
+                            hint: 'Max',
+                            onChanged: (value) => {} // tempMaxPrice = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    buildLabel('Nama Fotografer'),
+                    const SizedBox(height: 8),
+                    buildPhotographerSearch(),
+                  ],
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.all(20),
-                children: [
-                  buildLabel('Kategori'),
-                  const SizedBox(height: 8),
-                  buildSearchableDropdown(
-                    controller: categoryController,
-                    focusNode: categoryFocusNode,
-                    hint: 'Pilih Kategori',
-                    items: filteredCategories,
-                    allItems: kategoriList,
-                    hasError: categoryHasError,
-                    onSelected: (value) {
-                     // tempCategory = value;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  buildLabel('Lokasi'),
-                  const SizedBox(height: 8),
-                  buildSearchableDropdown(
-                    controller: locationController,
-                    focusNode: locationFocusNode,
-                    hint: 'Cari Lokasi',
-                    items: filteredLocations,
-                    allItems: locationList,
-                    hasError: locationHasError,
-                    onSelected: (value) {
-                      // tempLocation = value;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  buildLabel('Harga (Rp)'),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: buildTextInput(
-                          controller: minPriceController,
-                          focusNode: minPriceFocusNode,
-                          hint: 'Min',
-                          onChanged: (value) => {} // tempMinPrice = value,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          widget.onApply({
+                            'category': '',
+                            'location': '',
+                            'photographer': '',
+                            'minPrice': '',
+                            'maxPrice': '',
+                          });
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Constants.primaryColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: buildTextInput(
-                          controller: maxPriceController,
-                          focusNode: maxPriceFocusNode,
-                          hint: 'Max',
-                          onChanged: (value) => {} // tempMaxPrice = value,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  buildLabel('Nama Fotografer'),
-                  const SizedBox(height: 8),
-                  buildPhotographerSearch(),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        widget.onApply({
-                          'category': '',
-                          'location': '',
-                          'photographer': '',
-                          'minPrice': '',
-                          'maxPrice': '',
-                        });
-                      },
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Constants.primaryColor),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Atur Ulang',
-                          style: TextStyle(color: Constants.primaryColor)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        widget.onApply({
-                          'category': categoryController.text.trim(),
-                          'location': locationController.text.trim(),
-                          'photographer': photographerController.text.trim(),
-                          'minPrice': minPriceController.text.trim(),
-                          'maxPrice': maxPriceController.text.trim(),
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Constants.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'Pakai',
-                        style: TextStyle(color: Colors.white),
+                        child: const Text('Atur Ulang',
+                            style: TextStyle(color: Constants.primaryColor)),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          widget.onApply({
+                            'category': categoryController.text.trim(),
+                            'location': locationController.text.trim(),
+                            'photographer': photographerController.text.trim(),
+                            'minPrice': minPriceController.text.trim(),
+                            'maxPrice': maxPriceController.text.trim(),
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Constants.primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Pakai',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -634,40 +668,69 @@ Widget buildPhotographerSearch() {
 }
 
 
-  Widget buildTextInput({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String hint,
-    required ValueChanged<String> onChanged,
-  }) {
-    focusNode.addListener(() {
-      if (focusNode.hasFocus) {
-        controller.selection =
-            TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-      }
-    });
+Widget buildTextInput({
+  required TextEditingController controller,
+  required FocusNode focusNode,
+  required String hint,
+  required ValueChanged<String> onChanged,
+}) {
+  // Listener fokus: cuma untuk select all text
+  focusNode.addListener(() {
+    if (focusNode.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: controller.text.length,
+        );
+      });
+    }
+  });
 
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        hintText: hint,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.grey),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Constants.primaryColor,
-            width: 2,
-          ),
+  return TextField(
+    controller: controller,
+    focusNode: focusNode,
+    keyboardType: TextInputType.number,
+   onTap: () => _closeAllExcept(
+  focusNode == minPriceFocusNode ? 'minPrice' : 'maxPrice'
+),
+    decoration: InputDecoration(
+      hintText: hint,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.grey),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(
+          color: Constants.primaryColor,
+          width: 2,
         ),
       ),
-      onChanged: onChanged,
-    );
-  }
+    ),
+    onChanged: (value) {
+      // Hilangkan titik sebelum format ulang
+      String numericValue = value.replaceAll('.', '');
+      if (numericValue.isEmpty) {
+        controller.text = '';
+        onChanged('');
+        return;
+      }
+
+      // Format ribuan pakai titik
+      String formatted = NumberFormat('#,###', 'id_ID')
+          .format(int.parse(numericValue))
+          .replaceAll(',', '.');
+
+      // Update text dan posisikan kursor di akhir
+      controller.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+
+      onChanged(numericValue); // kirim angka tanpa titik
+    },
+  );
+}
+
 }
