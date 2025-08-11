@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
@@ -85,6 +86,8 @@ bool isPhotographerLoading = false;
 
 
   Timer? _locationDebounce;
+  Timer? _categoryDebounce;
+  Timer? _photographerDebounce;
 
   @override
 void initState() {
@@ -95,7 +98,7 @@ void initState() {
   maxPriceController.text = widget.maxPrice ?? '';
 
   // Listeners untuk filter pencarian
-  categoryController.addListener(filterCategories);
+
 
 
 locationController.addListener(() {
@@ -112,10 +115,36 @@ locationController.addListener(() {
 });
 
 
+categoryController.addListener(() {
+  if (_categoryDebounce?.isActive ?? false) _categoryDebounce!.cancel();
+
+  setState(() {
+    isCategoryLoading = true; // ✅ langsung tampil spinner
+  });
+
+  _categoryDebounce = Timer(const Duration(milliseconds: 500), () {
+    final query = categoryController.text.trim();
+    fetchCategorysFromApi(query);
+  });
+});
+
+photographerController.addListener(() {
+  if (_photographerDebounce?.isActive ?? false) _photographerDebounce!.cancel();
+
+  setState(() {
+    isPhotographerLoading = true; // ✅ langsung tampil spinner
+  });
+
+  _photographerDebounce = Timer(const Duration(milliseconds: 500), () {
+    final query = photographerController.text.trim();
+    fetchPhotographersFromApi(query);
+  });
+});
 
 
 
-  photographerController.addListener(filterPhotographers);
+
+
 
   // ====== Tambah focus listener global ======
   categoryFocusNode.addListener(() {
@@ -155,13 +184,23 @@ locationController.addListener(() {
 
   // Jalankan setelah frame build pertama
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-  await fetchFilterData(); // 1️⃣ Ambil semua list awal
+  // await fetchFilterData(); // 1️⃣ Ambil semua list awal
 
-  applySelectedIdsToController(); // 2️⃣ Isi text field dari data list yang sudah ada
+  // applySelectedIdsToController(); // 2️⃣ Isi text field dari data list yang sudah ada
 
   // 3️⃣ Kalau ada selectedLocation dari awal, langsung fetch spesifik (supaya filtered list sesuai)
   if (widget.selectedLocation != null && locationController.text.isNotEmpty) {
     fetchLocationsFromApi(locationController.text.trim());
+  }
+
+  if (widget.selectedCategory != null && categoryController.text.isNotEmpty) {
+    fetchCategorysFromApi(categoryController.text.trim());
+  }
+
+  if (widget.selectedPhotographer != null && photographerController.text.isNotEmpty) {
+    fetchPhotographersFromApi(photographerController.text.trim());
+
+    applySelectedIdsToController();
   }
 });
 }
@@ -211,51 +250,74 @@ Future<void> fetchLocationsFromApi(String query) async {
   }
 }
 
+Future<void> fetchCategorysFromApi(String query) async {
 
-Future<void> fetchFilterData() async {
-  List<Map<String, String>> kategori = [];
-  List<Map<String, String>> lokasi = [];
-  List<Map<String, String>> fotografer = [];
+  setState(() {
+    isCategoryLoading = true; // mulai loading
+  });
 
   try {
-    final categoryRes = await KategoriService().getAll(orderBy: 'nama_kategori');
-    kategori = categoryRes.map((e) => {
+    final categoryRes = await KategoriService().getAll(
+      orderBy: 'nama_kategori',
+      namaKategori: query.isEmpty ? null : query, // kalau kosong, kirim null
+    );
+
+    final lokasi = categoryRes.map((e) => {
       'id': e.no_id,
       'label': e.nama_kategori,
     }).toList();
-    print("===== KATEGORI LIST: $kategori");
+
+    setState(() {
+      filteredCategories = lokasi;
+      categoryHasError = lokasi.isEmpty;
+       isCategoryLoading = false; // selesai loading
+    });
   } catch (e) {
     print('====== Error fetching kategori: $e');
+    setState(() {
+      filteredCategories = [];
+      categoryHasError = true;
+       isCategoryLoading = false; // selesai loading
+    });
   }
+}
 
-  // try {
-  //   final locationRes = await KotaService().getAll(orderBy: 'nama_kota');
-  //   lokasi = locationRes.map((e) => {
-  //     'id': e.no_id,
-  //     'label': e.nama_kota,
-  //   }).toList();
-  // } catch (e) {
-  //   print('====== Error fetching lokasi: $e');
-  // }
-
-  try {
-    final photographerRes = await VendorService().getAll(orderBy: 'username_vendor');
-  fotografer = photographerRes.map((e) => {
-    'id': e.noId,              // "ven_1", "ven_2"
-    'username': e.userName,    // "vendA", "brandon.honanta"
-    'name': e.namaDisplay,     // "Vendor A", "Brandon H"
-    'avatar': e.id_media,       // URL avatar (nullable)
-  }).toList();
-  } catch (e) {
-    print('====== Error fetching fotografer: $e');
-  }
+Future<void> fetchPhotographersFromApi(String query) async {
 
   setState(() {
-    kategoriList = kategori;
-    // locationList = lokasi;
-    photographerList = fotografer;
+    isPhotographerLoading = true; // mulai loading
   });
+
+  try {
+    final photographerRes = await VendorService().getAll(
+      orderBy: 'username',
+      username: query.isEmpty ? null : query, // kalau kosong, kirim null
+    );
+
+    final lokasi = photographerRes.map((e) => {
+     'id': e.noId,              // "ven_1", "ven_2"
+    'username': e.username,    // "vendA", "brandon.honanta"
+    'name': e.namaDisplay,     // "Vendor A", "Brandon H"
+    'avatar': e.id_media,       // URL avatar (nullable)
+    }).toList();
+
+    setState(() {
+      filteredPhotographers = lokasi;
+      photographerHasError = lokasi.isEmpty;
+       isPhotographerLoading = false; // selesai loading
+    });
+  } catch (e) {
+    print('====== Error fetching vendor: $e');
+    setState(() {
+      filteredPhotographers = [];
+      photographerHasError = true;
+       isPhotographerLoading = false; // selesai loading
+    });
+  }
 }
+
+
+
 
 
   void applySelectedIdsToController() {
@@ -287,37 +349,7 @@ Future<void> fetchFilterData() async {
     }
   }
 
-  void filterCategories() {
-    final query = categoryController.text.toLowerCase();
-    setState(() {
-      filteredCategories = kategoriList
-          .where((item) => item['label']!.toLowerCase().contains(query))
-          .toList();
 
-      print("=========== FILTERED CATEGORY: " + filteredCategories.toString());
-      categoryHasError = query.isNotEmpty && filteredCategories.isEmpty;
-    });
-  }
-
-  void filterLocations() {
-    final query = locationController.text.toLowerCase();
-    setState(() {
-      filteredLocations = locationList
-          .where((item) => item['label']!.toLowerCase().contains(query))
-          .toList();
-      locationHasError = query.isNotEmpty && filteredLocations.isEmpty;
-    });
-  }
-
- void filterPhotographers() {
-  final query = photographerController.text.toLowerCase();
-  setState(() {
-    filteredPhotographers = photographerList
-        .where((item) => (item['name'] ?? '').toLowerCase().contains(query))
-        .toList();
-    photographerHasError = query.isNotEmpty && filteredPhotographers.isEmpty;
-  });
-}
 
 
   @override
@@ -674,7 +706,17 @@ Widget buildPhotographerSearch() {
           constraints: BoxConstraints(
             maxHeight: 200, // batas tinggi supaya list bisa scroll
           ),
-          child: filteredPhotographers.isEmpty
+          child: 
+          
+          isPhotographerLoading
+              ? Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+           
+              : filteredPhotographers.isEmpty
               ? Text(
                   'Pencarian tidak ada',
                   style: TextStyle(
@@ -692,7 +734,7 @@ Widget buildPhotographerSearch() {
                       // Amanin null dengan ?? '' supaya gak error
                       final String avatarUrl = 
                          photographer['avatar'] ?? '';
-                      final String name = photographer['name'] ?? '';
+                      final String name = photographer['username'] ?? '';
 
                       return ListTile(
                         leading: ClipRRect(

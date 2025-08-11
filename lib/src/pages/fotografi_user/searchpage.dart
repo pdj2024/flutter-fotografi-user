@@ -675,7 +675,7 @@ class _SearchPageState extends State<SearchPage> {
                           portofolioProvider.isLoading
                               ? const Center(child: CircularProgressIndicator())
                               : portofolios.isEmpty
-                                  ? const Center(child: Text('Tidak ada hasil'))
+                                  ? const Center(child: Text('Tidak ada hasil aaa'))
                                   : ListView(
                                       shrinkWrap: true,
                                       physics:

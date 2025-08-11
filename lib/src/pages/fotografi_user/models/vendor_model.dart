@@ -1,6 +1,6 @@
 class VendorModel {
   final String noId;
-  final String userName;
+  final String username;
   final String namaDisplay;
   final String email;
   final String kota;
@@ -17,7 +17,7 @@ class VendorModel {
 
   VendorModel({
     required this.noId,
-    required this.userName,
+    required this.username,
     required this.namaDisplay,
     required this.email,
     required this.kota,
@@ -33,7 +33,7 @@ class VendorModel {
 
   factory VendorModel.fromJson(Map<String, dynamic> json) => VendorModel(
         noId: json['No_Id'] ?? '',
-        userName: json['UserName'] ?? '',
+        username: json['UserName'] ?? '',
         namaDisplay: json['Nama_Display'] ?? '',
         email: json['Email'] ?? '',
         kota: json['Kota'] ?? '',
@@ -53,7 +53,7 @@ class VendorModel {
       Map<String, dynamic> toJson() {
   return {
     'No_Id': noId,
-    'UserName': userName,
+    'UserName': username,
     'Nama_Display': namaDisplay,
     'Email': email,
     'Kota': kota,

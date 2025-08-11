@@ -14,6 +14,7 @@ class VendorService {
   Future<List<VendorModel>> getAll({
     String? no_id,
     String? nama_vendor,
+     String? username,
     String? id_media,
     String? status,
     String? orderBy,
@@ -25,6 +26,7 @@ class VendorService {
         queryParameters: {
           if (no_id != null) 'no_id': no_id,
           if (nama_vendor != null) 'nama_vendor': nama_vendor,
+            if (username != null) 'username': username,
           if (id_media != null) 'id_media': id_media,
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,

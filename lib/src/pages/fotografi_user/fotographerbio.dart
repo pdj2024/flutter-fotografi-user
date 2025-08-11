@@ -54,7 +54,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
           ? vendorData.first
           : VendorModel(
               noId: widget.idVendor,
-              userName: notFoundUsername,
+              username: notFoundUsername,
               namaDisplay: 'Vendor Tidak Ditemukan',
               email: '',
               kota: '-',
@@ -70,7 +70,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
     } catch (_) {
       vendor = VendorModel(
         noId: widget.idVendor,
-        userName: notFoundUsername,
+        username: notFoundUsername,
         namaDisplay: 'Vendor Tidak Ditemukan',
         email: '',
         kota: '-',
@@ -85,7 +85,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
       );
     }
 
-    if(vendor?.userName == notFoundUsername) {
+    if(vendor?.username == notFoundUsername) {
 
     } else {
         try {
@@ -129,7 +129,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
         elevation: 1,
         leading: CustomBackButton(),
         title: Text(
-          vendor?.userName ?? '',
+          vendor?.username ?? '',
           style: const TextStyle(
               color: Colors.black, fontWeight: FontWeight.bold),
         ),
@@ -212,7 +212,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                     ),
                   ],
                   const SizedBox(height: 20),
-                  if (vendor!.userName != notFoundUsername) ...[
+                  if (vendor!.username != notFoundUsername) ...[
                     Row(
                       children: [
                         Expanded(
@@ -231,7 +231,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                   MaterialPageRoute(
                                     builder: (context) => PilihanPaket(
                                       namaVendor: vendor!.namaDisplay,
-                                      userName: vendor!.userName,
+                                      userName: vendor!.username,
                                       kotaVendor: vendor!.kota,
                                       ratingVendor: vendor!.rating,
                                       idVendor: vendor!.noId,
@@ -262,7 +262,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                               NavigationProvider().navigateToPage(
                                 context,
                                 SingleChat(
-                                  receiverUserName: vendor!.userName,
+                                  receiverUserName: vendor!.username,
                                   receiverEmail: vendor!.email,
                                   receiverID: vendor!.noId.toString(),
                                 ),
