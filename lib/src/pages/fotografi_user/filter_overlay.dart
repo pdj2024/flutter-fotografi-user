@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -77,6 +79,13 @@ class _FilterOverlayState extends State<FilterOverlay> {
   bool isLocationOpen = false;
   bool isPhotographerOpen = false;
 
+  bool isCategoryLoading = false;
+bool isLocationLoading = false;
+bool isPhotographerLoading = false;
+
+
+  Timer? _locationDebounce;
+
   @override
 void initState() {
   super.initState();
@@ -87,7 +96,25 @@ void initState() {
 
   // Listeners untuk filter pencarian
   categoryController.addListener(filterCategories);
-  locationController.addListener(filterLocations);
+
+
+locationController.addListener(() {
+  if (_locationDebounce?.isActive ?? false) _locationDebounce!.cancel();
+
+  setState(() {
+    isLocationLoading = true; // ✅ langsung tampil spinner
+  });
+
+  _locationDebounce = Timer(const Duration(milliseconds: 500), () {
+    final query = locationController.text.trim();
+    fetchLocationsFromApi(query);
+  });
+});
+
+
+
+
+
   photographerController.addListener(filterPhotographers);
 
   // ====== Tambah focus listener global ======
@@ -128,10 +155,15 @@ void initState() {
 
   // Jalankan setelah frame build pertama
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    await fetchFilterData();
-    // Pre-fill text field dari selected ID
-    applySelectedIdsToController();
-  });
+  await fetchFilterData(); // 1️⃣ Ambil semua list awal
+
+  applySelectedIdsToController(); // 2️⃣ Isi text field dari data list yang sudah ada
+
+  // 3️⃣ Kalau ada selectedLocation dari awal, langsung fetch spesifik (supaya filtered list sesuai)
+  if (widget.selectedLocation != null && locationController.text.isNotEmpty) {
+    fetchLocationsFromApi(locationController.text.trim());
+  }
+});
 }
 
 void _closeAllExcept([String? except]) {
@@ -147,6 +179,37 @@ void _closeAllExcept([String? except]) {
   });
 }
 
+Future<void> fetchLocationsFromApi(String query) async {
+
+  setState(() {
+    isLocationLoading = true; // mulai loading
+  });
+
+  try {
+    final locationRes = await KotaService().getAll(
+      orderBy: 'nama_kota',
+      namaKota: query.isEmpty ? null : query, // kalau kosong, kirim null
+    );
+
+    final lokasi = locationRes.map((e) => {
+      'id': e.no_id,
+      'label': e.nama_kota,
+    }).toList();
+
+    setState(() {
+      filteredLocations = lokasi;
+      locationHasError = lokasi.isEmpty;
+       isLocationLoading = false; // selesai loading
+    });
+  } catch (e) {
+    print('====== Error fetching lokasi: $e');
+    setState(() {
+      filteredLocations = [];
+      locationHasError = true;
+       isLocationLoading = false; // selesai loading
+    });
+  }
+}
 
 
 Future<void> fetchFilterData() async {
@@ -165,15 +228,15 @@ Future<void> fetchFilterData() async {
     print('====== Error fetching kategori: $e');
   }
 
-  try {
-    final locationRes = await KotaService().getAll(orderBy: 'nama_kota');
-    lokasi = locationRes.map((e) => {
-      'id': e.no_id,
-      'label': e.nama_kota,
-    }).toList();
-  } catch (e) {
-    print('====== Error fetching lokasi: $e');
-  }
+  // try {
+  //   final locationRes = await KotaService().getAll(orderBy: 'nama_kota');
+  //   lokasi = locationRes.map((e) => {
+  //     'id': e.no_id,
+  //     'label': e.nama_kota,
+  //   }).toList();
+  // } catch (e) {
+  //   print('====== Error fetching lokasi: $e');
+  // }
 
   try {
     final photographerRes = await VendorService().getAll(orderBy: 'username_vendor');
@@ -189,7 +252,7 @@ Future<void> fetchFilterData() async {
 
   setState(() {
     kategoriList = kategori;
-    locationList = lokasi;
+    // locationList = lokasi;
     photographerList = fotografer;
   });
 }
@@ -272,6 +335,8 @@ Future<void> fetchFilterData() async {
     filteredCategories.clear();
     filteredLocations.clear();
     filteredPhotographers.clear();
+
+     _locationDebounce?.cancel();
     super.dispose();
   }
 
@@ -309,6 +374,7 @@ Future<void> fetchFilterData() async {
                       items: filteredCategories,
                       allItems: kategoriList,
                       hasError: categoryHasError,
+                      isLoading: isCategoryLoading,
                       onSelected: (value) {
                        // tempCategory = value;
                       },
@@ -323,6 +389,7 @@ Future<void> fetchFilterData() async {
                       items: filteredLocations,
                       allItems: locationList,
                       hasError: locationHasError,
+                      isLoading: isLocationLoading,
                       onSelected: (value) {
                         // tempLocation = value;
                       },
@@ -454,6 +521,7 @@ Widget buildSearchableDropdown({
   required List<Map<String, String>> items,
   required List<Map<String, String>> allItems,
   required bool hasError,
+  required bool isLoading,
   required ValueChanged<Map<String, String>> onSelected,
 }) {
   return Column(
@@ -507,7 +575,14 @@ Widget buildSearchableDropdown({
             border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: items.isEmpty
+          child: isLoading
+              ? Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : items.isEmpty
               ? Text(
                   'Pencarian tidak ada',
                   style: TextStyle(
