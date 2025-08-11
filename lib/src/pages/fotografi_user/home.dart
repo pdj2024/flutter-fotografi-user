@@ -602,11 +602,9 @@ Widget build(BuildContext context) {
                   (context, index) {
                     if (index < portofolioList.length) {
                       final p = portofolioList[index];
-                      final List<MediaItem> mediaList = p.mediaUrls ?? [];
-                      final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-                      final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
+                     
                       final String? mediaUrl =
-                          isVideo ? (firstMedia?.thumbUrl ?? firstMedia?.url) : firstMedia?.url;
+                          context.read<NavigationProvider>().getMediaUrl(p)  ?? '';
 
                       return buildPhotographerCard(
                         context,

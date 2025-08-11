@@ -408,4 +408,13 @@ Future<void> navigateToPage(
   }
 }
 
+String? getMediaUrl(dynamic p) {
+  final mediaList = p.mediaUrls ?? [];
+  final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
+  final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
+  return isVideo
+      ? (firstMedia?.thumbUrl ?? firstMedia?.url)
+      : firstMedia?.url;
+}
+
 }

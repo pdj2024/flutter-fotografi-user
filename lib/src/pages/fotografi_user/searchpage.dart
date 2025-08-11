@@ -1,30 +1,20 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/portofolio_provider.dart';
+
 import 'package:mpjnew/src/pages/fotografi_user/models/kategori_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../providers/constants.dart';
+import 'models/portofolio_model.dart';
+import 'services/portofolio_service.dart';
 import 'singlepage.dart';
 import 'user_login.dart';
 import 'filter_overlay.dart';
 import 'fotographerbio.dart';
 import '../providers/navigation_provider.dart';
 
-// class ProfilePage extends StatelessWidget {
-//   final String photographerName;
-//   const ProfilePage({super.key, required this.photographerName});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: Text(photographerName)),
-//       body: Center(child: Text('Welcome to $photographerName\'s profile!')),
-//     );
-//   }
-// }
 
 class SearchPage extends StatefulWidget {
   final String category;
@@ -43,175 +33,64 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  // final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool isScrolled = false;
+ 
+   bool isLoadingPorto = true;
+  
+  List<PortofolioModel> portofolioList = [];
+   String? errorPorto;
+ 
+  Future<void> _doRefresh() async {
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
 
-  bool isLoggedIn = false;
+    await loadData(); // ✅ Langsung refresh dari service
+  }
 
-  final List<Map<String, String>> photographers = [
-    {
-      'image':
-          'a8701826-810b-467e-8fe4-222e10d4bc0b-image_cropper_1748676050844.jpg',
-      'name': 'michaelwilliams',
-      'avatar':
-          '14eac222-0e59-446b-be37-60b222800f5d-image_cropper_1748677848826.jpg'
-    },
-    {
-      'image':
-          'd1ef0fe8-7233-46e7-a69f-33a1d0e39dad-image_cropper_1748676063147.jpg',
-      'name': 'emilybphotos',
-      'avatar':
-          '1d98c486-b810-42d8-8779-3b0ca34154ef-image_cropper_1748677884447.jpg'
-    },
-    {
-      'image':
-          '380bf81d-0666-4ac7-a08c-8146592ff86e-image_cropper_1748676098660.jpg',
-      'name': 'davismiller',
-      'avatar':
-          '65868b74-ef32-4388-a6e9-c87b86f6541f-image_cropper_1748677941144.jpg'
-    },
-    {
-      'image':
-          'a3640fb0-0ba0-4996-a31c-3d2eff590f75-image_cropper_1748676026618.jpg',
-      'name': 'amandareedphoto',
-      'avatar':
-          '355c5d9f-0e1b-4c8f-a715-c388b9d2e21d-image_cropper_1748677911014.jpg'
-    },
-    {
-      'image':
-          '0ae49083-2adc-49ed-b08f-c5f22d65bba6-image_cropper_1748676084421.jpg',
-      'name': 'sarahleephoto',
-      'avatar':
-          '175a09b7-bd6e-4b0b-b74c-d06d94d8683e-image_cropper_1748677929955.jpg'
-    },
-    {
-      'image':
-          'd9aa9b4b-3d2c-4c15-8888-f2626a11ed19-image_cropper_1748676073533.jpg',
-      'name': 'runitadiah',
-      'avatar':
-          '34442862-aa5d-4e74-8129-43104eb79aa7-image_cropper_1748677842439.jpg'
-    },
-    {
-      'image':
-          '1ff6f9ce-c218-4874-9209-734f11e954cb-image_cropper_1748676012077.jpg',
-      'name': 'bridalphotos',
-      'avatar':
-          '16a113e9-a9b3-4590-92a0-979ec358f4a1-image_cropper_1748677918469.jpg'
-    },
-    {
-      'image':
-          '6e1fe938-2189-4826-b4c5-d851e3e071ab-image_cropper_1748676001756.jpg',
-      'name': 'nikital',
-      'avatar':
-          'd00c8632-393e-49e8-847f-3c01a4dbf701-image_cropper_1748677823909.jpg'
-    },
-  ];
+  
+  Future<void> loadData() async {
+    setState(() {
+      isLoadingPorto = true;
+            errorPorto = null;
+        });
 
-  List<String> _filteredSuggestions = [];
-  bool _showSuggestions = false;
+  
+    try {
+      final pList = await PortofolioService().getAll(
+        id_customer: null,
+        status: 'aktif',
+      );
+      setState(() => portofolioList = pList);
+    } catch (e) {
+      setState(() => errorPorto = 'Error memuat portofolio');
+    } finally {
+      setState(() => isLoadingPorto = false);
+    }
+
+      }
+
+  // List<String> _filteredSuggestions = [];
+  // bool _showSuggestions = false;
   bool _showFilterOverlay = false;
-  final double _searchBarHeight = 64.0;
+  // final double _searchBarHeight = 64.0;
 
-  Map<String, dynamic> appliedFilters = {};
-  Map<String, dynamic> tempFilters = {};
+  // Map<String, dynamic> appliedFilters = {};
+  // Map<String, dynamic> tempFilters = {};
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      await context.read<KategoriProvider>().getAll();
-      await context.read<VendorProvider>().getAll();
 
-      // Ambil kategori List
-      final kategoriList = context.read<KategoriProvider>().kategoriList;
+      _scrollController.addListener(_onScroll);
 
-      // Jika ada kategori yang dipilih dari widget.category, filter langsung
-      if (widget.category.isNotEmpty) {
-        // Ubah kategori ke ID kategori (jika perlu)
-        String idKategori = '';
-        try {
-          final found = kategoriList.firstWhere(
-              (k) => k.nama_kategori == widget.category,
-              orElse: () => KategoriModel(
-                  no_id: 'kategori_1', nama_kategori: '', status: "false", id_media: "media_30"));
-          if (found.no_id != 0) idKategori = found.no_id.toString();
-        } catch (_) {}
-
-        if (idKategori.isNotEmpty) {
-          await context.read<PortofolioProvider>().getAll(
-             );
-          appliedFilters['category'] = widget.category;
-        } else {
-          // fallback, tampilkan semua jika idKategori tidak ditemukan
-          await context.read<PortofolioProvider>().getAll();
-        }
-      } else {
-        // Jika tidak ada kategori, tampilkan semua
-        await context.read<PortofolioProvider>().getAll();
-      }
-
-      if (widget.autoOpenFilter) {
-        tempFilters = Map<String, dynamic>.from(appliedFilters);
-        setState(() {
-          _showFilterOverlay = true;
-        });
-      }
+    Future.microtask(() {
+      loadData(); // ✅ ganti dari provider ke service langsung
     });
-    _scrollController.addListener(_onScroll);
-  }
-
-  Future<void> _doRefresh() async {
-    final kategoriProvider = context.read<KategoriProvider>();
-    final vendorProvider = context.read<VendorProvider>();
-    final portofolioProvider = context.read<PortofolioProvider>();
-
-    await kategoriProvider.getAll();
-    await vendorProvider.getAll();
-
-    // Ambil kategori List
-    final kategoriList = kategoriProvider.kategoriList;
-
-    // Ulangi filter sesuai kategori yang aktif (seperti di initState)
-    if ((appliedFilters['category'] ?? widget.category).toString().isNotEmpty) {
-      // Ubah kategori ke ID kategori (jika perlu)
-      String categoryName = appliedFilters['category'] ?? widget.category;
-      String idKategori = '';
-      try {
-        final found = kategoriList.firstWhere(
-            (k) => k.nama_kategori == categoryName,
-            orElse: () => KategoriModel(
-                no_id: 'kategori_1', nama_kategori: '', status: 'nonaktif', id_media: 'media_30'));
-        if (found.no_id != 0) idKategori = found.no_id.toString();
-      } catch (_) {}
-      if (idKategori.isNotEmpty) {
-        await portofolioProvider
-            .getAll();
-      } else {
-        await portofolioProvider.getAll();
-      }
-    } else {
-      await portofolioProvider.getAll();
-    }
-  }
-
-  String kategoriNameFromId(int idKategori, List<KategoriModel> kategoriList) {
-    final found = kategoriList.firstWhere(
-      (k) => k.no_id == idKategori,
-      orElse: () =>
-          KategoriModel(no_id: 'kategori_1', nama_kategori: '', status: 'nonaktif', id_media: 'media_28'),
-    );
-    return found.nama_kategori;
-  }
-
-  String idKategoriFromName(String nama, List<KategoriModel> kategoriList) {
-    final found = kategoriList.firstWhere(
-      (k) => k.nama_kategori == nama,
-      orElse: () =>
-          KategoriModel(no_id: 'kategori_1', nama_kategori: '', status: 'nonaktif', id_media: 'media_30'),
-    );
-    return found.no_id.toString();
   }
 
   void _onScroll() {
@@ -226,78 +105,73 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-  void _onSearchChanged() {
-    String query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) {
-      setState(() {
-        _showSuggestions = false;
-      });
-    } else {
-      setState(() {
-        // _filteredSuggestions = photographers
-        //     .where((p) => p['name']!.toLowerCase().contains(query))
-        //     .map((p) => p['name']!)
-        //     .toSet()
-        //     .toList();
-        // _showSuggestions = true;
+  // void _onSearchChanged() {
+  //   String query = _searchController.text.trim().toLowerCase();
+  //   if (query.isEmpty) {
+  //     setState(() {
+  //       _showSuggestions = false;
+  //     });
+  //   } else {
+  //     setState(() {
+       
 
-        // This search is only for suggestions, not for the main list
-        _filteredSuggestions = [];
-        _showSuggestions = false;
-      });
-    }
-  }
+  //       // This search is only for suggestions, not for the main list
+  //       _filteredSuggestions = [];
+  //       _showSuggestions = false;
+  //     });
+  //   }
+  // }
 
-  void _submitSearch() {
-    final keyword = _searchController.text.trim();
-    if (keyword.isEmpty) return;
+  // void _submitSearch() {
+  //   final keyword = _searchController.text.trim();
+  //   if (keyword.isEmpty) return;
 
-    context.read<NavigationProvider>().navigateToPage(
-          context,
-          SearchPage(
-            category: widget.category,
-            search: keyword,
-          ),
-          targetTabIndex: 0,
-        );
-  }
+  //   context.read<NavigationProvider>().navigateToPage(
+  //         context,
+  //         SearchPage(
+  //           category: widget.category,
+  //           search: keyword,
+  //         ),
+  //         targetTabIndex: 0,
+  //       );
+  // }
 
   void openFilterOverlay() {
-    tempFilters = Map<String, dynamic>.from(appliedFilters);
+    // tempFilters = Map<String, dynamic>.from(appliedFilters);
     setState(() {
       _showFilterOverlay = true;
     });
   }
 
-  Future<void> applyFilter(Map<String, String?> filters) async {
-    appliedFilters = filters;
-    setState(() {
-      _showFilterOverlay = false;
-    });
-    final kategoriProvider = context.read<KategoriProvider>();
-    final kategoriList = kategoriProvider.kategoriList;
-    final filterParams = <String, String>{};
-    if (filters['category'] != null && filters['category']!.isNotEmpty) {
-      filterParams['id_kategori'] =
-          idKategoriFromName(filters['category']!, kategoriList);
-    }
-    if (filters['location'] != null && filters['location']!.isNotEmpty) {
-      filterParams['kota'] = filters['location']!;
-    }
-    if (filters['photographer'] != null &&
-        filters['photographer']!.isNotEmpty) {
-      filterParams['username_vendor'] = filters['photographer']!;
-    }
-    if (filters['minPrice'] != null && filters['minPrice']!.isNotEmpty) {
-      filterParams['harga_min'] = filters['minPrice']!;
-    }
-    if (filters['maxPrice'] != null && filters['maxPrice']!.isNotEmpty) {
-      filterParams['harga_max'] = filters['maxPrice']!;
-    }
-    await context
-        .read<PortofolioProvider>()
-        .getAll();
-  }
+  // Future<void> applyFilter(Map<String, String?> filters) async {
+  //   appliedFilters = filters;
+  //   setState(() {
+  //     _showFilterOverlay = false;
+  //   });
+  //   final kategoriProvider = context.read<KategoriProvider>();
+  //   final kategoriList = kategoriProvider.kategoriList;
+  //   final filterParams = <String, String>{};
+  //   // if (filters['category'] != null && filters['category']!.isNotEmpty) {
+  //   //   filterParams['id_kategori'] =
+  //   //       idKategoriFromName(filters['category']!, kategoriList);
+  //   // }
+  //   if (filters['location'] != null && filters['location']!.isNotEmpty) {
+  //     filterParams['kota'] = filters['location']!;
+  //   }
+  //   if (filters['photographer'] != null &&
+  //       filters['photographer']!.isNotEmpty) {
+  //     filterParams['username_vendor'] = filters['photographer']!;
+  //   }
+  //   if (filters['minPrice'] != null && filters['minPrice']!.isNotEmpty) {
+  //     filterParams['harga_min'] = filters['minPrice']!;
+  //   }
+  //   if (filters['maxPrice'] != null && filters['maxPrice']!.isNotEmpty) {
+  //     filterParams['harga_max'] = filters['maxPrice']!;
+  //   }
+  //   await context
+  //       .read<PortofolioProvider>()
+  //       .getAll();
+  // }
 
   Widget buildPhotographerCard(
     BuildContext context,
@@ -415,7 +289,7 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget buildPhotographerItem(
+  Widget buildPortoItem(
     String imagePath,
     String name,
     String avatar,
@@ -425,8 +299,7 @@ class _SearchPageState extends State<SearchPage> {
     final imgUrl = '$imagePath';
     // final String imgUrl =
     //     context.read<NavigationProvider>().ambilGambar(imagePath);
-    final String imgAvatarUrl =
-        context.read<NavigationProvider>().ambilGambar(avatar);
+    final String imgAvatarUrl = avatar;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,37 +406,27 @@ class _SearchPageState extends State<SearchPage> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _searchController.dispose();
-    _focusNode.dispose();
+    // _searchController.dispose();
+  
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final portofolioProvider = context.watch<PortofolioProvider>();
-    final kategoriProvider = context.watch<KategoriProvider>();
-    final vendorProvider = context.watch<VendorProvider>();
-
-    final portofolios = portofolioProvider.portofolioList;
-    final kategoriList = kategoriProvider.kategoriList;
-    final vendorList = vendorProvider.vendorList;
-
-// KATEGORI & KOTA dari semua vendor
-    // final categories = kategoriList.map((v) => v.nama_kategori).toList();
-    // final locations = vendorList.map((v) => v.kota).toList();
+   
 
     // Fotografer dari portofolio yang sedang tampil
-    final photographers = portofolios
-        .map((e) => {
-              'name': e.usernameVendor,
-              'avatar': e.idMediaVendor.toString(),
-              'image': e.idMedia.toString(),
-              'noId': e.noId.toString(),
-              'idVendor': e.idVendor.toString(),
-              'kota': e.kota,
-              'rating': e.ratingVendor.toString(),
-            })
-        .toList();
+    // final photographers = portofolios
+    //     .map((e) => {
+    //           'name': e.usernameVendor,
+    //           'avatar': e.idMediaVendor.toString(),
+    //           'image': e.idMedia.toString(),
+    //           'noId': e.noId.toString(),
+    //           'idVendor': e.idVendor.toString(),
+    //           'kota': e.kota,
+    //           'rating': e.ratingVendor.toString(),
+    //         })
+    //     .toList();
    
 
     return Scaffold(
@@ -657,13 +520,19 @@ class _SearchPageState extends State<SearchPage> {
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16),
                               children: [
-                                TextSpan(
-                                  text: (appliedFilters['category'] ?? '')
-                                          .isNotEmpty
-                                      ? appliedFilters['category']
-                                      : (widget.category.isNotEmpty
-                                          ? widget.category
-                                          : 'Semua'),
+                                // TextSpan(
+                                //   text: (appliedFilters['category'] ?? '')
+                                //           .isNotEmpty
+                                //       ? appliedFilters['category']
+                                //       : (widget.category.isNotEmpty
+                                //           ? widget.category
+                                //           : 'Semua'),
+                                //   style: const TextStyle(
+                                //       fontWeight: FontWeight.bold,
+                                //       fontSize: 16),
+                                // ),
+                                 TextSpan(
+                                  text: 'Semua',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16),
@@ -672,23 +541,23 @@ class _SearchPageState extends State<SearchPage> {
                             ),
                           ),
                           const SizedBox(height: 15),
-                          portofolioProvider.isLoading
+                          isLoadingPorto
                               ? const Center(child: CircularProgressIndicator())
-                              : portofolios.isEmpty
+                              : portofolioList.isEmpty
                                   ? const Center(child: Text('Tidak ada hasil'))
                                   : ListView(
                                       shrinkWrap: true,
                                       physics:
                                           const NeverScrollableScrollPhysics(),
                                       children: List.generate(
-                                        (photographers.length + 1) ~/ 2,
+                                        (portofolioList.length + 1) ~/ 2,
                                         (index) {
-                                          final firstPhotographer =
-                                              photographers[index * 2];
-                                          final secondPhotographer =
+                                          final firstPorto =
+                                              portofolioList[index * 2];
+                                          final secondPorto =
                                               (index * 2 + 1 <
-                                                      photographers.length)
-                                                  ? photographers[index * 2 + 1]
+                                                      portofolioList.length)
+                                                  ? portofolioList[index * 2 + 1]
                                                   : null;
 
                                           return Padding(
@@ -702,46 +571,36 @@ class _SearchPageState extends State<SearchPage> {
                                                         const EdgeInsets.only(
                                                             right: 4.0),
                                                     child:
-                                                        buildPhotographerItem(
-                                                      firstPhotographer[
-                                                          'image']!,
-                                                      firstPhotographer[
-                                                          'name']!,
-                                                      firstPhotographer[
-                                                          'avatar']!,
+                                                        buildPortoItem(
+                                                      context.read<NavigationProvider>().getMediaUrl(firstPorto)  ?? '',
+                                                      firstPorto.usernameVendor,
+                                                      firstPorto.idMediaVendor,
                                                      
-                                                          firstPhotographer[
-                                                              'noId']!,
+                                                          firstPorto.noId,
                                                      
-                                                          firstPhotographer[
-                                                              'idVendor']!,
+                                                          firstPorto.idVendor,
                                                     ),
                                                   ),
                                                 ),
-                                                if (secondPhotographer != null)
+                                                if (secondPorto != null)
                                                   Expanded(
                                                     child: Padding(
                                                       padding:
                                                           const EdgeInsets.only(
                                                               left: 4.0),
                                                       child:
-                                                          buildPhotographerItem(
-                                                        secondPhotographer[
-                                                            'image']!,
-                                                        secondPhotographer[
-                                                            'name']!,
-                                                        secondPhotographer[
-                                                            'avatar']!,
-                                                       
-                                                            secondPhotographer[
-                                                                'noId']!,
-                                                      
-                                                            secondPhotographer[
-                                                                'idVendor']!,
+                                                          buildPortoItem(
+                                                        context.read<NavigationProvider>().getMediaUrl(secondPorto)  ?? '',
+                                                      secondPorto.usernameVendor,
+                                                      secondPorto.idMediaVendor,
+                                                     
+                                                          secondPorto.noId,
+                                                     
+                                                          secondPorto.idVendor,
                                                       ),
                                                     ),
                                                   ),
-                                                if (secondPhotographer == null)
+                                                if (secondPorto == null)
                                                   const Expanded(
                                                       child: SizedBox.shrink()),
                                               ],
@@ -756,21 +615,21 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                 ],
               ),
-              if (_showFilterOverlay)
-                Positioned.fill(
-                  child: FilterOverlay(
+              // if (_showFilterOverlay)
+              //   Positioned.fill(
+              //     child: FilterOverlay(
                    
-                    selectedCategory: tempFilters['category'] ?? '',
-                    selectedLocation: tempFilters['location'] ?? '',
-                    selectedPhotographer: tempFilters['photographer'] ?? '',
-                    minPrice: (tempFilters['minPrice'] ?? '').toString(),
-                    maxPrice: (tempFilters['maxPrice'] ?? '').toString(),
-                    onApply: (newFilters) async =>
-                        await applyFilter(newFilters),
-                    onReset: (newFilters) async => await applyFilter({}),
-                    onClose: () => setState(() => _showFilterOverlay = false),
-                  ),
-                ),
+              //       selectedCategory: tempFilters['category'] ?? '',
+              //       selectedLocation: tempFilters['location'] ?? '',
+              //       selectedPhotographer: tempFilters['photographer'] ?? '',
+              //       minPrice: (tempFilters['minPrice'] ?? '').toString(),
+              //       maxPrice: (tempFilters['maxPrice'] ?? '').toString(),
+              //       onApply: (newFilters) async =>
+              //           await applyFilter(newFilters), param itu ditambahkan ke fetch
+              //       onReset: (newFilters) async => await applyFilter({}),
+              //       onClose: () => setState(() => _showFilterOverlay = false),
+              //     ),
+              //   ),
             ],
           ),
         ),
