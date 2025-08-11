@@ -13,18 +13,18 @@ import 'filter_overlay.dart';
 import 'fotographerbio.dart';
 import '../providers/navigation_provider.dart';
 
-class ProfilePage extends StatelessWidget {
-  final String photographerName;
-  const ProfilePage({super.key, required this.photographerName});
+// class ProfilePage extends StatelessWidget {
+//   final String photographerName;
+//   const ProfilePage({super.key, required this.photographerName});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(photographerName)),
-      body: Center(child: Text('Welcome to $photographerName\'s profile!')),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: Text(photographerName)),
+//       body: Center(child: Text('Welcome to $photographerName\'s profile!')),
+//     );
+//   }
+// }
 
 class SearchPage extends StatefulWidget {
   final String category;
@@ -675,7 +675,7 @@ class _SearchPageState extends State<SearchPage> {
                           portofolioProvider.isLoading
                               ? const Center(child: CircularProgressIndicator())
                               : portofolios.isEmpty
-                                  ? const Center(child: Text('Tidak ada hasil aaa'))
+                                  ? const Center(child: Text('Tidak ada hasil'))
                                   : ListView(
                                       shrinkWrap: true,
                                       physics:
@@ -759,9 +759,7 @@ class _SearchPageState extends State<SearchPage> {
               if (_showFilterOverlay)
                 Positioned.fill(
                   child: FilterOverlay(
-                    // categories: categories,
-                    // photographers: photographers,
-                    // locations: locations,
+                   
                     selectedCategory: tempFilters['category'] ?? '',
                     selectedLocation: tempFilters['location'] ?? '',
                     selectedPhotographer: tempFilters['photographer'] ?? '',

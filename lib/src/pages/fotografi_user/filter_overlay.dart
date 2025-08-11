@@ -516,27 +516,50 @@ Future<void> fetchPhotographersFromApi(String query) async {
     );
   }
 
-  Widget buildHeader() {
-    return Container(
-      color: Constants.primaryColor,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      child: Row(
-        children: [
-          CustomBackButton(color: Colors.white),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Filter',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold),
+Widget buildHeader() {
+  return Container(
+    color: Constants.primaryColor,
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+    child: Row(
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.white,
+          ),
+          onPressed: () async {
+            // ✅ Jalankan logic apply filter sebelum pop
+            widget.onApply({
+              'category': categoryController.text.trim(),
+              'location': locationController.text.trim(),
+              'photographer': photographerController.text.trim(),
+              'minPrice': minPriceController.text.trim(),
+              'maxPrice': maxPriceController.text.trim(),
+            });
+
+            // ✅ Navigasi tetap seperti CustomBackButton
+            final provider = Provider.of<NavigationProvider>(context, listen: false);
+            bool allowPop = await provider.onWillPop();
+            if (allowPop) {
+              Navigator.of(context).pop();
+            }
+          },
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'Filter',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget buildLabel(String label) {
     return Text(
