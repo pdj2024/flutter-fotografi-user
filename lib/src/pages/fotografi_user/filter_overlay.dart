@@ -19,6 +19,7 @@ class FilterOverlay extends StatefulWidget {
   final String? selectedCategory;
   final String? selectedLocation;
   final String? selectedPhotographer;
+  final String? usernamePhotographer;
   final String? minPrice;
   final String? maxPrice;
   final ValueChanged<Map<String, String?>> onApply;
@@ -30,6 +31,7 @@ class FilterOverlay extends StatefulWidget {
     required this.selectedCategory,
     required this.selectedLocation,
     required this.selectedPhotographer,
+    required this.usernamePhotographer,
     required this.minPrice,
     required this.maxPrice,
     required this.onApply,
@@ -75,6 +77,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
   String? selectedCategoryId;
   String? selectedLocationId;
   String? selectedPhotographerId;
+   
 
   // Error flags
   bool isCategoryOpen= false;
@@ -99,6 +102,7 @@ void initState() {
   print('🔍 selectedCategory: ${widget.selectedCategory}');
   print('📍 selectedLocation: ${widget.selectedLocation}');
   print('📸 selectedPhotographer: ${widget.selectedPhotographer}');
+  print('📸 usernamePhotographer: ${widget.usernamePhotographer}');
   print('💰 minPrice: ${widget.minPrice}');
   print('💎 maxPrice: ${widget.maxPrice}');
 
@@ -172,6 +176,10 @@ void initState() {
     }
     if (widget.selectedPhotographer?.isNotEmpty ?? false) {
       await fetchPhotographersFromApi(widget.selectedPhotographer!, null);
+    } else {
+      if (widget.usernamePhotographer?.isNotEmpty ?? false) {
+        await fetchPhotographersFromApi(null, widget.usernamePhotographer!);
+      }
     }
 
      applySelectedIdsToController();
@@ -344,14 +352,22 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
       selectedLocationId = widget.selectedLocation;
     }
 
-    if (widget.selectedPhotographer != null) {
-      final match = filteredPhotographers.firstWhere(
-        (item) => item['id'] == widget.selectedPhotographer,
-        orElse: () => {'username': ''},
-      );
-      photographerController.text = match['username']!;
-      selectedPhotographerId = widget.selectedPhotographer;
-    }
+    if (widget.selectedPhotographer != null && widget.selectedPhotographer!.isNotEmpty) {
+          final match = filteredPhotographers.firstWhere(
+            (item) => item['id'] == widget.selectedPhotographer,
+            orElse: () => {'username': ''},
+          );
+          photographerController.text = match['username'] ?? '';
+          selectedPhotographerId = widget.selectedPhotographer;
+      } else if (widget.usernamePhotographer != null && widget.usernamePhotographer!.isNotEmpty) {
+        // final match = filteredPhotographers.firstWhere(
+        //   (item) => item['username'] == widget.usernamePhotographer,
+        //   orElse: () => {'username': ''},
+        // );
+        photographerController.text = widget.usernamePhotographer!;
+        // selectedPhotographerId = match['id'] ?? null;
+      }
+  
   }
 
 
@@ -506,6 +522,7 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          print("===== DALAM USERNAME: " + photographerController.text.trim());
                           widget.onApply({
                             'id_vendor': selectedPhotographerId, // atau id vendor yang kamu ambil
                             'username_vendor': photographerController.text.trim(),

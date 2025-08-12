@@ -626,6 +626,7 @@ class _SearchPageState extends State<SearchPage> {
                     selectedCategory: filters['id_kategori'] ?? '',
                     selectedLocation: filters['id_lokasi'] ?? '',
                     selectedPhotographer: filters['id_vendor'] ?? '',
+                     usernamePhotographer: filters['username_vendor'] ?? '',
                     minPrice: (filters['min_price'] ?? '').toString(),
                     maxPrice: (filters['max_price'] ?? '').toString(),
                     onApply: (newFilters) async =>
