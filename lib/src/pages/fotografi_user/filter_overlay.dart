@@ -347,9 +347,9 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
     if (widget.selectedPhotographer != null) {
       final match = filteredPhotographers.firstWhere(
         (item) => item['id'] == widget.selectedPhotographer,
-        orElse: () => {'label': ''},
+        orElse: () => {'username': ''},
       );
-      photographerController.text = match['label']!;
+      photographerController.text = match['username']!;
       selectedPhotographerId = widget.selectedPhotographer;
     }
   }
@@ -415,7 +415,12 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
                       onSelected: (value) {
                         selectedCategoryId = value['id']; // ✅ simpan ID
                       },
-                      selected: selectedCategoryId
+                        onClear: () {
+                          setState(() {
+                            selectedCategoryId = null; // ✅ beneran null di luar
+                          });
+                          
+                        }
                     ),
                     const SizedBox(height: 20),
                     buildLabel('Lokasi'),
@@ -431,7 +436,12 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
                       onSelected: (value) {
                         selectedLocationId = value['id']; // ✅ simpan ID
                       },
-                      selected: selectedLocationId
+                      onClear: () {
+                          setState(() {
+                            selectedLocationId = null; // ✅ beneran null di luar
+                          });
+                          
+                        }
                     ),
                     const SizedBox(height: 20),
                     buildLabel('Harga (Rp)'),
@@ -594,7 +604,7 @@ Widget buildSearchableDropdown({
   required bool hasError,
   required bool isLoading,
   required ValueChanged<Map<String, String>> onSelected,
-  required String? selected
+   required VoidCallback onClear
 }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,7 +620,7 @@ Widget buildSearchableDropdown({
                   onPressed: () {
                     controller.clear();
                     focusNode.unfocus();
-                    selected = null;
+                    onClear();
                   },
                 )
               : null,
