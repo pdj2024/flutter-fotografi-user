@@ -173,6 +173,7 @@ class _SearchPageState extends State<SearchPage> {
     });
   
     filters = filtersFromOverlay;
+    print("========== FROM OVERLAY: " + filters.toString());
      await loadData();
   }
 
@@ -610,7 +611,10 @@ class _SearchPageState extends State<SearchPage> {
                     onApply: (newFilters) async =>
                         await applyFilter(newFilters), 
                     onReset: (newFilters) async => await applyFilter({}),
-                    onClose: () => setState(() => _showFilterOverlay = false),
+                    onClose: () {
+                      setState(() => _showFilterOverlay = false);
+                    
+                    } 
                   ),
                 ),
             ],

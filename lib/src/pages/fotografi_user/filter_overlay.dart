@@ -42,9 +42,9 @@ class FilterOverlay extends StatefulWidget {
 
 class _FilterOverlayState extends State<FilterOverlay> {
   // List fetched dari API
-  List<Map<String, String>> kategoriList = [];
-  List<Map<String, String>> locationList = [];
-  List<Map<String, String>> photographerList = [];
+  // List<Map<String, String>> kategoriList = [];
+  // List<Map<String, String>> locationList = [];
+  // List<Map<String, String>> photographerList = [];
 
   // Filtered for autocomplete
   List<Map<String, String>> filteredCategories = [];
@@ -89,70 +89,39 @@ bool isPhotographerLoading = false;
   Timer? _categoryDebounce;
   Timer? _photographerDebounce;
 
-  @override
+  bool firstBuild = true;
+
+@override
 void initState() {
   super.initState();
 
-    print('🔍 selectedCategory: ${widget.selectedCategory}');
-    print('📍 selectedLocation: ${widget.selectedLocation}');
-    print('📸 selectedPhotographer: ${widget.selectedPhotographer}');
-    print('💰 minPrice: ${widget.minPrice}');
-    print('💎 maxPrice: ${widget.maxPrice}');
+  print('🔍 selectedCategory: ${widget.selectedCategory}');
+  print('📍 selectedLocation: ${widget.selectedLocation}');
+  print('📸 selectedPhotographer: ${widget.selectedPhotographer}');
+  print('💰 minPrice: ${widget.minPrice}');
+  print('💎 maxPrice: ${widget.maxPrice}');
 
   // Set min/max price
   minPriceController.text = widget.minPrice ?? '';
   maxPriceController.text = widget.maxPrice ?? '';
 
-  // Listeners untuk filter pencarian
-
-
-
-locationController.addListener(() {
-  if (_locationDebounce?.isActive ?? false) _locationDebounce!.cancel();
-
-  setState(() {
-    isLocationLoading = true; // ✅ langsung tampil spinner
+  // ================== Listeners ==================
+  locationController.addListener(() {
+    if (firstBuild) return; // ❌ skip kalau masih build pertama
+    _debounceLocation();
   });
 
-  _locationDebounce = Timer(const Duration(milliseconds: 500), () {
-    final query = locationController.text.trim();
-    fetchLocationsFromApi(query);
-  });
-});
-
-
-categoryController.addListener(() {
-  if (_categoryDebounce?.isActive ?? false) _categoryDebounce!.cancel();
-
-  setState(() {
-    isCategoryLoading = true; // ✅ langsung tampil spinner
+  categoryController.addListener(() {
+    if (firstBuild) return;
+    _debounceCategory();
   });
 
-  _categoryDebounce = Timer(const Duration(milliseconds: 500), () {
-    final query = categoryController.text.trim();
-    fetchCategorysFromApi(query);
-  });
-});
-
-photographerController.addListener(() {
-  if (_photographerDebounce?.isActive ?? false) _photographerDebounce!.cancel();
-
-  setState(() {
-    isPhotographerLoading = true; // ✅ langsung tampil spinner
+  photographerController.addListener(() {
+    if (firstBuild) return;
+    _debouncePhotographer();
   });
 
-  _photographerDebounce = Timer(const Duration(milliseconds: 500), () {
-    final query = photographerController.text.trim();
-    fetchPhotographersFromApi(query);
-  });
-});
-
-
-
-
-
-
-  // ====== Tambah focus listener global ======
+  // ================== Focus Listeners ==================
   categoryFocusNode.addListener(() {
     if (categoryFocusNode.hasFocus) {
       _closeAllExcept('category');
@@ -188,28 +157,54 @@ photographerController.addListener(() {
     if (maxPriceFocusNode.hasFocus) _closeAllExcept();
   });
 
-  // Jalankan setelah frame build pertama
+  // ================== Post Frame untuk init fetch ==================
   WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // Apply teks awal tanpa trigger listener
+   
 
+    // Fetch awal (hanya sekali)
+    if (widget.selectedLocation?.isNotEmpty ?? false) {
+      await fetchLocationsFromApi(widget.selectedLocation!, null);
+    }
+    if (widget.selectedCategory?.isNotEmpty ?? false) {
+      await fetchCategorysFromApi(widget.selectedCategory!, null);
+    }
+    if (widget.selectedPhotographer?.isNotEmpty ?? false) {
+      await fetchPhotographersFromApi(widget.selectedPhotographer!, null);
+    }
 
-  // 3️⃣ Kalau ada selectedLocation dari awal, langsung fetch spesifik (supaya filtered list sesuai)
-  if (widget.selectedLocation != null && locationController.text.isNotEmpty) {
-    fetchLocationsFromApi(locationController.text.trim());
-  }
+     applySelectedIdsToController();
 
-  if (widget.selectedCategory != null && categoryController.text.isNotEmpty) {
-    fetchCategorysFromApi(categoryController.text.trim());
-  }
-
-  if (widget.selectedPhotographer != null && photographerController.text.isNotEmpty) {
-    fetchPhotographersFromApi(photographerController.text.trim());
-
-  
-  }
-
-    applySelectedIdsToController();
-});
+    // ✅ Setelah semua init selesai, listener aktif
+    firstBuild = false;
+  });
 }
+
+// ================== Debounce Helpers ==================
+void _debounceLocation() {
+  if (_locationDebounce?.isActive ?? false) _locationDebounce!.cancel();
+  setState(() => isLocationLoading = true);
+  _locationDebounce = Timer(const Duration(milliseconds: 500), () {
+    fetchLocationsFromApi(null, locationController.text);
+  });
+}
+
+void _debounceCategory() {
+  if (_categoryDebounce?.isActive ?? false) _categoryDebounce!.cancel();
+  setState(() => isCategoryLoading = true);
+  _categoryDebounce = Timer(const Duration(milliseconds: 500), () {
+    fetchCategorysFromApi(null, categoryController.text);
+  });
+}
+
+void _debouncePhotographer() {
+  if (_photographerDebounce?.isActive ?? false) _photographerDebounce!.cancel();
+  setState(() => isPhotographerLoading = true);
+  _photographerDebounce = Timer(const Duration(milliseconds: 500), () {
+    fetchPhotographersFromApi(null, photographerController.text);
+  });
+}
+
 
 void _closeAllExcept([String? except]) {
   if (except != 'category') categoryFocusNode.unfocus();
@@ -224,7 +219,7 @@ void _closeAllExcept([String? except]) {
   });
 }
 
-Future<void> fetchLocationsFromApi(String query) async {
+Future<void> fetchLocationsFromApi(String? no_id, String? query) async {
 
   setState(() {
     isLocationLoading = true; // mulai loading
@@ -233,7 +228,8 @@ Future<void> fetchLocationsFromApi(String query) async {
   try {
     final locationRes = await KotaService().getAll(
       orderBy: 'nama_kota',
-      namaKota: query.isEmpty ? null : query, // kalau kosong, kirim null
+      namaKota: query,
+      noId: no_id // kalau kosong, kirim null
     );
 
     final lokasi = locationRes.map((e) => {
@@ -256,7 +252,7 @@ Future<void> fetchLocationsFromApi(String query) async {
   }
 }
 
-Future<void> fetchCategorysFromApi(String query) async {
+Future<void> fetchCategorysFromApi(String? no_id, String? query) async {
 
   setState(() {
     isCategoryLoading = true; // mulai loading
@@ -265,7 +261,8 @@ Future<void> fetchCategorysFromApi(String query) async {
   try {
     final categoryRes = await KategoriService().getAll(
       orderBy: 'nama_kategori',
-      namaKategori: query.isEmpty ? null : query, // kalau kosong, kirim null
+      namaKategori: query,
+      noId: no_id, // kalau kosong, kirim null
     );
 
     final lokasi = categoryRes.map((e) => {
@@ -288,7 +285,7 @@ Future<void> fetchCategorysFromApi(String query) async {
   }
 }
 
-Future<void> fetchPhotographersFromApi(String query) async {
+Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
 
   setState(() {
     isPhotographerLoading = true; // mulai loading
@@ -297,7 +294,8 @@ Future<void> fetchPhotographersFromApi(String query) async {
   try {
     final photographerRes = await VendorService().getAll(
       orderBy: 'username',
-      username: query.isEmpty ? null : query, // kalau kosong, kirim null
+      username: query,
+      no_id: no_id, // kalau kosong, kirim null
     );
 
     final lokasi = photographerRes.map((e) => {
@@ -328,7 +326,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
 
   void applySelectedIdsToController() {
     if (widget.selectedCategory != null) {
-      final match = kategoriList.firstWhere(
+      final match = filteredCategories.firstWhere(
         (item) => item['id'] == widget.selectedCategory,
         orElse: () => {'label': ''},
       );
@@ -337,7 +335,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
     }
 
     if (widget.selectedLocation != null) {
-      final match = locationList.firstWhere(
+      final match = filteredLocations.firstWhere(
         (item) => item['id'] == widget.selectedLocation,
         orElse: () => {'label': ''},
       );
@@ -346,7 +344,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
     }
 
     if (widget.selectedPhotographer != null) {
-      final match = photographerList.firstWhere(
+      final match = filteredPhotographers.firstWhere(
         (item) => item['id'] == widget.selectedPhotographer,
         orElse: () => {'label': ''},
       );
@@ -410,12 +408,13 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       focusNode: categoryFocusNode,
                       hint: 'Pilih Kategori',
                       items: filteredCategories,
-                      allItems: kategoriList,
+                      // allItems: kategoriList,
                       hasError: categoryHasError,
                       isLoading: isCategoryLoading,
                       onSelected: (value) {
                         selectedCategoryId = value['id']; // ✅ simpan ID
                       },
+                      selected: selectedCategoryId
                     ),
                     const SizedBox(height: 20),
                     buildLabel('Lokasi'),
@@ -425,12 +424,13 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       focusNode: locationFocusNode,
                       hint: 'Cari Lokasi',
                       items: filteredLocations,
-                      allItems: locationList,
+                      // allItems: locationList,
                       hasError: locationHasError,
                       isLoading: isLocationLoading,
                       onSelected: (value) {
                         selectedLocationId = value['id']; // ✅ simpan ID
                       },
+                      selected: selectedLocationId
                     ),
                     const SizedBox(height: 20),
                     buildLabel('Harga (Rp)'),
@@ -589,10 +589,11 @@ Widget buildSearchableDropdown({
   required FocusNode focusNode,
   required String hint,
   required List<Map<String, String>> items,
-  required List<Map<String, String>> allItems,
+  // required List<Map<String, String>> allItems,
   required bool hasError,
   required bool isLoading,
   required ValueChanged<Map<String, String>> onSelected,
+  required String? selected
 }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,6 +609,7 @@ Widget buildSearchableDropdown({
                   onPressed: () {
                     controller.clear();
                     focusNode.unfocus();
+                    selected = null;
                   },
                 )
               : null,
@@ -700,7 +702,8 @@ Widget buildPhotographerSearch() {
                     photographerController.clear();
                     // Reset filter juga kalau perlu
                     setState(() {
-                      filteredPhotographers = List.from(photographerList);
+                      // filteredPhotographers = List.from(photographerList);
+                      selectedPhotographerId = null;
                     });
                     photographerFocusNode.unfocus();
                   },
