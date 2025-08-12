@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
@@ -828,7 +829,6 @@ Widget buildPhotographerSearch() {
   );
 }
 
-
 Widget buildTextInput({
   required TextEditingController controller,
   required FocusNode focusNode,
@@ -851,9 +851,12 @@ Widget buildTextInput({
     controller: controller,
     focusNode: focusNode,
     keyboardType: TextInputType.number,
-   onTap: () => _closeAllExcept(
-  focusNode == minPriceFocusNode ? 'minPrice' : 'maxPrice'
-),
+    inputFormatters: [
+      FilteringTextInputFormatter.digitsOnly, // ✅ hanya angka
+    ],
+    onTap: () => _closeAllExcept(
+      focusNode == minPriceFocusNode ? 'minPrice' : 'maxPrice'
+    ),
     decoration: InputDecoration(
       hintText: hint,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
@@ -870,17 +873,14 @@ Widget buildTextInput({
       ),
     ),
     onChanged: (value) {
-      // Hilangkan titik sebelum format ulang
-      String numericValue = value.replaceAll('.', '');
-      if (numericValue.isEmpty) {
-        controller.text = '';
+      if (value.isEmpty) {
         onChanged('');
         return;
       }
 
       // Format ribuan pakai titik
       String formatted = NumberFormat('#,###', 'id_ID')
-          .format(int.parse(numericValue))
+          .format(int.parse(value))
           .replaceAll(',', '.');
 
       // Update text dan posisikan kursor di akhir
@@ -889,7 +889,7 @@ Widget buildTextInput({
         selection: TextSelection.collapsed(offset: formatted.length),
       );
 
-      onChanged(numericValue); // kirim angka tanpa titik
+      onChanged(value); // kirim angka mentah tanpa titik
     },
   );
 }

@@ -25,6 +25,8 @@ class PortofolioService {
     double? ratingVendorMax,
     int? jumlahPaketMin,
     int? jumlahPaketMax,
+     int? hargaPaketMin,
+    int? hargaPaketMax,
     String? jenisMedia,
     String? username,
      String? nama_vendor,
@@ -33,26 +35,31 @@ class PortofolioService {
     String? orderDir,
   }) async {
     try {
+
+print("============= PORTO GETT MIN: " + hargaPaketMin.toString());
+
       final response = await apiClient.get(
         '/$controller/getAll',
         queryParameters: {
-          if (noId != null) 'no_id': noId,
-           if (status != null) 'status': status,
-          if (id_customer != null) 'id_customer': id_customer,
-          if (idVendor != null) 'id_vendor': idVendor,
-          if (idMedia != null) 'id_media': idMedia,
-          if (idKategori != null) 'id_kategori': idKategori,
-          if (namaVendor != null) 'nama_vendor': namaVendor,
-          if (ratingVendorMin != null) 'rating_vendor_min': ratingVendorMin.toString(),
-          if (ratingVendorMax != null) 'rating_vendor_max': ratingVendorMax.toString(),
-          if (jumlahPaketMin != null) 'jumlah_paket_min': jumlahPaketMin.toString(),
-          if (jumlahPaketMax != null) 'jumlah_paket_max': jumlahPaketMax.toString(),
-          if (jenisMedia != null) 'jenis_media': jenisMedia,
-          if (username != null) 'username_vendor': username,
-           if (nama_vendor != null) 'nama_vendor': nama_vendor,
-            if (untuk_keperluan != null) 'untuk_keperluan': untuk_keperluan,
-          if (orderBy != null) 'orderBy': orderBy,
-          if (orderDir != null) 'orderDir': orderDir,
+         if (noId != null && noId.toString().isNotEmpty) 'no_id': noId,
+  if (status != null && status.toString().isNotEmpty) 'status': status,
+  if (id_customer != null && id_customer.toString().isNotEmpty) 'id_customer': id_customer,
+  if (idVendor != null && idVendor.toString().isNotEmpty) 'id_vendor': idVendor,
+  if (idMedia != null && idMedia.toString().isNotEmpty) 'id_media': idMedia,
+  if (idKategori != null && idKategori.toString().isNotEmpty) 'id_kategori': idKategori,
+  if (namaVendor != null && namaVendor.toString().isNotEmpty) 'nama_vendor': namaVendor,
+  if (ratingVendorMin != null) 'rating_vendor_min': ratingVendorMin.toString(),
+  if (ratingVendorMax != null) 'rating_vendor_max': ratingVendorMax.toString(),
+  if (jumlahPaketMin != null) 'jumlah_paket_min': jumlahPaketMin.toString(),
+  if (jumlahPaketMax != null) 'jumlah_paket_max': jumlahPaketMax.toString(),
+  if (hargaPaketMin != null) 'harga_min': hargaPaketMin.toString(),
+  if (hargaPaketMax != null) 'harga_max': hargaPaketMax.toString(),
+  if (jenisMedia != null && jenisMedia.toString().isNotEmpty) 'jenis_media': jenisMedia,
+  if (username != null && username.toString().isNotEmpty) 'username_vendor': username,
+  if (nama_vendor != null && nama_vendor.toString().isNotEmpty) 'nama_vendor': nama_vendor,
+  if (untuk_keperluan != null && untuk_keperluan.toString().isNotEmpty) 'untuk_keperluan': untuk_keperluan,
+  if (orderBy != null && orderBy.toString().isNotEmpty) 'orderBy': orderBy,
+  if (orderDir != null && orderDir.toString().isNotEmpty) 'orderDir': orderDir,
         },
       );
 print('==============================');

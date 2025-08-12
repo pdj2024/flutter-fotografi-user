@@ -69,6 +69,21 @@ class _SearchPageState extends State<SearchPage> {
     await loadData(); // ✅ Langsung refresh dari service
   }
 
+  int? parseNumber(dynamic value) {
+  if (value == null) return null;
+
+  // pastikan string
+  String str = value.toString().trim();
+
+  if (str.isEmpty) return null;
+
+  // normalisasi format
+  str = str.replaceAll('.', '');   // buang pemisah ribuan
+  str = str.replaceAll(',', '.');  // koma jadi titik
+
+  return int.tryParse(str);
+}
+
   
   Future<void> loadData() async {
     setState(() {
@@ -76,6 +91,8 @@ class _SearchPageState extends State<SearchPage> {
             errorPorto = null;
         });
 
+      print("======= LOAD DATA: MIN " + filters?['min_price']);
+      print("======= LOAD DATA: MAX " + filters?['max_price']);
   
     try {
       final pList = await PortofolioService().getAll(
@@ -86,13 +103,16 @@ class _SearchPageState extends State<SearchPage> {
         idVendor: filters?['id_vendor'],
         username: filters?['username_vendor'],
         idKategori: filters?['id_kategori'],
-         
+         hargaPaketMin: parseNumber(filters?['min_price']),
+          hargaPaketMax: parseNumber(filters?['max_price']),
 
 
       
       );
       setState(() => portofolioList = pList);
     } catch (e) {
+      print("======= LOAD DATA: ERRORRRRR $e");
+  
       setState(() => errorPorto = 'Error memuat portofolio');
     } finally {
       setState(() => isLoadingPorto = false);
