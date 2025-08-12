@@ -51,7 +51,12 @@ class PaketService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((e) => PaketModel.fromJson(e)).toList();
-    } else {
+    } 
+    else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      }
+    else {
       throw Exception('Gagal load $entity (${response.statusCode})');
     }
   } catch (e) {

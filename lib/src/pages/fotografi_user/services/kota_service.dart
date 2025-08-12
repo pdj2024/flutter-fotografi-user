@@ -53,7 +53,11 @@ print('==============================');
         final Map<String, dynamic> json = jsonDecode(response.body);
         final List<dynamic> data = json['Data'];
         return data.map((e) => KotaModel.fromJson(e)).toList();
-      } else {
+      } else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      }
+      else {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e) {

@@ -472,7 +472,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
     'min_price':  '',
     'max_price':  '',
     'id_lokasi':  '',
-    'lokasi':  '',
+    'nama_lokasi':  '',
   });
                         },
                         style: OutlinedButton.styleFrom(
@@ -497,7 +497,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
                             'min_price': minPriceController.text.trim(),
                             'max_price': maxPriceController.text.trim(),
                             'id_lokasi': selectedLocationId,
-                            'lokasi': locationController.text.trim(),
+                            'nama_lokasi': locationController.text.trim(),
                           });
                         },
                         style: ElevatedButton.styleFrom(
@@ -543,7 +543,7 @@ Widget buildHeader() {
                             'min_price': minPriceController.text.trim(),
                             'max_price': maxPriceController.text.trim(),
                             'id_lokasi': selectedLocationId,
-                            'lokasi': locationController.text.trim(),
+                            'nama_lokasi': locationController.text.trim(),
                           });
 
             // ✅ Navigasi tetap seperti CustomBackButton

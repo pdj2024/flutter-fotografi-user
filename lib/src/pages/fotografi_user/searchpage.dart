@@ -509,19 +509,11 @@ class _SearchPageState extends State<SearchPage> {
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16),
                               children: [
-                                // TextSpan(
-                                //   text: (appliedFilters['category'] ?? '')
-                                //           .isNotEmpty
-                                //       ? appliedFilters['category']
-                                //       : (widget.category.isNotEmpty
-                                //           ? widget.category
-                                //           : 'Semua'),
-                                //   style: const TextStyle(
-                                //       fontWeight: FontWeight.bold,
-                                //       fontSize: 16),
-                                // ),
+                              
                                  TextSpan(
-                                  text: filters['nama_kategori'] ?? 'Semua',
+                                  text: (filters['nama_kategori']?.trim().isEmpty ?? true) 
+                                      ? 'Semua' 
+                                      : filters['nama_kategori'],
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16),
@@ -608,11 +600,11 @@ class _SearchPageState extends State<SearchPage> {
                 Positioned.fill(
                   child: FilterOverlay(
                    
-                    selectedCategory: filters['category'] ?? '',
-                    selectedLocation: filters['location'] ?? '',
-                    selectedPhotographer: filters['photographer'] ?? '',
-                    minPrice: (filters['minPrice'] ?? '').toString(),
-                    maxPrice: (filters['maxPrice'] ?? '').toString(),
+                    selectedCategory: filters['id_kategori'] ?? '',
+                    selectedLocation: filters['id_lokasi'] ?? '',
+                    selectedPhotographer: filters['id_vendor'] ?? '',
+                    minPrice: (filters['min_price'] ?? '').toString(),
+                    maxPrice: (filters['max_price'] ?? '').toString(),
                     onApply: (newFilters) async =>
                         await applyFilter(newFilters), 
                     onReset: (newFilters) async => await applyFilter({}),

@@ -47,7 +47,12 @@ class VendorService {
 
 
       return data.map((e) => VendorModel.fromJson(e)).toList();
-    } else {
+    } 
+    else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      }
+    else {
       throw Exception('Gagal load $entity (${response.statusCode})');
     }
   } catch (e) {
