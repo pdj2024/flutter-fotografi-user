@@ -69,6 +69,7 @@ class _EcommerceHomeState extends State<EcommerceHome> {
       final pList = await PortofolioService().getAll(
         id_customer: userId,
         status: 'aktif',
+        untuk_keperluan: 'home'
       );
       setState(() => portofolioList = pList);
     } catch (e) {
@@ -251,7 +252,8 @@ Widget buildKategoriSection(List<KategoriModel> kategoriList) {
                     context.read<NavigationProvider>().navigateToPage(
                           context,
                           SearchPage(
-                            category: kategori.nama_kategori,
+                            id_category: kategori.no_id,
+                            nama_category: kategori.nama_kategori,
                             search: "",
                           ),
                           targetTabIndex: 0,
@@ -284,7 +286,8 @@ Widget buildKategoriSection(List<KategoriModel> kategoriList) {
                 context.read<NavigationProvider>().navigateToPage(
                       context,
                       SearchPage(
-                        category: kategori.nama_kategori,
+                       id_category: kategori.no_id,
+                        nama_category: kategori.nama_kategori,
                         search: "",
                       ),
                       targetTabIndex: 0,
@@ -454,7 +457,8 @@ Widget build(BuildContext context) {
                                     context.read<NavigationProvider>().navigateToPage(
                                       context,
                                       SearchPage(
-                                        category: "",
+                                         id_category: "",
+                                          nama_category: '',
                                         search: "",
                                         autoOpenFilter: true,
                                       ),

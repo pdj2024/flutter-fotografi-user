@@ -17,13 +17,15 @@ import '../providers/navigation_provider.dart';
 
 
 class SearchPage extends StatefulWidget {
-  final String category;
+  final String id_category;
+  final String nama_category;
   final String search;
   final bool autoOpenFilter;
 
   const SearchPage({
     super.key,
-    required this.category,
+    required this.id_category,
+    required this.nama_category,
     required this.search,
     this.autoOpenFilter = false,
   });
@@ -36,11 +38,26 @@ class _SearchPageState extends State<SearchPage> {
   // final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool isScrolled = false;
+
+   bool _showFilterOverlay = false;
  
    bool isLoadingPorto = true;
   
   List<PortofolioModel> portofolioList = [];
    String? errorPorto;
+
+
+
+ 
+ 
+  // final double _searchBarHeight = 64.0;
+
+  Map<String, dynamic> filters = {};
+  // Map<String, dynamic> tempFilters = {};
+  //  List<String> _filteredSuggestions = [];
+  // bool _showSuggestions = false;
+
+
  
   Future<void> _doRefresh() async {
     await _scrollController.animateTo(
@@ -62,8 +79,17 @@ class _SearchPageState extends State<SearchPage> {
   
     try {
       final pList = await PortofolioService().getAll(
-        id_customer: null,
-        status: 'aktif',
+         status: 'aktif',
+         untuk_keperluan: 'search',
+        noId: filters?['no_id'],
+        id_customer: filters?['id_customer'],
+        idVendor: filters?['id_vendor'],
+        username: filters?['username_vendor'],
+        idKategori: filters?['id_kategori'],
+         
+
+
+      
       );
       setState(() => portofolioList = pList);
     } catch (e) {
@@ -74,19 +100,14 @@ class _SearchPageState extends State<SearchPage> {
 
       }
 
-  // List<String> _filteredSuggestions = [];
-  // bool _showSuggestions = false;
-  bool _showFilterOverlay = false;
-  // final double _searchBarHeight = 64.0;
-
-  // Map<String, dynamic> appliedFilters = {};
-  // Map<String, dynamic> tempFilters = {};
 
   @override
   void initState() {
     super.initState();
 
       _scrollController.addListener(_onScroll);
+      filters?['nama_kategori'] = widget.nama_category;
+      filters?['id_kategori'] = widget.id_category;
 
     Future.microtask(() {
       loadData(); // ✅ ganti dari provider ke service langsung
@@ -143,35 +164,15 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
-  // Future<void> applyFilter(Map<String, String?> filters) async {
-  //   appliedFilters = filters;
-  //   setState(() {
-  //     _showFilterOverlay = false;
-  //   });
-  //   final kategoriProvider = context.read<KategoriProvider>();
-  //   final kategoriList = kategoriProvider.kategoriList;
-  //   final filterParams = <String, String>{};
-  //   // if (filters['category'] != null && filters['category']!.isNotEmpty) {
-  //   //   filterParams['id_kategori'] =
-  //   //       idKategoriFromName(filters['category']!, kategoriList);
-  //   // }
-  //   if (filters['location'] != null && filters['location']!.isNotEmpty) {
-  //     filterParams['kota'] = filters['location']!;
-  //   }
-  //   if (filters['photographer'] != null &&
-  //       filters['photographer']!.isNotEmpty) {
-  //     filterParams['username_vendor'] = filters['photographer']!;
-  //   }
-  //   if (filters['minPrice'] != null && filters['minPrice']!.isNotEmpty) {
-  //     filterParams['harga_min'] = filters['minPrice']!;
-  //   }
-  //   if (filters['maxPrice'] != null && filters['maxPrice']!.isNotEmpty) {
-  //     filterParams['harga_max'] = filters['maxPrice']!;
-  //   }
-  //   await context
-  //       .read<PortofolioProvider>()
-  //       .getAll();
-  // }
+  Future<void> applyFilter(Map<String, String?> filtersFromOverlay) async {
+  
+    setState(() {
+      _showFilterOverlay = false;
+    });
+  
+    filters = filtersFromOverlay;
+     await loadData();
+  }
 
   Widget buildPhotographerCard(
     BuildContext context,
@@ -415,19 +416,7 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
    
 
-    // Fotografer dari portofolio yang sedang tampil
-    // final photographers = portofolios
-    //     .map((e) => {
-    //           'name': e.usernameVendor,
-    //           'avatar': e.idMediaVendor.toString(),
-    //           'image': e.idMedia.toString(),
-    //           'noId': e.noId.toString(),
-    //           'idVendor': e.idVendor.toString(),
-    //           'kota': e.kota,
-    //           'rating': e.ratingVendor.toString(),
-    //         })
-    //     .toList();
-   
+
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -532,7 +521,7 @@ class _SearchPageState extends State<SearchPage> {
                                 //       fontSize: 16),
                                 // ),
                                  TextSpan(
-                                  text: 'Semua',
+                                  text: filters['nama_kategori'] ?? 'Semua',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16),
@@ -615,21 +604,21 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                 ],
               ),
-              // if (_showFilterOverlay)
-              //   Positioned.fill(
-              //     child: FilterOverlay(
+              if (_showFilterOverlay)
+                Positioned.fill(
+                  child: FilterOverlay(
                    
-              //       selectedCategory: tempFilters['category'] ?? '',
-              //       selectedLocation: tempFilters['location'] ?? '',
-              //       selectedPhotographer: tempFilters['photographer'] ?? '',
-              //       minPrice: (tempFilters['minPrice'] ?? '').toString(),
-              //       maxPrice: (tempFilters['maxPrice'] ?? '').toString(),
-              //       onApply: (newFilters) async =>
-              //           await applyFilter(newFilters), param itu ditambahkan ke fetch
-              //       onReset: (newFilters) async => await applyFilter({}),
-              //       onClose: () => setState(() => _showFilterOverlay = false),
-              //     ),
-              //   ),
+                    selectedCategory: filters['category'] ?? '',
+                    selectedLocation: filters['location'] ?? '',
+                    selectedPhotographer: filters['photographer'] ?? '',
+                    minPrice: (filters['minPrice'] ?? '').toString(),
+                    maxPrice: (filters['maxPrice'] ?? '').toString(),
+                    onApply: (newFilters) async =>
+                        await applyFilter(newFilters), 
+                    onReset: (newFilters) async => await applyFilter({}),
+                    onClose: () => setState(() => _showFilterOverlay = false),
+                  ),
+                ),
             ],
           ),
         ),

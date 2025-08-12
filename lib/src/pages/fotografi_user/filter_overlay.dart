@@ -408,7 +408,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       hasError: categoryHasError,
                       isLoading: isCategoryLoading,
                       onSelected: (value) {
-                       // tempCategory = value;
+                        selectedCategoryId = value['id']; // ✅ simpan ID
                       },
                     ),
                     const SizedBox(height: 20),
@@ -423,7 +423,7 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       hasError: locationHasError,
                       isLoading: isLocationLoading,
                       onSelected: (value) {
-                        // tempLocation = value;
+                        selectedLocationId = value['id']; // ✅ simpan ID
                       },
                     ),
                     const SizedBox(height: 20),
@@ -465,12 +465,15 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       child: OutlinedButton(
                         onPressed: () {
                           widget.onApply({
-                            'category': '',
-                            'location': '',
-                            'photographer': '',
-                            'minPrice': '',
-                            'maxPrice': '',
-                          });
+    'id_vendor':  '',
+    'username_vendor':  '',
+    'id_kategori':  '',
+    'nama_kategori': '',
+    'min_price':  '',
+    'max_price':  '',
+    'id_lokasi':  '',
+    'lokasi':  '',
+  });
                         },
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Constants.primaryColor),
@@ -487,11 +490,14 @@ Future<void> fetchPhotographersFromApi(String query) async {
                       child: ElevatedButton(
                         onPressed: () {
                           widget.onApply({
-                            'category': categoryController.text.trim(),
-                            'location': locationController.text.trim(),
-                            'photographer': photographerController.text.trim(),
-                            'minPrice': minPriceController.text.trim(),
-                            'maxPrice': maxPriceController.text.trim(),
+                            'id_vendor': selectedPhotographerId, // atau id vendor yang kamu ambil
+                            'username_vendor': photographerController.text.trim(),
+                            'id_kategori': selectedCategoryId,
+                            'nama_kategori': categoryController.text.trim(),
+                            'min_price': minPriceController.text.trim(),
+                            'max_price': maxPriceController.text.trim(),
+                            'id_lokasi': selectedLocationId,
+                            'lokasi': locationController.text.trim(),
                           });
                         },
                         style: ElevatedButton.styleFrom(
@@ -529,13 +535,16 @@ Widget buildHeader() {
           ),
           onPressed: () async {
             // ✅ Jalankan logic apply filter sebelum pop
-            widget.onApply({
-              'category': categoryController.text.trim(),
-              'location': locationController.text.trim(),
-              'photographer': photographerController.text.trim(),
-              'minPrice': minPriceController.text.trim(),
-              'maxPrice': maxPriceController.text.trim(),
-            });
+             widget.onApply({
+                            'id_vendor': selectedPhotographerId, // atau id vendor yang kamu ambil
+                            'username_vendor': photographerController.text.trim(),
+                            'id_kategori': selectedCategoryId,
+                            'nama_kategori': categoryController.text.trim(),
+                            'min_price': minPriceController.text.trim(),
+                            'max_price': maxPriceController.text.trim(),
+                            'id_lokasi': selectedLocationId,
+                            'lokasi': locationController.text.trim(),
+                          });
 
             // ✅ Navigasi tetap seperti CustomBackButton
             final provider = Provider.of<NavigationProvider>(context, listen: false);
@@ -795,7 +804,10 @@ Widget buildPhotographerSearch() {
                         ),
                         title: Text(name),
                         onTap: () {
-                          photographerController.text = name;
+                           setState(() {
+                              photographerController.text = name;
+                              selectedPhotographerId = photographer['id']; // ✅ simpan ID di variabel state
+                            });
                           FocusScope.of(context).unfocus();
                         },
                       );

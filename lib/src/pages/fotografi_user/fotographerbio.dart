@@ -47,7 +47,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
     try {
       final vendorData = await VendorService().getAll(
         no_id: widget.idVendor,
-        status: 'aktif',
+        status: 'aktif'
       );
 
       vendor = vendorData.isNotEmpty
