@@ -93,6 +93,12 @@ bool isPhotographerLoading = false;
 void initState() {
   super.initState();
 
+    print('🔍 selectedCategory: ${widget.selectedCategory}');
+    print('📍 selectedLocation: ${widget.selectedLocation}');
+    print('📸 selectedPhotographer: ${widget.selectedPhotographer}');
+    print('💰 minPrice: ${widget.minPrice}');
+    print('💎 maxPrice: ${widget.maxPrice}');
+
   // Set min/max price
   minPriceController.text = widget.minPrice ?? '';
   maxPriceController.text = widget.maxPrice ?? '';
@@ -184,9 +190,7 @@ photographerController.addListener(() {
 
   // Jalankan setelah frame build pertama
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-  // await fetchFilterData(); // 1️⃣ Ambil semua list awal
 
-  // applySelectedIdsToController(); // 2️⃣ Isi text field dari data list yang sudah ada
 
   // 3️⃣ Kalau ada selectedLocation dari awal, langsung fetch spesifik (supaya filtered list sesuai)
   if (widget.selectedLocation != null && locationController.text.isNotEmpty) {
@@ -200,8 +204,10 @@ photographerController.addListener(() {
   if (widget.selectedPhotographer != null && photographerController.text.isNotEmpty) {
     fetchPhotographersFromApi(photographerController.text.trim());
 
-    applySelectedIdsToController();
+  
   }
+
+    applySelectedIdsToController();
 });
 }
 

@@ -109,6 +109,8 @@ class _SearchPageState extends State<SearchPage> {
       filters?['nama_kategori'] = widget.nama_category;
       filters?['id_kategori'] = widget.id_category;
 
+      _showFilterOverlay = widget.autoOpenFilter;
+
     Future.microtask(() {
       loadData(); // ✅ ganti dari provider ke service langsung
     });
