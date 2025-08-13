@@ -91,8 +91,12 @@ class _SearchPageState extends State<SearchPage> {
             errorPorto = null;
         });
 
-      print("======= LOAD DATA: MIN " + filters?['min_price']);
-      print("======= LOAD DATA: MAX " + filters?['max_price']);
+     final minPrice = filters?['min_price']?.toString() ?? '';
+final maxPrice = filters?['max_price']?.toString() ?? '';
+
+print("======= LOAD DATA: MIN $minPrice");
+print("======= LOAD DATA: MAX $maxPrice");
+
   
     try {
       final pList = await PortofolioService().getAll(
@@ -105,6 +109,7 @@ class _SearchPageState extends State<SearchPage> {
         idKategori: filters?['id_kategori'],
          hargaPaketMin: parseNumber(filters?['min_price']),
           hargaPaketMax: parseNumber(filters?['max_price']),
+           kota: filters?['id_lokasi']
 
 
       

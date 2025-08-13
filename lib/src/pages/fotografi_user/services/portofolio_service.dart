@@ -31,6 +31,7 @@ class PortofolioService {
     String? username,
      String? nama_vendor,
       String? untuk_keperluan,
+      String? kota,
     String? orderBy,
     String? orderDir,
   }) async {
@@ -58,6 +59,7 @@ print("============= PORTO GETT MIN: " + hargaPaketMin.toString());
   if (username != null && username.toString().isNotEmpty) 'username_vendor': username,
   if (nama_vendor != null && nama_vendor.toString().isNotEmpty) 'nama_vendor': nama_vendor,
   if (untuk_keperluan != null && untuk_keperluan.toString().isNotEmpty) 'untuk_keperluan': untuk_keperluan,
+    if (kota != null && kota.toString().isNotEmpty) 'kota': kota,
   if (orderBy != null && orderBy.toString().isNotEmpty) 'orderBy': orderBy,
   if (orderDir != null && orderDir.toString().isNotEmpty) 'orderDir': orderDir,
         },

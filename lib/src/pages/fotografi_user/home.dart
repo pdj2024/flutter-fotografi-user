@@ -561,6 +561,17 @@ Widget build(BuildContext context) {
                         GestureDetector(
                           onTap: () {
                             // setState(() => showAllKategori = !showAllKategori);
+                            context.read<NavigationProvider>().navigateToPage(
+                          context,
+                          SearchPage(
+                            id_category: '',
+                            nama_category: '',
+                            search: "",
+                          ),
+                          targetTabIndex: 0,
+                          targetPage: "SearchPage",
+                          hrsLogin: false,
+                        );
                           },
                           child: Text(
                             "Lihat Semua",
