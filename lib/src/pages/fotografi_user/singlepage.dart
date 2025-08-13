@@ -9,6 +9,7 @@ import '../providers/custom_back_button.dart';
 import 'fotographerbio.dart';
 import 'models/portofolio_model.dart';
 import 'models/paket_model.dart';
+import 'providers/user_provider.dart';
 import 'services/portofolio_service.dart';
 import 'services/paket_service.dart';
 import 'single_chat.dart';
@@ -25,6 +26,7 @@ class SinglePostPage extends StatefulWidget {
 class _SinglePostPageState extends State<SinglePostPage> {
   bool isLiked = false;
   bool isSaved = false;
+  int likeCount = 0;
   final ScrollController _scrollController = ScrollController();
 
   Map<String, dynamic>? portofolioData;
@@ -44,9 +46,14 @@ class _SinglePostPageState extends State<SinglePostPage> {
     });
 
     try {
+      final userId = context.read<UserProvider>().role == 'customer'
+      ? context.read<UserProvider>().userId
+      : null;
+
       final portofolioDataList = await PortofolioService().getAll(
             noId: widget.noId,
             status: "aktif",
+            id_customer: userId
           );
 
       if (portofolioDataList.isEmpty) {
@@ -55,6 +62,13 @@ class _SinglePostPageState extends State<SinglePostPage> {
       }
 
       final portofolio = portofolioDataList.first;
+
+      setState(() {
+        isLiked = portofolio.isLiked;
+        isSaved = portofolio.isSaved;
+        likeCount = portofolio.likes;
+      });
+     
       portofolioData = portofolio.toJson();
 
       final List<String> idPaketList = List<String>.from(portofolio.idPaket ?? []);
@@ -68,6 +82,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
           final paketData = await PaketService().getAll(
                 idList: idPaketList,
                 status: "aktif",
+                
               );
 
           setState(() {
@@ -129,11 +144,11 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         _buildImage(portofolioData!),
                         _buildLikeSaveRow(),
                        // ✅ Sembunyikan likes jika null atau 0
-                      if (portofolioData!['Likes'] != null && portofolioData!['Likes'] != 0)
+                      if (likeCount > 0)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
-                            "${portofolioData!['Likes']} likes",
+                            "$likeCount likes",
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -155,10 +170,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                           ...paketList.map((paket) => OfferCard(
                                 title: paket.nama_paket,
                                 price: Constants.formatCurrency(paket.harga),
-                                includes: [
-                                  if (paket.rincian.isNotEmpty) paket.rincian,
-                                  "Aktif: ${paket.aktif ? 'Ya' : 'Tidak'}",
-                                ],
+                                rincian: paket.rincian,
                               )),
                         const SizedBox(height: 20),
                       ],
@@ -308,18 +320,68 @@ Widget _buildVendorHeader(Map<String, dynamic> data) {
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => setState(() => isLiked = !isLiked),
+            onTap: () async {
+    final prevLiked = isLiked;
+    final prevCount = likeCount;
+
+   setState(() {
+      isLiked = !isLiked;
+      likeCount += isLiked ? 1 : -1; // update lokal langsung
+    });
+
+    try {
+      await PortofolioService().action(
+        no_id: context.read<UserProvider>().userId!,
+        id_portofolio: widget.noId,
+        action_type: isLiked ? "like" : "unlike",
+      );
+    } catch (e) {
+      // rollback kalau error
+     setState(() {
+        isLiked = prevLiked;
+        likeCount = prevCount;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengubah like: $e')),
+      );
+    }
+  },
             child: Icon(
               isLiked ? Icons.favorite : Icons.favorite_border,
               color: isLiked ? Colors.red : Colors.black,
               size: 28,
             ),
           ),
-          const SizedBox(width: 16),
-          const Icon(Icons.chat_bubble_outline, size: 28),
+          // const SizedBox(width: 16),
+          // const Icon(Icons.chat_bubble_outline, size: 28),
           const Spacer(),
           GestureDetector(
-            onTap: () => setState(() => isSaved = !isSaved),
+          onTap: () async {
+    final prevSaved = isSaved;
+
+
+   setState(() {
+      isSaved = !isSaved;
+     
+    });
+
+    try {
+      await PortofolioService().action(
+        no_id: context.read<UserProvider>().userId!,
+        id_portofolio: widget.noId,
+        action_type: isSaved ? "save" : "unsave",
+      );
+    } catch (e) {
+      // rollback kalau error
+     setState(() {
+        isSaved = prevSaved;
+       
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengubah save: $e')),
+      );
+    }
+  },
             child: Icon(
               isSaved ? Icons.bookmark : Icons.bookmark_border,
               color: isSaved ? Colors.amber : Colors.black,
@@ -335,13 +397,15 @@ Widget _buildVendorHeader(Map<String, dynamic> data) {
 class OfferCard extends StatelessWidget {
   final String title;
   final String price;
-  final List<String> includes;
+    final String rincian;
+  // final List<String> includes;
 
   const OfferCard({
     super.key,
     required this.title,
     required this.price,
-    required this.includes,
+    required this.rincian
+    // required this.includes,
   });
 
   @override
@@ -375,10 +439,18 @@ class OfferCard extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          ...includes.map((item) => Padding(
+          // ...includes.map((item) => Padding(
+          //       padding: const EdgeInsets.only(bottom: 2),
+          //       child: Text("• $item", style: const TextStyle(fontSize: 13)),
+          //     )),
+          Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: Text("• $item", style: const TextStyle(fontSize: 13)),
-              )),
+                child:  Text(
+          rincian,
+          style: const TextStyle(fontSize: 13),
+          softWrap: true,
+        ),
+              ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

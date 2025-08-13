@@ -85,6 +85,36 @@ print('==============================');
     }
   }
 
+
+// ACTION
+  Future<void> action({
+  required String no_id,
+  required String id_portofolio,
+  required String action_type, // like, unlike, save, unsave
+}) async {
+  final body = {
+    "no_id": no_id,
+    "id_portofolio": id_portofolio,
+    "action_type": action_type,
+  };
+
+  final response = await apiClient.post(
+    '/$controller/action',
+    body: jsonEncode(body),
+    headers: {'Content-Type': 'application/json'},
+  );
+
+  print('==============================');
+  print('Response Body: ${response.body}');
+  print('Status Code: ${response.statusCode}');
+  print('==============================');
+
+  if (response.statusCode != 200) {
+    throw Exception('Gagal melakukan aksi $action_type');
+  }
+}
+
+
 /// CREATE
   Future<void> create(PortofolioModel model) async {
     final response = await apiClient.post(

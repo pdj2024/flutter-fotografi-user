@@ -193,6 +193,7 @@ class _PilihanPaketState extends State<PilihanPaket> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (widget.ratingVendor != null && widget.ratingVendor > 0) 
                 Row(
                   children: [
                     const Icon(Icons.star, size: 20, color: Colors.amber),
@@ -200,6 +201,8 @@ class _PilihanPaketState extends State<PilihanPaket> {
                     Text(widget.ratingVendor.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ],
                 ),
+
+                
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 44,
@@ -235,66 +238,97 @@ class _PilihanPaketState extends State<PilihanPaket> {
   }
 
   Widget buildPackageCard({
-    required BuildContext context,
-    required String title,
-    required String price,
-    required String rincian
- 
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              Text(price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(rincian)
-               
-              ],
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Constants.primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+  required BuildContext context,
+  required String title,
+  required String price,
+  required String rincian,
+}) {
+  return Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: const [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 4,
+          offset: Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Baris judul & harga
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Judul paket - bisa wrap
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
                 ),
+                softWrap: true,
               ),
-              onPressed: () {
-                NavigationProvider().navigateToPage(
-                  context,
-                  SingleChat(
-                    receiverUserName: widget.userName,
-                    receiverEmail: "hello@gmail.com",
-                    receiverID: widget.idVendor,
-                  ),
-                  targetTabIndex: 1,
-                );
-              },
-              child: const Text('Atur Jadwal', style: TextStyle(color: Colors.white)),
             ),
-          )
-        ],
-      ),
-    );
-  }
+            const SizedBox(width: 8),
+            // Harga - tetap kanan, tidak wrap
+            Text(
+              price,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Rincian paket - auto wrap & multi-line
+        Text(
+          rincian,
+          style: const TextStyle(fontSize: 13),
+          softWrap: true,
+        ),
+
+        const SizedBox(height: 12),
+
+        // Tombol di kanan bawah
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Constants.primaryColor,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            onPressed: () {
+              NavigationProvider().navigateToPage(
+                context,
+                SingleChat(
+                  receiverUserName: widget.userName,
+                  receiverEmail: "hello@gmail.com",
+                  receiverID: widget.idVendor,
+                ),
+                targetTabIndex: 1,
+              );
+            },
+            child: const Text(
+              'Atur Jadwal',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 }

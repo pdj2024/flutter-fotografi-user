@@ -1,6 +1,7 @@
 class PortofolioModel {
   final String noId;
   final String idVendor;
+ 
   final String idMedia;
   final String idMediaVendor;
   final String idKategori;
@@ -20,6 +21,7 @@ class PortofolioModel {
   final int matchKota;
   final int fromSavedVendor;
   final bool isSaved;
+   final bool isLiked;
   final double skorTotal;
   final String contentType;
   final String thumbUrl;
@@ -28,6 +30,7 @@ class PortofolioModel {
   PortofolioModel({
     required this.noId,
     required this.idVendor,
+   
     required this.idMedia,
     required this.idMediaVendor,
     required this.idKategori,
@@ -47,6 +50,7 @@ class PortofolioModel {
     required this.matchKota,
     required this.fromSavedVendor,
     required this.isSaved,
+     required this.isLiked,
     required this.skorTotal,
     required this.contentType,
     required this.thumbUrl,
@@ -65,6 +69,7 @@ class PortofolioModel {
     return PortofolioModel(
       noId: json['No_Id']?.toString() ?? "",
       idVendor: json['Id_Vendor']?.toString() ?? "",
+      
       idMedia: json['Id_Media']?.toString() ?? "",
       idMediaVendor: json['Id_Media_Vendor']?.toString() ?? "",
       idKategori: json['Id_Kategori']?.toString() ?? "",
@@ -89,6 +94,7 @@ class PortofolioModel {
       fromSavedVendor:
           json['From_Saved_Vendor'] is int ? json['From_Saved_Vendor'] : 0,
       isSaved: json['Is_Saved'] == true,
+        isLiked: json['Is_Liked'] == true,
       skorTotal: (json['Skor_Total'] is num)
           ? (json['Skor_Total'] as num).toDouble()
           : 0.0,
@@ -121,6 +127,7 @@ class PortofolioModel {
       'Match_Kota': matchKota,
       'From_Saved_Vendor': fromSavedVendor,
       'Is_Saved': isSaved,
+      'Is_Liked': isLiked,
       'Skor_Total': skorTotal,
       'Content_Type': contentType,
       'Thumb_Url': thumbUrl,

@@ -37,6 +37,8 @@ class _EcommerceHomeState extends State<EcommerceHome> {
   String? errorPorto;
   String? errorKategori;
 
+  int maxKategoriPerRow = 4;
+
   Future<void> _doRefresh() async {
     await _scrollController.animateTo(
       0,
@@ -49,6 +51,8 @@ class _EcommerceHomeState extends State<EcommerceHome> {
 
   Future<void> _loadCustomerId() async {
     await context.read<UserProvider>().checkLoginGoogle(role: 'customer', silent: true);
+
+    // INI OPTIONAL LOGGING AJA
     final userId = context.read<UserProvider>().userId;
     print("==== LOADED USER ID: $userId");
   }
@@ -211,7 +215,7 @@ class _EcommerceHomeState extends State<EcommerceHome> {
 
   
 Widget buildKategoriSection(List<KategoriModel> kategoriList) {
-  const int maxPerRow = 4;
+  int maxPerRow = maxKategoriPerRow;
   final screenWidth = MediaQuery.of(context).size.width;
   final itemWidth = (screenWidth - 16 - (8.0 * (maxPerRow - 1))) / maxPerRow;
 
@@ -522,6 +526,7 @@ Widget build(BuildContext context) {
                           "Kategori Populer",
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
+                        if (kategoriList.length > maxKategoriPerRow)
                         GestureDetector(
                           onTap: () {
                             setState(() => showAllKategori = !showAllKategori);
@@ -539,7 +544,7 @@ Widget build(BuildContext context) {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(
-                          4,
+                          maxKategoriPerRow,
                           (i) => _shimmerPlaceholder(width: 56, height: 56, radius: 28),
                         ),
                       )
