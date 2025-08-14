@@ -16,6 +16,12 @@ class ApiClient {
   void setRole(String role) => _role = role;
   void clearRole() => _role = null;
   String? getRole() => _role;
+   Future<String?> getIdToken() async {
+    return await _authService.getIdToken();
+  }
+
+  Future<Map<String, String>> getHeaders() => _headers();
+
 
   /// GET request
   Future<http.Response> get(

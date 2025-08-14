@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'package:path/path.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../../core/api_client.dart';
 import '../../core/api_singleton.dart';
 import '../../providers/constants.dart';
+import '../providers/user_provider.dart';
 
 class ChatService {
   final String controller = 'chat';
@@ -29,70 +31,95 @@ class ChatService {
   // SIGNALR SECTION
   // ===========================
 
-  Future<void> connect(String currentUserId) async {
+Future<void> connect(String currentUserId, ApiClient apiClient) async {
+  print("======= INI MULAI CONNECT");
 
-    print("======= INI MULAI CONNECT");
+  // Ambil token & role dari ApiClient
+  final token = await apiClient.getIdToken();
+  final role = apiClient.getRole() ?? 'customer'; // default vendor kalau belum diset
 
-    if (_connection == null) {
-      _connection = HubConnectionBuilder()
-          .withUrl(hubUrl)
-          .withAutomaticReconnect()
-          .build();
-
-      // Receive message event
-      _connection!.on("ReceiveMessage", (args) {
-        try {
-          final Map<String, dynamic> msg = jsonDecode(jsonEncode(args![0]));
-          final roomId = msg["roomId"] ?? "";
-          final sender = msg["sender"] ?? "";
-          final text = msg["message"] ?? "";
-          final sentAt = DateTime.parse(msg["sentAt"]);
-
-          if (!_joinedRooms.contains(roomId)) {
-            _joinedRooms.add(roomId);
-          }
-
-          onMessageReceived?.call(sender, text, sentAt);
-          onRoomMessageReceived?.call(roomId, sender, text, sentAt);
-        } catch (e) {
-          print("[SignalR] Error parsing ReceiveMessage: $e");
-        }
-      });
-
-      // Room created event
-      _connection!.on("RoomCreated", (args) {
-        try {
-          final Map<String, dynamic> payload =
-              jsonDecode(jsonEncode(args![0]));
-          final roomId = payload["roomId"] ?? "";
-          onNewRoomDetected?.call(roomId);
-        } catch (e) {
-          print("[SignalR] Error parsing RoomCreated: $e");
-        }
-      });
-
-      // Auto reconnect
-      _connection!.onclose(({error}) async {
-        print("[SignalR] Connection closed: $error");
-        _joinedRooms.clear();
-        _joinedUserChannels.clear();
-        _lastConnectedUserId = "";
-        await Future.delayed(Duration(seconds: 2));
-        await connect(currentUserId);
-      });
-    }
-
-    if (_connection!.state != HubConnectionState.Connected) {
-      await _connection!.start();
-      print("[SignalR] Connected");
-    }
-
-    if (currentUserId != _lastConnectedUserId ||
-        !_joinedUserChannels.contains(currentUserId)) {
-      await joinUserChannel(currentUserId);
-      _lastConnectedUserId = currentUserId;
-    }
+  // Pastikan token ada
+  if (token == null || token.isEmpty) {
+    print("[SignalR] ❌ Gagal connect: token kosong");
+    return;
   }
+
+  // Buat URL hub dengan query string supaya backend bisa baca
+  final hubUri = Uri.parse(hubUrl).replace(queryParameters: {
+    'access_token': token, // untuk Authorization
+    'role': role,          // untuk X-Jenis-User
+  });
+
+  if (_connection == null) {
+    _connection = HubConnectionBuilder()
+        .withUrl(
+          hubUri.toString(),
+          options: HttpConnectionOptions(
+            // SignalR tetap minta accessTokenFactory
+            accessTokenFactory: () async => token,
+            transport: HttpTransportType.WebSockets,
+          ),
+        )
+        .withAutomaticReconnect()
+        .build();
+
+    // Listener untuk pesan masuk
+    _connection!.on("ReceiveMessage", (args) {
+      try {
+        final Map<String, dynamic> msg = jsonDecode(jsonEncode(args![0]));
+        final roomId = msg["roomId"] ?? "";
+        final sender = msg["sender"] ?? "";
+        final text = msg["message"] ?? "";
+        final sentAt = DateTime.parse(msg["sentAt"]);
+
+        if (!_joinedRooms.contains(roomId)) {
+          _joinedRooms.add(roomId);
+        }
+
+        onMessageReceived?.call(sender, text, sentAt);
+        onRoomMessageReceived?.call(roomId, sender, text, sentAt);
+      } catch (e) {
+        print("[SignalR] Error parsing ReceiveMessage: $e");
+      }
+    });
+
+    // Listener untuk room baru
+    _connection!.on("RoomCreated", (args) {
+      try {
+        final Map<String, dynamic> payload = jsonDecode(jsonEncode(args![0]));
+        final roomId = payload["roomId"] ?? "";
+        onNewRoomDetected?.call(roomId);
+      } catch (e) {
+        print("[SignalR] Error parsing RoomCreated: $e");
+      }
+    });
+
+    // Auto reconnect kalau koneksi terputus
+    _connection!.onclose(({error}) async {
+      print("[SignalR] Connection closed: $error");
+      _joinedRooms.clear();
+      _joinedUserChannels.clear();
+      _lastConnectedUserId = "";
+      await Future.delayed(const Duration(seconds: 2));
+      await connect(currentUserId, apiClient);
+    });
+  }
+
+  // Start koneksi kalau belum terhubung
+  if (_connection!.state != HubConnectionState.Connected) {
+    await _connection!.start();
+    print("[SignalR] ✅ Connected");
+  }
+
+  // Join channel user kalau belum
+  if (currentUserId != _lastConnectedUserId ||
+      !_joinedUserChannels.contains(currentUserId)) {
+    await joinUserChannel(currentUserId);
+    _lastConnectedUserId = currentUserId;
+  }
+}
+
+
 
   Future<void> joinRoom(String roomId) async {
     if (_connection?.state == HubConnectionState.Connected &&
@@ -132,6 +159,8 @@ class ChatService {
   // ===========================
 
   Future<List<String>> fetchRoomIdsForUser(String userId) async {
+
+    print('======== MASUK GET ROOM: ' + userId);
     final response = await _client.get(
       '/$controller/getRooms',
       queryParameters: {'user_id': userId},
@@ -145,26 +174,62 @@ class ChatService {
     return [];
   }
 
-  Future<List<Map<String, dynamic>>> fetchMessagesForRoom(
-      String roomId) async {
-    final response = await _client.get(
-      '/$controller/getAll',
-      queryParameters: {'room_id': roomId},
-    );
+//   Future<List<Map<String, dynamic>>> fetchMessagesForRoom(
+//       String roomId) async {
+//     final response = await _client.get(
+//       '/$controller/getAll',
+//       queryParameters: {'room_id': roomId},
+//     );
 
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> json = jsonDecode(response.body);
-      final List<dynamic> data = json['Data'];
-      return data
-          .map((m) => {
-                'Sender': m['Sender_Id'],
-                'Text': m['Message'],
-                'SentAt': DateTime.parse(m['Sent_At'])
-              })
-          .toList();
-    }
-    return [];
-  }
+//     if (response.statusCode == 200) {
+//       final Map<String, dynamic> json = jsonDecode(response.body);
+
+//  print('=== FULL RESPONSE ===');
+//     print(json);
+
+//       final List<dynamic> data = json['Data']?? [];
+
+//       return data.map((room) {
+//   return {
+//     'roomId': room['Room_Id'] ?? '',
+//     'roomType': room['Room_Type'] ?? '',
+//     'name': room['Username_Lawan'] ?? 'Unknown',
+//     'receiverUserName': room['Username_Lawan'] ?? 'Unknown',
+//     'avatar': room['Id_Media_Lawan'] ?? '',
+//     'receiverEmail': '', // kalau API gak punya, kasih default
+//     'receiverId': '',
+//     'message': room['Message'] ?? '',
+//     'time': DateTime.tryParse(
+//                 room['Last_Chat'] ??
+//                 room['Sent_At'] ??
+//                 ''
+//             ) ?? DateTime.fromMillisecondsSinceEpoch(0),
+//     'unread': 0,
+//     'status': room['Status'] ?? '',
+//     'userIds': List<String>.from(room['User_Ids'] ?? []),
+//   };
+// }).toList();
+
+//     }
+//     return [];
+//   }
+Future<List<Map<String, dynamic>>> fetchMessagesForRoom( String roomId) async 
+{ 
+  final response = await _client.get( '/$controller/getAll', queryParameters: {'room_id': roomId}, ); 
+  if (response.statusCode == 200) 
+  { 
+    final Map<String, dynamic> json = jsonDecode(response.body); 
+    final List<dynamic> data = json['Data']; 
+    return data .map((m) => 
+    { 
+      'Sender': m['Sender_Id'],
+       'Text': m['Message'], 
+       'SentAt': DateTime.parse(m['Sent_At']) }) .toList(); 
+  } 
+  return [];
+ }
+
+  
 
   Future<bool> postChat(Map<String, dynamic> payload) async {
     final response = await _client.post(

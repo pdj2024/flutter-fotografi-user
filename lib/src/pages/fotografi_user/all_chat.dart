@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/pages/core/api_singleton.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -33,70 +34,113 @@ class _AllChatState extends State<AllChat> {
   }
 
   Future<void> _initChat() async {
-    // Connect ke SignalR
-    await _chatService.connect(currentUserId);
+  // Step 1: Connect ke SignalR
+  try {
+    await _chatService.connect(currentUserId, apiClient);
+  } catch (e, s) {
+    debugPrint("Error connect SignalR: $e");
+    debugPrintStack(stackTrace: s);
+  }
 
-    // Listener pesan baru
-    _chatService.onRoomMessageReceived =
-        (roomId, sender, message, sentAt) {
-      setState(() {
-        final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
-        if (idx >= 0) {
-          _chats[idx]['message'] = message;
-          _chats[idx]['time'] = sentAt;
-          if (sender != currentUserId) {
-            _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
+  // Step 2: Listener pesan baru
+  try {
+    _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
+      try {
+        setState(() {
+          final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
+          if (idx >= 0) {
+            _chats[idx]['message'] = message;
+            _chats[idx]['time'] = sentAt;
+            if (sender != currentUserId) {
+              _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
+            }
+          } else {
+            _chats.add({
+              'name': sender,
+              'username': sender,
+              'avatar': '',
+              'receiverEmail': '',
+              'receiverId': sender,
+              'message': message,
+              'time': sentAt,
+              'unread': 1,
+              'roomId': roomId,
+            });
           }
-        } else {
-          // kalau belum ada, tambahkan chat baru
-          _chats.add({
-            'name': sender,
-            'username': sender,
+        });
+      } catch (e, s) {
+        debugPrint("Error handle incoming message: $e");
+        debugPrintStack(stackTrace: s);
+      }
+    };
+  } catch (e, s) {
+    debugPrint("Error set listener: $e");
+    debugPrintStack(stackTrace: s);
+  }
+
+  List<String> roomIds = [];
+  // Step 3: Fetch semua room
+  try {
+    roomIds = await _chatService.fetchRoomIdsForUser(currentUserId);
+  } catch (e, s) {
+    debugPrint("Error fetch room ids: $e");
+    debugPrintStack(stackTrace: s);
+  }
+
+  // Step 4: Join rooms
+  try {
+    if (roomIds.isNotEmpty) {
+      await _chatService.joinMultipleRooms(roomIds);
+    }
+  } catch (e, s) {
+    debugPrint("Error join rooms: $e");
+    debugPrintStack(stackTrace: s);
+  }
+
+  // Step 5: Ambil pesan terakhir dari tiap room
+  try {
+    List<Map<String, dynamic>> tempChats = [];
+    for (final roomId in roomIds) {
+      try {
+        final msgs = await _chatService.fetchMessagesForRoom(roomId);
+        if (msgs.isNotEmpty) {
+          final last = msgs.last;
+          tempChats.add({
+            'name': last['Sender'],
+            'username': last['Sender'],
             'avatar': '',
             'receiverEmail': '',
-            'receiverId': sender,
-            'message': message,
-            'time': sentAt,
-            'unread': 1,
+            'receiverId': last['Sender'],
+            'message': last['Text'],
+            'time': last['SentAt'],
+            'unread': 0,
             'roomId': roomId,
           });
         }
-      });
-    };
-
-    // Fetch semua room
-    final roomIds = await _chatService.fetchRoomIdsForUser(currentUserId);
-    await _chatService.joinMultipleRooms(roomIds);
-
-    // Ambil pesan terakhir dari tiap room
-    List<Map<String, dynamic>> tempChats = [];
-    for (final roomId in roomIds) {
-      final msgs = await _chatService.fetchMessagesForRoom(roomId);
-      if (msgs.isNotEmpty) {
-        final last = msgs.last;
-        tempChats.add({
-          'name': last['Sender'],
-          'username': last['Sender'],
-          'avatar': '',
-          'receiverEmail': '',
-          'receiverId': last['Sender'],
-          'message': last['Text'],
-          'time': last['SentAt'],
-          'unread': 0,
-          'roomId': roomId,
-        });
+      } catch (e, s) {
+        debugPrint("Error fetch messages for room $roomId: $e");
+        debugPrintStack(stackTrace: s);
       }
     }
 
     setState(() {
       _chats = tempChats;
     });
+  } catch (e, s) {
+    debugPrint("Error proses pesan terakhir: $e");
+    debugPrintStack(stackTrace: s);
   }
+}
 
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> sortedChats = [..._chats];
-    sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
+    // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
+    sortedChats.sort((a, b) {
+  final timeB = b['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final timeA = a['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+  return timeB.compareTo(timeA);
+});
 
     final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
       final name = chat['name'].toString().toLowerCase();
@@ -136,8 +180,8 @@ class _AllChatState extends State<AllChat> {
                   name: chat['name'],
                   receiverUserName: chat['username'],
                   avatar: chat['avatar'],
-                  receiverEmail: chat['receiverEmail'],
-                  receiverId: chat['receiverId'],
+                  receiverEmail: 'INI EMAIL',
+                  receiverId: 'INI RECEIVER ID',
                   message: chat['message'],
                   time: chat['time'],
                   unreadCount: chat['unread'],
@@ -199,10 +243,10 @@ class ChatItem extends StatelessWidget {
   final String receiverUserName;
   final String receiverEmail;
   final String receiverId;
-  final String avatar;
-  final String message;
+  final String? avatar;
+ final String? message;
   final DateTime time;
-  final int unreadCount;
+  final int unreadCount; 
   final String roomId;
 
   const ChatItem({
@@ -245,7 +289,7 @@ class ChatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String imgUrl =
-        context.read<NavigationProvider>().ambilGambar(avatar);
+       avatar ?? '';
 
     return ListTile(
       leading: CircleAvatar(
@@ -271,7 +315,7 @@ class ChatItem extends StatelessWidget {
       ),
       title: Text(name),
       subtitle: Text(
-        message,
+        message ?? '',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
