@@ -55,6 +55,7 @@ class _AllChatState extends State<AllChat> {
               _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
             }
           } else {
+            // fallback jika room belum ada
             _chats.add({
               'name': sender,
               'username': sender,
@@ -78,17 +79,19 @@ class _AllChatState extends State<AllChat> {
     debugPrintStack(stackTrace: s);
   }
 
-  List<String> roomIds = [];
-  // Step 3: Fetch semua room
+  List<Map<String, dynamic>> rooms = [];
+  // Step 3: Fetch semua room (langsung ambil detailnya)
   try {
-    roomIds = await _chatService.fetchRoomIdsForUser(currentUserId);
+    rooms = await _chatService.fetchRoomsForUser(currentUserId); 
+    // hasil sudah berupa List<Map> dengan key seperti Room_Id, Username_Lawan, Avatar, dll
   } catch (e, s) {
-    debugPrint("Error fetch room ids: $e");
+    debugPrint("Error fetch rooms: $e");
     debugPrintStack(stackTrace: s);
   }
 
-  // Step 4: Join rooms
+  // Step 4: Join semua room
   try {
+    final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
     if (roomIds.isNotEmpty) {
       await _chatService.joinMultipleRooms(roomIds);
     }
@@ -97,31 +100,32 @@ class _AllChatState extends State<AllChat> {
     debugPrintStack(stackTrace: s);
   }
 
-  // Step 5: Ambil pesan terakhir dari tiap room
+  // Step 5: Ambil pesan terakhir + gabungkan dengan data room
   try {
     List<Map<String, dynamic>> tempChats = [];
-    for (final roomId in roomIds) {
-      try {
-        final msgs = await _chatService.fetchMessagesForRoom(roomId);
-        if (msgs.isNotEmpty) {
-          final last = msgs.last;
-          tempChats.add({
-            'name': last['Sender'],
-            'username': last['Sender'],
-            'avatar': '',
-            'receiverEmail': '',
-            'receiverId': last['Sender'],
-            'message': last['Text'],
-            'time': last['SentAt'],
-            'unread': 0,
-            'roomId': roomId,
-          });
-        }
-      } catch (e, s) {
-        debugPrint("Error fetch messages for room $roomId: $e");
-        debugPrintStack(stackTrace: s);
-      }
-    }
+    for (final room in rooms) {
+          try {
+            final msgs = await _chatService.fetchMessagesForRoom(room['Room_Id']);
+
+            // Ambil pesan terakhir (kalau ada)
+            final last = msgs.isNotEmpty ? msgs.last : null;
+
+            tempChats.add({
+              'name': room['Username_Lawan'] ?? '',
+              'username': room['Username_Lawan'] ?? '',
+              'avatar': room['Id_Media_Lawan'] ?? '',
+              'receiverEmail': '',
+              'receiverId': _findReceiverId(room),
+              'message': last?['Text'] ?? '', // ✅ sesuai key di fetchMessagesForRoom
+              'time': last?['SentAt'] ?? DateTime.tryParse(room['Last_Chat'] ?? ''),
+              'unread': 0,
+              'roomId': room['Room_Id'] ?? '',
+            });
+            } catch (e, s) {
+              debugPrint("Error fetch messages for room ${room['Room_Id']}: $e");
+              debugPrintStack(stackTrace: s);
+            }
+}
 
     setState(() {
       _chats = tempChats;
@@ -131,6 +135,13 @@ class _AllChatState extends State<AllChat> {
     debugPrintStack(stackTrace: s);
   }
 }
+
+String _findReceiverId(Map<String, dynamic> room) {
+  // ambil id lawan bicara
+  final ids = List<String>.from(room['User_Ids']);
+  return ids.firstWhere((id) => id != currentUserId, orElse: () => '');
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -177,14 +188,14 @@ class _AllChatState extends State<AllChat> {
               itemBuilder: (context, index) {
                 final chat = filteredChats[index];
                 return ChatItem(
-                  name: chat['name'],
+                  name: chat['username'], // display
                   receiverUserName: chat['username'],
-                  avatar: chat['avatar'],
+                  avatar: chat['avatar'], // display
                   receiverEmail: 'INI EMAIL',
                   receiverId: 'INI RECEIVER ID',
-                  message: chat['message'],
-                  time: chat['time'],
-                  unreadCount: chat['unread'],
+                  message: chat['message'], // display
+                  time: chat['time'], // display
+                  unreadCount: chat['unread'], // display
                   roomId: chat['roomId'],
                 );
               },

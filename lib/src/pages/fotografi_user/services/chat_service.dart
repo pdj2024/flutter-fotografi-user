@@ -158,21 +158,51 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
   // API SECTION
   // ===========================
 
-  Future<List<String>> fetchRoomIdsForUser(String userId) async {
+  // Future<List<String>> fetchRoomIdsForUser(String userId) async {
 
-    print('======== MASUK GET ROOM: ' + userId);
-    final response = await _client.get(
-      '/$controller/getRooms',
-      queryParameters: {'user_id': userId},
-    );
+  //   print('======== MASUK GET ROOM: ' + userId);
+  //   final response = await _client.get(
+  //     '/$controller/getRooms',
+  //     queryParameters: {'user_id': userId},
+  //   );
 
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> json = jsonDecode(response.body);
-      final List<dynamic> data = json['Data'];
-      return data.map((e) => e['Room_Id'] as String).toList();
-    }
-    return [];
+  //   if (response.statusCode == 200) {
+  //     final Map<String, dynamic> json = jsonDecode(response.body);
+  //     final List<dynamic> data = json['Data'];
+  //     return data.map((e) => e['Room_Id'] as String).toList();
+  //   }
+  //   return [];
+  // }
+
+  Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId) async {
+  print('======== MASUK GET ROOM: $userId');
+
+  final response = await _client.get(
+    '/$controller/getRooms',
+    queryParameters: {'user_id': userId},
+  );
+
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> json = jsonDecode(response.body);
+    final List<dynamic> data = json['Data'];
+
+    return data.map<Map<String, dynamic>>((e) {
+      return {
+        'Room_Id': e['Room_Id'],
+        'Room_Type': e['Room_Type'],
+        'Username_Lawan': e['Username_Lawan'],
+        'Id_Media_Lawan': e['Id_Media_Lawan'],
+        'Tipe_User_Lawan': e['Tipe_User_Lawan'],
+        'Last_Chat': e['Last_Chat'],
+        'Status': e['Status'],
+        'User_Ids': List<String>.from(e['User_Ids'] ?? []),
+      };
+    }).toList();
   }
+
+  return [];
+}
+
 
 //   Future<List<Map<String, dynamic>>> fetchMessagesForRoom(
 //       String roomId) async {
