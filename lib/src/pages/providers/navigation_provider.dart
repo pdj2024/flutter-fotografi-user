@@ -9,6 +9,7 @@ import 'package:path/path.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../fotografi_user/providers/user_provider.dart';
 import '../fotografi_user/singlepage.dart';
 import '../fotografi_user/user_login.dart';
 import '../fotografi_vendor/biodata.dart';
@@ -26,7 +27,7 @@ class NavigationProvider with ChangeNotifier {
   int _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
  
- bool get _isLoggedIn => FirebaseAuth.instance.currentUser != null;
+//  bool get _isLoggedIn => FirebaseAuth.instance.currentUser != null;
 
  void clearSelectedIndex() async {
    
@@ -165,7 +166,7 @@ void setSelectedIndex(int index) {
   }
 
   void onItemTapped(int index, BuildContext context) {
-    if (_isLoggedIn || index == 0) {
+    if (context.read<UserProvider>().userId != null || index == 0) {
       // Asumsi tab pertama tidak perlu login (misalnya Home)
       if (_selectedIndex != index) {
         _selectedIndex = index;
@@ -173,16 +174,16 @@ void setSelectedIndex(int index) {
         notifyListeners();
 
         // Tambahkan: Refresh portofolio jika pindah ke tab Home (index 0)
-        if (index == 0) {
-          // Panggil provider fetchPortofolio tanpa filter
-          Future.microtask(() {
-            // Pastikan context masih valid, gunakan Provider.of dengan listen: false
-            // Reset portofolio dan fetch ulang
-            Provider.of<PortofolioProvider>(context, listen: false).getAll();
-            Provider.of<PortofolioProvider>(context, listen: false)
-                .getAll();
-          });
-        }
+        // if (index == 0) {
+        //   // Panggil provider fetchPortofolio tanpa filter
+        //   Future.microtask(() {
+        //     // Pastikan context masih valid, gunakan Provider.of dengan listen: false
+        //     // Reset portofolio dan fetch ulang
+        //     Provider.of<PortofolioProvider>(context, listen: false).getAll();
+        //     Provider.of<PortofolioProvider>(context, listen: false)
+        //         .getAll();
+        //   });
+        // }
       } else {
         // Reset halaman di tab yang sama
         // navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
@@ -202,7 +203,7 @@ void setSelectedIndex(int index) {
   }
 
   void onItemTappedVendor(int index, BuildContext context) {
-    if (_isLoggedIn || index == 0) {
+    if (context.read<UserProvider>().userId != null  || index == 0) {
       // Asumsi tab pertama tidak perlu login (misalnya Home)
       if (_selectedIndex != index) {
         _selectedIndex = index;
@@ -350,7 +351,7 @@ Future<void> navigateToPage(
       {int targetTabIndex = 0,
       bool hrsLogin = true,
       String targetPage = 'VendorHome'}) async {
-    if (!_isLoggedIn && hrsLogin) {
+    if (context.read<UserProvider>().userId == null  && hrsLogin) {
       // Menggunakan root navigator agar login tampil di layar penuh terpisah
       Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
