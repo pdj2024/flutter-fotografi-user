@@ -141,7 +141,7 @@ DateTime? parseIsoDate(String? iso) {
 });
 
     final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
-      final name = chat['name'].toString().toLowerCase();
+      final name = chat['username'].toString().toLowerCase();
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
