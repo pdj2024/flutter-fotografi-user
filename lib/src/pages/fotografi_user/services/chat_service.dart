@@ -193,7 +193,8 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
         'Username_Lawan': e['Username_Lawan'],
         'Id_Media_Lawan': e['Id_Media_Lawan'],
         'Tipe_User_Lawan': e['Tipe_User_Lawan'],
-        'Last_Chat': e['Last_Chat'],
+        'Last_Message_At': e['Last_Message_At'],
+         'Last_Message': e['Last_Message'],
         'Status': e['Status'],
         'User_Ids': List<String>.from(e['User_Ids'] ?? []),
       };

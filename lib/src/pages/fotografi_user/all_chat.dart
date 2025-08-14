@@ -57,10 +57,8 @@ class _AllChatState extends State<AllChat> {
           } else {
             // fallback jika room belum ada
             _chats.add({
-             
               'username': sender,
               'avatar': '',
-             
               'message': message,
               'time': sentAt,
               'unread': 1,
@@ -79,10 +77,9 @@ class _AllChatState extends State<AllChat> {
   }
 
   List<Map<String, dynamic>> rooms = [];
-  // Step 3: Fetch semua room (langsung ambil detailnya)
+  // Step 3: Fetch semua room (langsung lengkap)
   try {
-    rooms = await _chatService.fetchRoomsForUser(currentUserId); 
-    // hasil sudah berupa List<Map> dengan key seperti Room_Id, Username_Lawan, Avatar, dll
+    rooms = await _chatService.fetchRoomsForUser(currentUserId);
   } catch (e, s) {
     debugPrint("Error fetch rooms: $e");
     debugPrintStack(stackTrace: s);
@@ -99,47 +96,39 @@ class _AllChatState extends State<AllChat> {
     debugPrintStack(stackTrace: s);
   }
 
-  // Step 5: Ambil pesan terakhir + gabungkan dengan data room
+  // Step 5: Set _chats langsung dari response API
   try {
-    List<Map<String, dynamic>> tempChats = [];
-    for (final room in rooms) {
-          try {
-            final msgs = await _chatService.fetchMessagesForRoom(room['Room_Id']);
-
-            // Ambil pesan terakhir (kalau ada)
-            final last = msgs.isNotEmpty ? msgs.last : null;
-
-            tempChats.add({
-            
-              'username': room['Username_Lawan'] ?? '',
-              'avatar': room['Id_Media_Lawan'] ?? '',
-            
-              'message': last?['Text'] ?? '', // ✅ sesuai key di fetchMessagesForRoom
-              'time': last?['SentAt'] ?? DateTime.tryParse(room['Last_Chat'] ?? ''),
-              'unread': 0,
-              'roomId': room['Room_Id'] ?? '',
-            });
-            } catch (e, s) {
-              debugPrint("Error fetch messages for room ${room['Room_Id']}: $e");
-              debugPrintStack(stackTrace: s);
-            }
-}
-
     setState(() {
-      _chats = tempChats;
+      _chats = rooms.map((room) {
+   final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
+
+   print("====== ASLI " + (room['Last_Message_At']).toString());
+   print("====== HASIL PARSE " + lastTime.toString());
+  return {
+    'username': room['Username_Lawan'] ?? '',
+    'avatar': room['Id_Media_Lawan'] ?? '',
+    'message': room['Last_Message'] ?? '',
+   'time': lastTime ?? DateTime.now(),
+    'unread': 0,
+    'roomId': room['Room_Id'] ?? '',
+  };
+}).toList();
     });
   } catch (e, s) {
-    debugPrint("Error proses pesan terakhir: $e");
+    debugPrint("Error set chats from rooms: $e");
     debugPrintStack(stackTrace: s);
   }
 }
 
-String _findReceiverId(Map<String, dynamic> room) {
-  // ambil id lawan bicara
-  final ids = List<String>.from(room['User_Ids']);
-  return ids.firstWhere((id) => id != currentUserId, orElse: () => '');
-}
 
+DateTime? parseIsoDate(String? iso) {
+  if (iso == null || iso.isEmpty) return null;
+  try {
+    return DateTime.parse(iso).toLocal(); // konversi ke local timezone
+  } catch (_) {
+    return null;
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +241,7 @@ class ChatItem extends StatelessWidget {
 
   final String? avatar;
  final String? message;
-  final DateTime time;
+  final DateTime? time;
   final int unreadCount; 
   final String roomId;
 
@@ -268,14 +257,15 @@ class ChatItem extends StatelessWidget {
     required this.roomId,
   });
 
-  String formatTime(DateTime time) {
-    final now = DateTime.now();
-    if (now.difference(time).inDays == 0) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${time.day}/${time.month}/${time.year}';
-    }
+ String formatTime(DateTime? time) {
+  if (time == null) return '';
+  final now = DateTime.now();
+  if (now.difference(time).inDays == 0) {
+    return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
+  } else {
+    return '${time.day}/${time.month}/${time.year}';
   }
+}
 
   Widget _shimmerAvatar(double size) {
     return Shimmer.fromColors(
