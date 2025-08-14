@@ -57,11 +57,10 @@ class _AllChatState extends State<AllChat> {
           } else {
             // fallback jika room belum ada
             _chats.add({
-              'name': sender,
+             
               'username': sender,
               'avatar': '',
-              'receiverEmail': '',
-              'receiverId': sender,
+             
               'message': message,
               'time': sentAt,
               'unread': 1,
@@ -111,11 +110,10 @@ class _AllChatState extends State<AllChat> {
             final last = msgs.isNotEmpty ? msgs.last : null;
 
             tempChats.add({
-              'name': room['Username_Lawan'] ?? '',
+            
               'username': room['Username_Lawan'] ?? '',
               'avatar': room['Id_Media_Lawan'] ?? '',
-              'receiverEmail': '',
-              'receiverId': _findReceiverId(room),
+            
               'message': last?['Text'] ?? '', // ✅ sesuai key di fetchMessagesForRoom
               'time': last?['SentAt'] ?? DateTime.tryParse(room['Last_Chat'] ?? ''),
               'unread': 0,
@@ -188,11 +186,10 @@ String _findReceiverId(Map<String, dynamic> room) {
               itemBuilder: (context, index) {
                 final chat = filteredChats[index];
                 return ChatItem(
-                  name: chat['username'], // display
-                  receiverUserName: chat['username'],
+                  username: chat['username'], // display
+                
                   avatar: chat['avatar'], // display
-                  receiverEmail: 'INI EMAIL',
-                  receiverId: 'INI RECEIVER ID',
+                  
                   message: chat['message'], // display
                   time: chat['time'], // display
                   unreadCount: chat['unread'], // display
@@ -250,10 +247,9 @@ class ChatHeader extends StatelessWidget {
 }
 
 class ChatItem extends StatelessWidget {
-  final String name;
-  final String receiverUserName;
-  final String receiverEmail;
-  final String receiverId;
+  final String username;
+
+
   final String? avatar;
  final String? message;
   final DateTime time;
@@ -262,10 +258,9 @@ class ChatItem extends StatelessWidget {
 
   const ChatItem({
     super.key,
-    required this.name,
-    required this.receiverUserName,
-    required this.receiverEmail,
-    required this.receiverId,
+   
+    required this.username,
+
     required this.avatar,
     required this.message,
     required this.time,
@@ -324,7 +319,7 @@ class ChatItem extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(name),
+      title: Text(username),
       subtitle: Text(
         message ?? '',
         maxLines: 1,
@@ -366,9 +361,9 @@ class ChatItem extends StatelessWidget {
         context.read<NavigationProvider>().navigateToPage(
           context,
           SingleChat(
-            receiverUserName: receiverUserName,
-            receiverEmail: receiverEmail,
-            receiverID: receiverId,
+            receiverUserName: username,
+            receiverEmail: 'INI RECEIVER EMAIL',
+            receiverID: 'INI RECEIVER ID',
             // roomId: roomId,
           ),
           targetTabIndex: 1,
