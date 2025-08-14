@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'providers/user_provider.dart';
+import 'services/chat_service.dart';
+import 'single_chat.dart';
 
 class AllChat extends StatefulWidget {
   const AllChat({super.key});
@@ -16,111 +18,80 @@ class AllChat extends StatefulWidget {
 }
 
 class _AllChatState extends State<AllChat> {
-  final List<Map<String, dynamic>> _chats = [
-    {
-      'name': 'Michael Williams',
-      'username': 'michaelwilliams',
-      'avatar': '14eac222-0e59-446b-be37-60b222800f5d-image_cropper_1748677848826.jpg',
-      'receiverEmail': 'michaelwilliams@gmail.com',
-      'receiverId': 'michael-williams',
-      'message': 'Apakah kamu tersedia untuk sesi prewedding?',
-      'time': DateTime.now().subtract(const Duration(minutes: 5)),
-      'unread': 2
-    },
-    {
-      'name': 'Emily Photos',
-       'username': 'emilyphotos',
-      'avatar': '1d98c486-b810-42d8-8779-3b0ca34154ef-image_cropper_1748677884447.jpg',
-      'receiverEmail': 'emilyphotos@gmail.com',
-      'receiverId': 'emily-photos',
-      'message': 'File hasil foto sudah dikirim via email ya!',
-      'time': DateTime.now().subtract(const Duration(minutes: 30)),
-      'unread': 0
-    },
-    {
-      'name': 'Davis Miller',
-       'username': 'davismiller',
-      'avatar': '65868b74-ef32-4388-a6e9-c87b86f6541f-image_cropper_1748677941144.jpg',
-      'receiverEmail': 'davismiller@gmail.com',
-      'receiverId': 'davis-miller',
-      'message': 'Kapan jadwal sesi foto berikutnya?',
-      'time': DateTime.now().subtract(const Duration(hours: 1, minutes: 20)),
-      'unread': 1
-    },
-    {
-      'name': 'Amanda Reed Photo',
-       'username': 'amandareed',
-      'avatar': '355c5d9f-0e1b-4c8f-a715-c388b9d2e21d-image_cropper_1748677911014.jpg',
-       'receiverEmail': 'amandareed@gmail.com',
-      'receiverId': 'amanda-reed',
-      'message': 'Terima kasih untuk sesi kemarin!',
-      'time': DateTime.now().subtract(const Duration(hours: 3)),
-      'unread': 3
-    },
-    {
-      'name': 'Sarah Lee',
-       'username': 'sarahlee',
-      'avatar': '175a09b7-bd6e-4b0b-b74c-d06d94d8683e-image_cropper_1748677929955.jpg',
-       'receiverEmail': 'sarahlee@gmail.com',
-      'receiverId': 'sarah-lee',
-      'message': 'Besok kita ketemu jam 10 ya',
-      'time': DateTime.now().subtract(const Duration(days: 1)),
-      'unread': 0
-    },
-    {
-      'name': 'Runita Diah',
-       'username': 'runitadiah',
-      'avatar': 'db66c60d-57d6-4eec-ac0a-2a325a088825-image_cropper_1748677859114.jpg',
-       'receiverEmail': 'runitadiah@gmail.com',
-      'receiverId': 'runita-diah',
-      'message': 'Ada slot untuk bulan depan?',
-      'time': DateTime.now().subtract(const Duration(days: 2)),
-      'unread': 4
-    },
-    {
-      'name': 'Bridals Photos',
-       'username': 'bridalsphotos',
-      'avatar': '7aa46c78-118e-41c6-9e21-e8ac39ccfe93-image_cropper_1748677935167.jpg',
-       'receiverEmail': 'bridalsphoto@gmail.com',
-      'receiverId': 'bridals-photo',
-      'message': 'Saya butuh file high-res ya',
-      'time': DateTime.now().subtract(const Duration(days: 3, hours: 2)),
-      'unread': 0
-    },
-    {
-      'name': 'Nikita Lusi',
-       'username': 'nikitalusi',
-      'avatar': '34442862-aa5d-4e74-8129-43104eb79aa7-image_cropper_1748677842439.jpg',
-       'receiverEmail': 'nikitalusi@gmail.com',
-      'receiverId': 'nikita-lusi',
-      'message': 'Mantap hasil fotonya!',
-      'time': DateTime.now().subtract(const Duration(days: 5)),
-      'unread': 1
-    },
-    {
-      'name': 'Andi Utami',
-       'username': 'andiutami',
-      'avatar': '16a113e9-a9b3-4590-92a0-979ec358f4a1-image_cropper_1748677918469.jpg',
-       'receiverEmail': 'andiutami@gmail.com',
-      'receiverId': 'andi-utami',
-      'message': 'Foto wisuda saya bagus banget',
-      'time': DateTime.now().subtract(const Duration(days: 6)),
-      'unread': 0
-    },
-    {
-      'name': 'Budi Bali',
-       'username': 'budibali',
-      'avatar': 'd00c8632-393e-49e8-847f-3c01a4dbf701-image_cropper_1748677823909.jpg',
-       'receiverEmail': 'budibali@gmail.com',
-      'receiverId': 'budi-bali',
-      'message': 'Nanti ada diskon untuk repeat client?',
-      'time': DateTime.now().subtract(const Duration(days: 8)),
-      'unread': 0
-    },
-  ];
-
+  final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  List<Map<String, dynamic>> _chats = [];
+  late String currentUserId; 
+    
+  @override
+  void initState() {
+    super.initState();
+    currentUserId = context.read<UserProvider>().userId ?? '';
+    _initChat();
+  }
+
+  Future<void> _initChat() async {
+    // Connect ke SignalR
+    await _chatService.connect(currentUserId);
+
+    // Listener pesan baru
+    _chatService.onRoomMessageReceived =
+        (roomId, sender, message, sentAt) {
+      setState(() {
+        final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
+        if (idx >= 0) {
+          _chats[idx]['message'] = message;
+          _chats[idx]['time'] = sentAt;
+          if (sender != currentUserId) {
+            _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
+          }
+        } else {
+          // kalau belum ada, tambahkan chat baru
+          _chats.add({
+            'name': sender,
+            'username': sender,
+            'avatar': '',
+            'receiverEmail': '',
+            'receiverId': sender,
+            'message': message,
+            'time': sentAt,
+            'unread': 1,
+            'roomId': roomId,
+          });
+        }
+      });
+    };
+
+    // Fetch semua room
+    final roomIds = await _chatService.fetchRoomIdsForUser(currentUserId);
+    await _chatService.joinMultipleRooms(roomIds);
+
+    // Ambil pesan terakhir dari tiap room
+    List<Map<String, dynamic>> tempChats = [];
+    for (final roomId in roomIds) {
+      final msgs = await _chatService.fetchMessagesForRoom(roomId);
+      if (msgs.isNotEmpty) {
+        final last = msgs.last;
+        tempChats.add({
+          'name': last['Sender'],
+          'username': last['Sender'],
+          'avatar': '',
+          'receiverEmail': '',
+          'receiverId': last['Sender'],
+          'message': last['Text'],
+          'time': last['SentAt'],
+          'unread': 0,
+          'roomId': roomId,
+        });
+      }
+    }
+
+    setState(() {
+      _chats = tempChats;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +141,7 @@ class _AllChatState extends State<AllChat> {
                   message: chat['message'],
                   time: chat['time'],
                   unreadCount: chat['unread'],
+                  roomId: chat['roomId'],
                 );
               },
             ),
@@ -231,6 +203,7 @@ class ChatItem extends StatelessWidget {
   final String message;
   final DateTime time;
   final int unreadCount;
+  final String roomId;
 
   const ChatItem({
     super.key,
@@ -242,6 +215,7 @@ class ChatItem extends StatelessWidget {
     required this.message,
     required this.time,
     required this.unreadCount,
+    required this.roomId,
   });
 
   String formatTime(DateTime time) {
@@ -278,33 +252,21 @@ class ChatItem extends StatelessWidget {
         radius: 24,
         backgroundColor: Colors.grey[200],
         child: ClipOval(
-          // child: CachedNetworkImage(
-          //   imageUrl: imgUrl,
-          //   width: 48,
-          //   height: 48,
-          //   fit: BoxFit.cover,
-          //   placeholder: (context, url) => _shimmerAvatar(48),
-          //   errorWidget: (context, url, error) =>
-          //       const Icon(Icons.person, size: 24),
-          // ),
           child: SizedBox(
-  width: 48,
-  height: 48,
-  child: ClipOval(
-    child: Image.network(
-      imgUrl,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return _shimmerAvatar(48);  // panggil fungsi shimmer placeholder kamu
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return const Icon(Icons.person, size: 24);
-      },
-    ),
-  ),
-),
-
+            width: 48,
+            height: 48,
+            child: Image.network(
+              imgUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return _shimmerAvatar(48);
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.person, size: 24);
+              },
+            ),
+          ),
         ),
       ),
       title: Text(name),
@@ -346,9 +308,16 @@ class ChatItem extends StatelessWidget {
         ],
       ),
       onTap: () {
-        context
-            .read<NavigationProvider>()
-            .navigateToPage(context, SingleChat(receiverUserName: receiverUserName, receiverEmail: receiverEmail, receiverID: receiverId), targetTabIndex: 1);
+        context.read<NavigationProvider>().navigateToPage(
+          context,
+          SingleChat(
+            receiverUserName: receiverUserName,
+            receiverEmail: receiverEmail,
+            receiverID: receiverId,
+            // roomId: roomId,
+          ),
+          targetTabIndex: 1,
+        );
       },
     );
   }
