@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mpjnew/src/pages/core/api_singleton.dart';
 import 'package:mpjnew/src/pages/fotografi_user/fotographerbio.dart';
 import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
@@ -138,6 +139,32 @@ Future<String?> getRole() async {
   return prefs.getString('role');
 }
 
+String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+
+  if (date == null) {
+    date = now;
+  }
+
+  final messageDate = DateTime(date.year, date.month, date.day);
+
+  if (messageDate == today) {
+    if (showTodaysJam) {
+      // Tampilkan jam
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else {
+      return "Hari ini";
+    }
+  }
+
+  if (messageDate == today.subtract(const Duration(days: 1))) {
+    return "Kemarin";
+  }
+
+  // Format dengan singkatan bulan dan locale Indonesia
+  return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
+}
 
 void setSelectedIndex(int index) {
     if (_selectedIndex != index) {

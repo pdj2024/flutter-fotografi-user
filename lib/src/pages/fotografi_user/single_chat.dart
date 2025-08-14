@@ -177,23 +177,23 @@ WidgetsBinding.instance.addPostFrameCallback((_) {
   Map<String, List<ChatMessage>> groupMessagesByDate(List<ChatMessage> messages) {
     final Map<String, List<ChatMessage>> grouped = {};
     for (var message in messages) {
-      final key = _formatDateLabel(message.time);
+      final key = context.read<NavigationProvider>().formatDateLabel(message.time);
       grouped.putIfAbsent(key, () => []).add(message);
     }
     return grouped;
   }
 
-String _formatDateLabel(DateTime date) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final messageDate = DateTime(date.year, date.month, date.day);
+// String _formatDateLabel(DateTime date) {
+//   final now = DateTime.now();
+//   final today = DateTime(now.year, now.month, now.day);
+//   final messageDate = DateTime(date.year, date.month, date.day);
 
-  if (messageDate == today) return "Hari ini";
-  if (messageDate == today.subtract(const Duration(days: 1))) return "Kemarin";
+//   if (messageDate == today) return "Hari ini";
+//   if (messageDate == today.subtract(const Duration(days: 1))) return "Kemarin";
   
-  // Format dengan singkatan bulan dan locale Indonesia
-  return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
-}
+//   // Format dengan singkatan bulan dan locale Indonesia
+//   return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
+// }
 
   @override
   Widget build(BuildContext context) {

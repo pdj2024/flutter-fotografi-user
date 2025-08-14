@@ -257,15 +257,15 @@ class ChatItem extends StatelessWidget {
     required this.roomId,
   });
 
- String formatTime(DateTime? time) {
-  if (time == null) return '';
-  final now = DateTime.now();
-  if (now.difference(time).inDays == 0) {
-    return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
-  } else {
-    return '${time.day}/${time.month}/${time.year}';
-  }
-}
+//  String formatTime(DateTime? time) {
+//   if (time == null) return '';
+//   final now = DateTime.now();
+//   if (now.difference(time).inDays == 0) {
+//     return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
+//   } else {
+//     return '${time.day}/${time.month}/${time.year}';
+//   }
+// }
 
   Widget _shimmerAvatar(double size) {
     return Shimmer.fromColors(
@@ -319,7 +319,7 @@ class ChatItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            formatTime(time),
+            context.read<NavigationProvider>().formatDateLabel(time, showTodaysJam: true),
             style: const TextStyle(
               color: Constants.primaryColor,
               fontSize: 12,
