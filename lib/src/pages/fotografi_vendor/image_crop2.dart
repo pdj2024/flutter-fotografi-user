@@ -50,7 +50,8 @@ class _UploadPhotoPageState extends State<UploadPhotoPage> {
           hideBottomControls: true,
           lockAspectRatio: true,
           initAspectRatio: CropAspectRatioPreset.ratio4x3,
-          cropStyle: CropStyle.rectangle,
+
+          // cropStyle: CropStyle.rectangle,
         ),
         IOSUiSettings(
           title: 'Crop Photo',

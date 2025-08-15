@@ -10,7 +10,7 @@ class ChatService {
   final String controller = 'chat';
   final ApiClient _client = apiClient;
 
-  final String hubUrl = "${Constants.baseUrl}/chathub";
+  final String hubUrl = "${Constants.baseUrl}/api/chathub";
 
   HubConnection? _connection;
   final List<String> _joinedRooms = [];
@@ -32,7 +32,7 @@ class ChatService {
   // ===========================
 
 Future<void> connect(String currentUserId, ApiClient apiClient) async {
-  print("======= INI MULAI CONNECT");
+  print("======= INI MULAI CONNECT " + hubUrl);
 
   // Ambil token & role dari ApiClient
   final token = await apiClient.getIdToken();
@@ -158,22 +158,6 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
   // API SECTION
   // ===========================
 
-  // Future<List<String>> fetchRoomIdsForUser(String userId) async {
-
-  //   print('======== MASUK GET ROOM: ' + userId);
-  //   final response = await _client.get(
-  //     '/$controller/getRooms',
-  //     queryParameters: {'user_id': userId},
-  //   );
-
-  //   if (response.statusCode == 200) {
-  //     final Map<String, dynamic> json = jsonDecode(response.body);
-  //     final List<dynamic> data = json['Data'];
-  //     return data.map((e) => e['Room_Id'] as String).toList();
-  //   }
-  //   return [];
-  // }
-
   Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId) async {
   print('======== MASUK GET ROOM: $userId');
 
@@ -204,46 +188,6 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
   return [];
 }
 
-
-//   Future<List<Map<String, dynamic>>> fetchMessagesForRoom(
-//       String roomId) async {
-//     final response = await _client.get(
-//       '/$controller/getAll',
-//       queryParameters: {'room_id': roomId},
-//     );
-
-//     if (response.statusCode == 200) {
-//       final Map<String, dynamic> json = jsonDecode(response.body);
-
-//  print('=== FULL RESPONSE ===');
-//     print(json);
-
-//       final List<dynamic> data = json['Data']?? [];
-
-//       return data.map((room) {
-//   return {
-//     'roomId': room['Room_Id'] ?? '',
-//     'roomType': room['Room_Type'] ?? '',
-//     'name': room['Username_Lawan'] ?? 'Unknown',
-//     'receiverUserName': room['Username_Lawan'] ?? 'Unknown',
-//     'avatar': room['Id_Media_Lawan'] ?? '',
-//     'receiverEmail': '', // kalau API gak punya, kasih default
-//     'receiverId': '',
-//     'message': room['Message'] ?? '',
-//     'time': DateTime.tryParse(
-//                 room['Last_Chat'] ??
-//                 room['Sent_At'] ??
-//                 ''
-//             ) ?? DateTime.fromMillisecondsSinceEpoch(0),
-//     'unread': 0,
-//     'status': room['Status'] ?? '',
-//     'userIds': List<String>.from(room['User_Ids'] ?? []),
-//   };
-// }).toList();
-
-//     }
-//     return [];
-//   }
 Future<List<Map<String, dynamic>>> fetchMessagesForRoom( String roomId) async 
 { 
   final response = await _client.get( '/$controller/getAll', queryParameters: {'room_id': roomId}, ); 
