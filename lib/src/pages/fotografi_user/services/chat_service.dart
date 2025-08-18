@@ -27,6 +27,9 @@ class ChatService {
       onRoomMessageReceived;
   Function(String roomId)? onNewRoomDetected;
 
+  // ✅ Tambahin ini
+Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
+
   // ===========================
   // SIGNALR SECTION
   // ===========================
@@ -69,7 +72,7 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
         final roomId = msg["roomId"] ?? "";
         final sender = msg["sender"] ?? "";
         final text = msg["message"] ?? "";
-        final sentAt = DateTime.parse(msg["sentAt"]);
+        final sentAt = DateTime.parse(msg["sentAt"]).toLocal();
 
         if (!_joinedRooms.contains(roomId)) {
           _joinedRooms.add(roomId);
@@ -83,15 +86,25 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
     });
 
     // Listener untuk room baru
-    _connection!.on("RoomCreated", (args) {
-      try {
-        final Map<String, dynamic> payload = jsonDecode(jsonEncode(args![0]));
-        final roomId = payload["roomId"] ?? "";
-        onNewRoomDetected?.call(roomId);
-      } catch (e) {
-        print("[SignalR] Error parsing RoomCreated: $e");
-      }
-    });
+_connection!.on("RoomCreated", (args) {
+  try {
+    final Map<String, dynamic> payload = jsonDecode(jsonEncode(args![0]));
+    final roomId = payload["roomId"] ?? "";
+    final roomName = payload["roomName"] ?? "";
+    final createdAt = payload["createdAt"] != null
+        ? DateTime.tryParse(payload["createdAt"]) ?? DateTime.now()
+        : DateTime.now();
+
+    // panggil callback baru
+    onRoomCreated?.call(roomId, roomName, createdAt);
+
+    // kalau masih mau pakai yang lama
+    onNewRoomDetected?.call(roomId);
+  } catch (e) {
+    print("[SignalR] Error parsing RoomCreated: $e");
+  }
+});
+
 
     // Auto reconnect kalau koneksi terputus
     _connection!.onclose(({error}) async {

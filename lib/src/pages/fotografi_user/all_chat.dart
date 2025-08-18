@@ -26,8 +26,8 @@ class _AllChatState extends State<AllChat> {
   String _searchQuery = '';
 
   List<Map<String, dynamic>> _chats = [];
-  late String currentUserId; 
-    
+  late String currentUserId;
+
   @override
   void initState() {
     super.initState();
@@ -36,91 +36,110 @@ class _AllChatState extends State<AllChat> {
   }
 
   Future<void> _initChat() async {
-  // Step 1: Connect ke SignalR
-  try {
-    await _chatService.connect(currentUserId, apiClient);
-  } catch (e, s) {
-    debugPrint("❌ Error connect SignalR: $e");
-    debugPrintStack(stackTrace: s);
-  }
-
-  // Step 2: Listener pesan baru
-  try {
-    _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
-      try {
-        setState(() {
-          final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
-          if (idx >= 0) {
-            _chats[idx]['message'] = message;
-            _chats[idx]['time'] = sentAt;
-            if (sender != currentUserId) {
-              _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
-            }
-          } else {
-            // fallback jika room belum ada
-            _chats.add({
-              'username': sender,
-              'avatar': '',
-              'message': message,
-              'time': sentAt,
-              'unread': 1,
-              'roomId': roomId,
-            });
-          }
-        });
-      } catch (e, s) {
-        debugPrint("Error handle incoming message: $e");
-        debugPrintStack(stackTrace: s);
-      }
-    };
-  } catch (e, s) {
-    debugPrint("Error set listener: $e");
-    debugPrintStack(stackTrace: s);
-  }
-
-  List<Map<String, dynamic>> rooms = [];
-  // Step 3: Fetch semua room (langsung lengkap)
-  try {
-    rooms = await _chatService.fetchRoomsForUser(currentUserId);
-  } catch (e, s) {
-    debugPrint("Error fetch rooms: $e");
-    debugPrintStack(stackTrace: s);
-  }
-
-  // Step 4: Join semua room
-  try {
-    final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
-    if (roomIds.isNotEmpty) {
-      await _chatService.joinMultipleRooms(roomIds);
+    // Step 1: Connect ke SignalR
+    try {
+      await _chatService.connect(currentUserId, apiClient);
+    } catch (e, s) {
+      debugPrint("❌ Error connect SignalR: $e");
+      debugPrintStack(stackTrace: s);
     }
-  } catch (e, s) {
-    debugPrint("Error join rooms: $e");
-    debugPrintStack(stackTrace: s);
+
+    // Step 2a: Listener pesan baru
+    try {
+      _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
+        try {
+          setState(() {
+            final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
+            if (idx >= 0) {
+              _chats[idx]['message'] = message;
+              _chats[idx]['time'] = sentAt;
+              if (sender != currentUserId) {
+                _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
+              }
+            } else {
+              // fallback jika room belum ada
+              _chats.add({
+                'username': sender,
+                'avatar': '',
+                'message': message,
+                'time': sentAt,
+                'unread': 1,
+                'roomId': roomId,
+              });
+            }
+          });
+        } catch (e, s) {
+          debugPrint("Error handle incoming message: $e");
+          debugPrintStack(stackTrace: s);
+        }
+      };
+    } catch (e, s) {
+      debugPrint("Error set message listener: $e");
+      debugPrintStack(stackTrace: s);
+    }
+
+    // Step 2b: Listener room baru
+    try {
+      _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
+        try {
+          debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
+          await _fetchRooms(); // refresh supaya data lengkap
+        } catch (e, s) {
+          debugPrint("Error handle RoomCreated: $e");
+          debugPrintStack(stackTrace: s);
+        }
+      };
+    } catch (e, s) {
+      debugPrint("Error set RoomCreated listener: $e");
+      debugPrintStack(stackTrace: s);
+    }
+
+    // Step 3 & 4 & 5: Fetch + Join + Set state
+    await _fetchRooms();
   }
 
-  // Step 5: Set _chats langsung dari response API
-  try {
-    setState(() {
-      _chats = rooms.map((room) {
-   final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
+  Future<void> _fetchRooms() async {
+    List<Map<String, dynamic>> rooms = [];
 
-   print("====== ASLI " + (room['Last_Message_At']).toString());
-   print("====== HASIL PARSE " + lastTime.toString());
-  return {
-    'username': room['Username_Lawan'] ?? '',
-    'avatar': room['Id_Media_Lawan'] ?? '',
-    'message': room['Last_Message'] ?? '',
-   'time': lastTime ?? DateTime.now(),
-    'unread': 0,
-    'roomId': room['Room_Id'] ?? '',
-  };
-}).toList();
-    });
-  } catch (e, s) {
-    debugPrint("Error set chats from rooms: $e");
-    debugPrintStack(stackTrace: s);
+    // Step 3: Fetch semua room
+    try {
+      rooms = await _chatService.fetchRoomsForUser(currentUserId);
+    } catch (e, s) {
+      debugPrint("Error fetch rooms: $e");
+      debugPrintStack(stackTrace: s);
+    }
+
+    // Step 4: Join semua room
+    try {
+      final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
+      if (roomIds.isNotEmpty) {
+        await _chatService.joinMultipleRooms(roomIds);
+      }
+    } catch (e, s) {
+      debugPrint("Error join rooms: $e");
+      debugPrintStack(stackTrace: s);
+    }
+
+    // Step 5: Update state
+    try {
+      setState(() {
+        _chats = rooms.map((room) {
+          final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
+          return {
+            'username': room['Username_Lawan'] ?? '',
+            'avatar': room['Id_Media_Lawan'] ?? '',
+            'message': room['Last_Message'] ?? '',
+            'time': lastTime ?? DateTime.now(),
+            'unread': 0,
+            'roomId': room['Room_Id'] ?? '',
+          };
+        }).toList();
+      });
+    } catch (e, s) {
+      debugPrint("Error set chats from rooms: $e");
+      debugPrintStack(stackTrace: s);
+    }
   }
-}
 
 
 DateTime? parseIsoDate(String? iso) {
