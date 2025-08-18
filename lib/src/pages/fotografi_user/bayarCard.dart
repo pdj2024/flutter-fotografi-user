@@ -66,7 +66,7 @@ class _BayarCardState extends State<BayarCard> {
       return;
     }
 
-    final String apiUrl = 'http://43.228.212.41:88/api/PurchaseOrder/charge';
+    final String apiUrl = 'http://43.228.212.41:15/api/PurchaseOrder/charge';
     final Map<String, dynamic> body = {
       "transaction_details": {
         "order_id": widget.orderId,

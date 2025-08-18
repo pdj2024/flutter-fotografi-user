@@ -8,7 +8,7 @@ class Constants {
   static const String customer = 'customer';
   static const String vendor = 'vendor';
 
-  static const String baseUrl = 'http://43.228.212.41:88';
+  static const String baseUrl = 'http://43.228.212.41:15';
       // 'https://fotoapi.pdj.web.id'; // Ganti dengan URL API Anda
 
   static formatCurrency(num value, {String prefix = "IDR "}) {

@@ -60,8 +60,10 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
           options: HttpConnectionOptions(
             accessTokenFactory: () async => token,
              transport: HttpTransportType.WebSockets, // paksa langsung WS
+              requestTimeout: 10000, // ✅ naikkan timeout
           ),
         )
+        .withAutomaticReconnect(retryDelays: [1, 2, 5, 10]) // coba lagi 1s, 2s, 5s, 10s
         .build();
 
 
@@ -170,12 +172,17 @@ _connection!.on("RoomCreated", (args) {
   // API SECTION
   // ===========================
 
-  Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId) async {
+  Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId, {String? room_id = null}) async {
   print('======== MASUK GET ROOM: $userId');
+
+   final queryParams = {
+    'user_id': userId,
+    if (room_id != null) 'room_id': room_id, // hanya dikirim kalau tidak null
+  };
 
   final response = await _client.get(
     '/$controller/getRooms',
-    queryParameters: {'user_id': userId},
+    queryParameters: queryParams,
   );
 
   if (response.statusCode == 200) {
@@ -199,6 +206,8 @@ _connection!.on("RoomCreated", (args) {
 
   return [];
 }
+
+  
 
 Future<List<Map<String, dynamic>>> fetchMessagesForRoom( String roomId) async 
 { 

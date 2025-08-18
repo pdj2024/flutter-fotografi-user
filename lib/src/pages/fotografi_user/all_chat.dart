@@ -78,21 +78,45 @@ class _AllChatState extends State<AllChat> {
       debugPrintStack(stackTrace: s);
     }
 
-    // Step 2b: Listener room baru
+   // Step 2b: Listener room baru
+try {
+  _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
     try {
-      _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
-        try {
-          debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
-          await _fetchRooms(); // refresh supaya data lengkap
-        } catch (e, s) {
-          debugPrint("Error handle RoomCreated: $e");
-          debugPrintStack(stackTrace: s);
-        }
-      };
+      debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
+     
+
+      // Ini fetch chat room, bukan fetch chat nya
+      final room = await _chatService.fetchRoomsForUser(currentUserId, room_id: roomId);
+      print("============= ROOM: " + room.toString());
+
+      if (room.isNotEmpty) {
+          // Join room supaya langsung terhubung
+          await _chatService.joinMultipleRooms([roomId]);
+
+          // Update state dengan append 1 room baru
+        
+          setState(() {
+            final lastTime = parseIsoDate(room[0]['Last_Message_At'] as String?);
+            _chats.add({
+              'username': room[0]['Username_Lawan'] ?? roomName ?? '',
+              'avatar': room[0]['Id_Media_Lawan'] ?? '',
+              'message': room[0]['Last_Message'] ?? '',
+              'time': lastTime ?? createdAt, // fallback ke waktu createdAt
+              'unread': 1,
+              'roomId': room[0]['Room_Id'] ?? roomId,
+            });
+          });
+      }
+     
     } catch (e, s) {
-      debugPrint("Error set RoomCreated listener: $e");
+      debugPrint("Error handle RoomCreated: $e");
       debugPrintStack(stackTrace: s);
     }
+  };
+} catch (e, s) {
+  debugPrint("Error set RoomCreated listener: $e");
+  debugPrintStack(stackTrace: s);
+}
 
     // Step 3 & 4 & 5: Fetch + Join + Set state
     await _fetchRooms();
