@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
@@ -86,6 +87,12 @@ void main() async {
           create: (_) => PortofolioProvider(
             service: PortofolioService(),
           ),
+        ),
+
+
+         /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat
+        ChangeNotifierProvider(
+          create: (_) => ChatProvider(),
         ),
       ],
       child: const MyApp(),

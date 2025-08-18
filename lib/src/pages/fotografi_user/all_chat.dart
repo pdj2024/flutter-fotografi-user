@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
-
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
-
 import 'providers/user_provider.dart';
-
+import 'providers/chat_provider.dart';
 import 'single_chat.dart';
 
 class AllChat extends StatefulWidget {
@@ -21,219 +17,84 @@ class AllChat extends StatefulWidget {
 }
 
 class _AllChatState extends State<AllChat> {
-  final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-
-  List<Map<String, dynamic>> _chats = [];
-  late String currentUserId;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
-    currentUserId = context.read<UserProvider>().userId ?? '';
-    _initChat();
-  }
-
-  Future<void> _initChat() async {
-    // Step 1: Connect ke SignalR
-    try {
-      await _chatService.connect(currentUserId, apiClient);
-    } catch (e, s) {
-      debugPrint("❌ Error connect SignalR: $e");
-      debugPrintStack(stackTrace: s);
-    }
-
-    // Step 2a: Listener pesan baru
-    try {
-      _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
-        try {
-          setState(() {
-            final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
-            if (idx >= 0) {
-              _chats[idx]['message'] = message;
-              _chats[idx]['time'] = sentAt;
-              if (sender != currentUserId) {
-                _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
-              }
-            } else {
-              // fallback jika room belum ada
-              _chats.add({
-                'username': sender,
-                'avatar': '',
-                'message': message,
-                'time': sentAt,
-                'unread': 1,
-                'roomId': roomId,
-              });
-            }
-          });
-        } catch (e, s) {
-          debugPrint("Error handle incoming message: $e");
-          debugPrintStack(stackTrace: s);
-        }
-      };
-    } catch (e, s) {
-      debugPrint("Error set message listener: $e");
-      debugPrintStack(stackTrace: s);
-    }
-
-   // Step 2b: Listener room baru
-try {
-  _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
-    try {
-      debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
-     
-
-      // Ini fetch chat room, bukan fetch chat nya
-      final room = await _chatService.fetchRoomsForUser(currentUserId, room_id: roomId);
-      print("============= ROOM: " + room.toString());
-
-      if (room.isNotEmpty) {
-          // Join room supaya langsung terhubung
-          await _chatService.joinMultipleRooms([roomId]);
-
-          // Update state dengan append 1 room baru
-        
-          setState(() {
-            final lastTime = parseIsoDate(room[0]['Last_Message_At'] as String?);
-            _chats.add({
-              'username': room[0]['Username_Lawan'] ?? roomName ?? '',
-              'avatar': room[0]['Id_Media_Lawan'] ?? '',
-              'message': room[0]['Last_Message'] ?? '',
-              'time': lastTime ?? createdAt, // fallback ke waktu createdAt
-              'unread': 1,
-              'roomId': room[0]['Room_Id'] ?? roomId,
-            });
-          });
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      final currentUserId = context.read<UserProvider>().userId;
+      if (currentUserId != null && currentUserId.isNotEmpty) {
+        context.read<ChatProvider>().init(currentUserId);
       }
-     
-    } catch (e, s) {
-      debugPrint("Error handle RoomCreated: $e");
-      debugPrintStack(stackTrace: s);
-    }
-  };
-} catch (e, s) {
-  debugPrint("Error set RoomCreated listener: $e");
-  debugPrintStack(stackTrace: s);
-}
-
-    // Step 3 & 4 & 5: Fetch + Join + Set state
-    await _fetchRooms();
-  }
-
-  Future<void> _fetchRooms() async {
-    List<Map<String, dynamic>> rooms = [];
-
-    // Step 3: Fetch semua room
-    try {
-      rooms = await _chatService.fetchRoomsForUser(currentUserId);
-    } catch (e, s) {
-      debugPrint("Error fetch rooms: $e");
-      debugPrintStack(stackTrace: s);
-    }
-
-    // Step 4: Join semua room
-    try {
-      final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
-      if (roomIds.isNotEmpty) {
-        await _chatService.joinMultipleRooms(roomIds);
-      }
-    } catch (e, s) {
-      debugPrint("Error join rooms: $e");
-      debugPrintStack(stackTrace: s);
-    }
-
-    // Step 5: Update state
-    try {
-      setState(() {
-        _chats = rooms.map((room) {
-          final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
-          return {
-            'username': room['Username_Lawan'] ?? '',
-            'avatar': room['Id_Media_Lawan'] ?? '',
-            'message': room['Last_Message'] ?? '',
-            'time': lastTime ?? DateTime.now(),
-            'unread': 0,
-            'roomId': room['Room_Id'] ?? '',
-          };
-        }).toList();
-      });
-    } catch (e, s) {
-      debugPrint("Error set chats from rooms: $e");
-      debugPrintStack(stackTrace: s);
+      _initialized = true;
     }
   }
-
-
-DateTime? parseIsoDate(String? iso) {
-  if (iso == null || iso.isEmpty) return null;
-  try {
-    return DateTime.parse(iso).toLocal(); // konversi ke local timezone
-  } catch (_) {
-    return null;
-  }
-}
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> sortedChats = [..._chats];
-    // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
-    sortedChats.sort((a, b) {
-  final timeB = b['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
-  final timeA = a['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
-  return timeB.compareTo(timeA);
-});
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, _) {
+        final sortedChats = [...chatProvider.rooms];
+        sortedChats.sort((a, b) {
+          final timeB = b['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final timeA = a['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return timeB.compareTo(timeA);
+        });
 
-    final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
-      final name = chat['username'].toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase());
-    }).toList();
+        final filteredChats = sortedChats.where((chat) {
+          final name = chat['username'].toString().toLowerCase();
+          return name.contains(_searchQuery.toLowerCase());
+        }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        leading: CustomBackButton(),
-        title: const Text(
-          "Semua Pesan",
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          ChatHeader(
-            unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
-            searchController: _searchController,
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredChats.length,
-              itemBuilder: (context, index) {
-                final chat = filteredChats[index];
-                return ChatItem(
-                  username: chat['username'], // display
-                
-                  avatar: chat['avatar'], // display
-                  
-                  message: chat['message'], // display
-                  time: chat['time'], // display
-                  unreadCount: chat['unread'], // display
-                  roomId: chat['roomId'],
-                );
-              },
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: const Color(0xFFF9F9F9),
+            elevation: 1,
+            leading: CustomBackButton(),
+            title: const Text(
+              "Semua Pesan",
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-        ],
-      ),
+          body: Column(
+            children: [
+              ChatHeader(
+                unreadCount: sortedChats.where((c) => (c['unread'] ?? 0) > 0).length,
+                searchController: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
+              Expanded(
+                child: chatProvider.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        itemCount: filteredChats.length,
+                        itemBuilder: (context, index) {
+                          final chat = filteredChats[index];
+                          return ChatItem(
+                            username: chat['username'] ?? 'Unknown',
+                            avatar: chat['avatar'],
+                            message: chat['message'],
+                            time: chat['time'],
+                            unreadCount: chat['unread'] ?? 0,
+                            roomId: chat['roomId'] ?? '',
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -281,36 +142,22 @@ class ChatHeader extends StatelessWidget {
 }
 
 class ChatItem extends StatelessWidget {
-  final String username;
-
-
+  final String? username;
   final String? avatar;
- final String? message;
+  final String? message;
   final DateTime? time;
-  final int unreadCount; 
-  final String roomId;
+  final int unreadCount;
+  final String? roomId;
 
   const ChatItem({
     super.key,
-   
     required this.username,
-
     required this.avatar,
     required this.message,
     required this.time,
     required this.unreadCount,
     required this.roomId,
   });
-
-//  String formatTime(DateTime? time) {
-//   if (time == null) return '';
-//   final now = DateTime.now();
-//   if (now.difference(time).inDays == 0) {
-//     return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
-//   } else {
-//     return '${time.day}/${time.month}/${time.year}';
-//   }
-// }
 
   Widget _shimmerAvatar(double size) {
     return Shimmer.fromColors(
@@ -319,7 +166,7 @@ class ChatItem extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
         ),
@@ -329,8 +176,7 @@ class ChatItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String imgUrl =
-       avatar ?? '';
+    final String imgUrl = avatar ?? '';
 
     return ListTile(
       leading: CircleAvatar(
@@ -354,7 +200,7 @@ class ChatItem extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(username),
+      title: Text(username ?? 'Unknown'),
       subtitle: Text(
         message ?? '',
         maxLines: 1,
@@ -396,10 +242,9 @@ class ChatItem extends StatelessWidget {
         context.read<NavigationProvider>().navigateToPage(
           context,
           SingleChat(
-            receiverUserName: username,
+            receiverUserName: username ?? 'Unknown',
             receiverEmail: 'INI RECEIVER EMAIL',
             receiverID: 'INI RECEIVER ID',
-            // roomId: roomId,
           ),
           targetTabIndex: 1,
         );

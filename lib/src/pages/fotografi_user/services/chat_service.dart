@@ -74,7 +74,10 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
         final roomId = msg["roomId"] ?? "";
         final sender = msg["sender"] ?? "";
         final text = msg["message"] ?? "";
-        final sentAt = DateTime.parse(msg["sentAt"]).toLocal();
+       final sentAt = msg["sentAt"] != null
+    ? DateTime.tryParse(msg["sentAt"])?.toLocal() ?? DateTime.now()
+    : DateTime.now();
+
 
         if (!_joinedRooms.contains(roomId)) {
           _joinedRooms.add(roomId);
@@ -168,6 +171,18 @@ _connection!.on("RoomCreated", (args) {
     }
   }
 
+  Future<void> disconnect() async {
+  if (_connection != null &&
+      _connection!.state == HubConnectionState.Connected) {
+    await _connection!.stop();
+    print("[SignalR] Disconnected");
+  }
+  _connection = null;
+  _joinedRooms.clear();
+  _joinedUserChannels.clear();
+}
+
+
   // ===========================
   // API SECTION
   // ===========================
@@ -199,7 +214,10 @@ _connection!.on("RoomCreated", (args) {
         'Last_Message_At': e['Last_Message_At'],
          'Last_Message': e['Last_Message'],
         'Status': e['Status'],
-        'User_Ids': List<String>.from(e['User_Ids'] ?? []),
+        'User_Ids': (e['User_Ids'] as List?)
+        ?.where((id) => id != null)
+        .map((id) => id.toString())
+        .toList() ?? [],
       };
     }).toList();
   }
@@ -216,11 +234,13 @@ Future<List<Map<String, dynamic>>> fetchMessagesForRoom( String roomId) async
   { 
     final Map<String, dynamic> json = jsonDecode(response.body); 
     final List<dynamic> data = json['Data']; 
-    return data .map((m) => 
-    { 
-      'Sender': m['Sender_Id'],
-       'Text': m['Message'], 
-       'SentAt': DateTime.parse(m['Sent_At']) }) .toList(); 
+   return data.map((m) => {
+  'Sender': m['Sender_Id']?.toString() ?? '',
+  'Text': m['Message']?.toString() ?? '',
+  'SentAt': m['Sent_At'] != null
+      ? DateTime.tryParse(m['Sent_At']) ?? DateTime.now()
+      : DateTime.now(),
+}).toList();
   } 
   return [];
  }
