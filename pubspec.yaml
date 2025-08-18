@@ -44,7 +44,7 @@ dependencies:
   photo_manager: ^3.0.0
   video_player: ^2.8.1
 
-  signalr_netcore:
+
 
   cached_network_image:
 
@@ -60,6 +60,7 @@ dependencies:
   google_maps_flutter: ^2.5.0
   geolocator: ^13.0.1
   geocoding: ^3.0.0
+  signalr_netcore:
 
   #image_gallery_saver: ^2.0.3
 
