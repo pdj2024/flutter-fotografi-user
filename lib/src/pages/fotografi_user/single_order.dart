@@ -165,11 +165,11 @@ class SingleOrder extends StatelessWidget {
           padding: EdgeInsets.zero,
         ),
         onPressed: () {
-          context.read<NavigationProvider>().navigateToPage(
-            context,
-            SingleChat(receiverUserName: 'helooo', receiverEmail:"hello@gmail.com", receiverID: '123'),
-            targetTabIndex: 1,
-          );
+          // context.read<NavigationProvider>().navigateToPage(
+          //   context,
+          //   SingleChat(receiverUserName: 'helooo', receiverEmail:"hello@gmail.com", receiverID: '123'),
+          //   targetTabIndex: 1,
+          // );
         },
         child: const Icon(
           Icons.chat_outlined,

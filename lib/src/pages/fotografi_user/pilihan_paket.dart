@@ -216,15 +216,15 @@ class _PilihanPaketState extends State<PilihanPaket> {
                       padding: EdgeInsets.zero,
                     ),
                     onPressed: () {
-                      NavigationProvider().navigateToPage(
-                        context,
-                        SingleChat(
-                          receiverUserName: widget.userName,
-                          receiverEmail: "hello@gmail.com",
-                          receiverID: widget.idVendor,
-                        ),
-                        targetTabIndex: 1,
-                      );
+                      // NavigationProvider().navigateToPage(
+                      //   context,
+                      //   SingleChat(
+                      //     receiverUserName: widget.userName,
+                      //     receiverEmail: "hello@gmail.com",
+                      //     receiverID: widget.idVendor,
+                      //   ),
+                      //   targetTabIndex: 1,
+                      // );
                     },
                     child: const Icon(Icons.chat_outlined, size: 20, color: Constants.primaryColor),
                   ),
@@ -310,15 +310,15 @@ class _PilihanPaketState extends State<PilihanPaket> {
               ),
             ),
             onPressed: () {
-              NavigationProvider().navigateToPage(
-                context,
-                SingleChat(
-                  receiverUserName: widget.userName,
-                  receiverEmail: "hello@gmail.com",
-                  receiverID: widget.idVendor,
-                ),
-                targetTabIndex: 1,
-              );
+              // NavigationProvider().navigateToPage(
+              //   context,
+              //   SingleChat(
+              //     receiverUserName: widget.userName,
+              //     receiverEmail: "hello@gmail.com",
+              //     receiverID: widget.idVendor,
+              //   ),
+              //   targetTabIndex: 1,
+              // );
             },
             child: const Text(
               'Atur Jadwal',

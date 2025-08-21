@@ -261,15 +261,15 @@ Widget _buildVendorHeader(Map<String, dynamic> data) {
               padding: EdgeInsets.zero,
             ),
             onPressed: () {
-              context.read<NavigationProvider>().navigateToPage(
-                    context,
-                    SingleChat(
-                      receiverUserName: data['Username_Vendor'] ?? '',
-                      receiverEmail: "",
-                      receiverID: data['Id_Vendor'],
-                    ),
-                    targetTabIndex: 1,
-                  );
+              // context.read<NavigationProvider>().navigateToPage(
+              //       context,
+              //       SingleChat(
+              //         receiverUserName: data['Username_Vendor'] ?? '',
+              //         receiverEmail: "",
+              //         receiverID: data['Id_Vendor'],
+              //       ),
+              //       targetTabIndex: 1,
+              //     );
             },
             child: const Icon(Icons.chat_outlined,
                 color: Constants.primaryColor),
@@ -463,15 +463,15 @@ class OfferCard extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                context.read<NavigationProvider>().navigateToPage(
-                      context,
-                      SingleChat(
-                        receiverUserName: 'helooo',
-                        receiverEmail: "hello@gmail.com",
-                        receiverID: '123',
-                      ),
-                      targetTabIndex: 1,
-                    );
+                // context.read<NavigationProvider>().navigateToPage(
+                //       context,
+                //       SingleChat(
+                //         receiverUserName: 'helooo',
+                //         receiverEmail: "hello@gmail.com",
+                //         receiverID: '123',
+                //       ),
+                //       targetTabIndex: 1,
+                //     );
               },
               child: const Text(
                 "Atur Jadwal",

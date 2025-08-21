@@ -164,10 +164,14 @@ _connection!.on("RoomCreated", (args) {
 
   Future<void> sendMessage(
       String roomId, String senderUserId, String message) async {
+        print("======= MASUK ATAS");
+
     if (_connection?.state == HubConnectionState.Connected) {
+
+         print("======= MASUK BAWAH");
       await _connection!
           .invoke("SendMessageToRoom", args: [roomId, senderUserId, message]);
-      print("[SignalR] Sent message to $roomId: $message");
+      print("================ [SignalR] Sent message to $roomId: $message");
     }
   }
 

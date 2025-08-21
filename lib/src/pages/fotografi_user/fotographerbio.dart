@@ -259,15 +259,15 @@ class _PhotographerBioState extends State<PhotographerBio> {
                               padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
-                              NavigationProvider().navigateToPage(
-                                context,
-                                SingleChat(
-                                  receiverUserName: vendor!.username,
-                                  receiverEmail: vendor!.email,
-                                  receiverID: vendor!.noId.toString(),
-                                ),
-                                targetTabIndex: 1,
-                              );
+                              // NavigationProvider().navigateToPage(
+                              //   context,
+                              //   SingleChat(
+                              //     receiverUserName: vendor!.username,
+                              //     receiverEmail: vendor!.email,
+                              //     receiverID: vendor!.noId.toString(),
+                              //   ),
+                              //   targetTabIndex: 1,
+                              // );
                             },
                             child: const Icon(Icons.chat_outlined,
                                 color: Constants.primaryColor),
