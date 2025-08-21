@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/pages/core/api_singleton.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+// import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
 
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -21,149 +22,151 @@ class AllChat extends StatefulWidget {
 }
 
 class _AllChatState extends State<AllChat> {
-  final ChatService _chatService = ChatService();
+  // final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  List<Map<String, dynamic>> _chats = [];
+  // List<Map<String, dynamic>> _chats = [];
   late String currentUserId;
 
   @override
   void initState() {
     super.initState();
-    currentUserId = context.read<UserProvider>().userId ?? '';
-    _initChat();
+    final userId = context.read<UserProvider>().userId ?? '';
+    Future.microtask(() {
+      context.read<ChatProvider>().init(userId);
+    });
   }
 
-  Future<void> _initChat() async {
-    // Step 1: Connect ke SignalR
-    try {
-      await _chatService.connect(currentUserId, apiClient);
-    } catch (e, s) {
-      debugPrint("❌ Error connect SignalR: $e");
-      debugPrintStack(stackTrace: s);
-    }
+//   Future<void> _initChat() async {
+//     // Step 1: Connect ke SignalR
+//     try {
+//       await _chatService.connect(currentUserId, apiClient);
+//     } catch (e, s) {
+//       debugPrint("❌ Error connect SignalR: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
 
-    // Step 2a: Listener pesan baru
-    try {
-      _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
-        try {
-          setState(() {
-            final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
-            if (idx >= 0) {
-              _chats[idx]['message'] = message;
-              _chats[idx]['time'] = sentAt;
-              if (sender != currentUserId) {
-                _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
-              }
-            } else {
-              // fallback jika room belum ada
-              _chats.add({
-                'username': sender,
-                'avatar': '',
-                'message': message,
-                'time': sentAt,
-                'unread': 1,
-                'roomId': roomId,
-              });
-            }
-          });
-        } catch (e, s) {
-          debugPrint("Error handle incoming message: $e");
-          debugPrintStack(stackTrace: s);
-        }
-      };
-    } catch (e, s) {
-      debugPrint("Error set message listener: $e");
-      debugPrintStack(stackTrace: s);
-    }
+//     // Step 2a: Listener pesan baru
+//     try {
+//       _chatService.onRoomMessageReceived = (roomId, sender, message, sentAt) {
+//         try {
+//           setState(() {
+//             final idx = _chats.indexWhere((c) => c['roomId'] == roomId);
+//             if (idx >= 0) {
+//               _chats[idx]['message'] = message;
+//               _chats[idx]['time'] = sentAt;
+//               if (sender != currentUserId) {
+//                 _chats[idx]['unread'] = (_chats[idx]['unread'] ?? 0) + 1;
+//               }
+//             } else {
+//               // fallback jika room belum ada
+//               _chats.add({
+//                 'username': sender,
+//                 'avatar': '',
+//                 'message': message,
+//                 'time': sentAt,
+//                 'unread': 1,
+//                 'roomId': roomId,
+//               });
+//             }
+//           });
+//         } catch (e, s) {
+//           debugPrint("Error handle incoming message: $e");
+//           debugPrintStack(stackTrace: s);
+//         }
+//       };
+//     } catch (e, s) {
+//       debugPrint("Error set message listener: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
 
-   // Step 2b: Listener room baru
-try {
-  _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
-    try {
-      debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
+//    // Step 2b: Listener room baru
+// try {
+//   _chatService.onRoomCreated = (roomId, roomName, createdAt) async {
+//     try {
+//       debugPrint("📢 RoomCreated diterima: $roomId ($roomName)");
      
 
-      // Ini fetch chat room, bukan fetch chat nya
-      final room = await _chatService.fetchRoomsForUser(currentUserId, room_id: roomId);
-      print("============= ROOM: " + room.toString());
+//       // Ini fetch chat room, bukan fetch chat nya
+//       final room = await _chatService.fetchRoomsForUser(currentUserId, room_id: roomId);
+//       print("============= ROOM: " + room.toString());
 
-      if (room.isNotEmpty) {
-          // Join room supaya langsung terhubung
-          await _chatService.joinMultipleRooms([roomId]);
+//       if (room.isNotEmpty) {
+//           // Join room supaya langsung terhubung
+//           await _chatService.joinMultipleRooms([roomId]);
 
-          // Update state dengan append 1 room baru
+//           // Update state dengan append 1 room baru
         
-          setState(() {
-            final lastTime = parseIsoDate(room[0]['Last_Message_At'] as String?);
-            _chats.add({
-              'username': room[0]['Username_Lawan'] ?? roomName ?? '',
-              'avatar': room[0]['Id_Media_Lawan'] ?? '',
-              'message': room[0]['Last_Message'] ?? '',
-              'time': lastTime ?? createdAt, // fallback ke waktu createdAt
-              'unread': 1,
-              'roomId': room[0]['Room_Id'] ?? roomId,
-            });
-          });
-      }
+//           setState(() {
+//             final lastTime = parseIsoDate(room[0]['Last_Message_At'] as String?);
+//             _chats.add({
+//               'username': room[0]['Username_Lawan'] ?? roomName ?? '',
+//               'avatar': room[0]['Id_Media_Lawan'] ?? '',
+//               'message': room[0]['Last_Message'] ?? '',
+//               'time': lastTime ?? createdAt, // fallback ke waktu createdAt
+//               'unread': 1,
+//               'roomId': room[0]['Room_Id'] ?? roomId,
+//             });
+//           });
+//       }
      
-    } catch (e, s) {
-      debugPrint("Error handle RoomCreated: $e");
-      debugPrintStack(stackTrace: s);
-    }
-  };
-} catch (e, s) {
-  debugPrint("Error set RoomCreated listener: $e");
-  debugPrintStack(stackTrace: s);
-}
+//     } catch (e, s) {
+//       debugPrint("Error handle RoomCreated: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
+//   };
+// } catch (e, s) {
+//   debugPrint("Error set RoomCreated listener: $e");
+//   debugPrintStack(stackTrace: s);
+// }
 
-    // Step 3 & 4 & 5: Fetch + Join + Set state
-    await _fetchRooms();
-  }
+//     // Step 3 & 4 & 5: Fetch + Join + Set state
+//     await _fetchRooms();
+//   }
 
-  Future<void> _fetchRooms() async {
-    List<Map<String, dynamic>> rooms = [];
+//   Future<void> _fetchRooms() async {
+//     List<Map<String, dynamic>> rooms = [];
 
-    // Step 3: Fetch semua room
-    try {
-      rooms = await _chatService.fetchRoomsForUser(currentUserId);
-    } catch (e, s) {
-      debugPrint("Error fetch rooms: $e");
-      debugPrintStack(stackTrace: s);
-    }
+//     // Step 3: Fetch semua room
+//     try {
+//       rooms = await _chatService.fetchRoomsForUser(currentUserId);
+//     } catch (e, s) {
+//       debugPrint("Error fetch rooms: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
 
-    // Step 4: Join semua room
-    try {
-      final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
-      if (roomIds.isNotEmpty) {
-        await _chatService.joinMultipleRooms(roomIds);
-      }
-    } catch (e, s) {
-      debugPrint("Error join rooms: $e");
-      debugPrintStack(stackTrace: s);
-    }
+//     // Step 4: Join semua room
+//     try {
+//       final roomIds = rooms.map((r) => r['Room_Id'] as String).toList();
+//       if (roomIds.isNotEmpty) {
+//         await _chatService.joinMultipleRooms(roomIds);
+//       }
+//     } catch (e, s) {
+//       debugPrint("Error join rooms: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
 
-    // Step 5: Update state
-    try {
-      setState(() {
-        _chats = rooms.map((room) {
-          final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
-          return {
-            'username': room['Username_Lawan'] ?? '',
-            'avatar': room['Id_Media_Lawan'] ?? '',
-            'message': room['Last_Message'] ?? '',
-            'time': lastTime ?? DateTime.now(),
-            'unread': 0,
-            'roomId': room['Room_Id'] ?? '',
-          };
-        }).toList();
-      });
-    } catch (e, s) {
-      debugPrint("Error set chats from rooms: $e");
-      debugPrintStack(stackTrace: s);
-    }
-  }
+//     // Step 5: Update state
+//     try {
+//       setState(() {
+//         _chats = rooms.map((room) {
+//           final lastTime = parseIsoDate(room['Last_Message_At'] as String?);
+//           return {
+//             'username': room['Username_Lawan'] ?? '',
+//             'avatar': room['Id_Media_Lawan'] ?? '',
+//             'message': room['Last_Message'] ?? '',
+//             'time': lastTime ?? DateTime.now(),
+//             'unread': 0,
+//             'roomId': room['Room_Id'] ?? '',
+//           };
+//         }).toList();
+//       });
+//     } catch (e, s) {
+//       debugPrint("Error set chats from rooms: $e");
+//       debugPrintStack(stackTrace: s);
+//     }
+//   }
 
 
 DateTime? parseIsoDate(String? iso) {
@@ -177,16 +180,18 @@ DateTime? parseIsoDate(String? iso) {
 
   @override
   Widget build(BuildContext context) {
+      final _chats = context.watch<ChatProvider>().rooms;
+
     final List<Map<String, dynamic>> sortedChats = [..._chats];
     // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
     sortedChats.sort((a, b) {
-  final timeB = b['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
-  final timeA = a['time'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final timeB = b['Last_Message_At'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final timeA = a['Last_Message_At'] ?? DateTime.fromMillisecondsSinceEpoch(0);
   return timeB.compareTo(timeA);
 });
 
     final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
-      final name = chat['username'].toString().toLowerCase();
+      final name = chat['Username_Lawan'].toString().toLowerCase();
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -206,7 +211,8 @@ DateTime? parseIsoDate(String? iso) {
       body: Column(
         children: [
           ChatHeader(
-            unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
+            // unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
+             unreadCount: sortedChats.where((c) => (c['unread'] ?? 0) > 0).length,
             searchController: _searchController,
             onChanged: (value) {
               setState(() {
@@ -220,14 +226,14 @@ DateTime? parseIsoDate(String? iso) {
               itemBuilder: (context, index) {
                 final chat = filteredChats[index];
                 return ChatItem(
-                  username: chat['username'], // display
-                
-                  avatar: chat['avatar'], // display
-                  
-                  message: chat['message'], // display
-                  time: chat['time'], // display
-                  unreadCount: chat['unread'], // display
-                  roomId: chat['roomId'],
+                   username: chat['Username_Lawan'] ?? '',
+                  avatar: chat['Id_Media_Lawan'] as String?,
+                  message: chat['Last_Message'] as String?,
+                 time: chat['Last_Message_At'] != null
+    ? parseIsoDate(chat['Last_Message_At'])
+    : null,
+                  unreadCount: chat['unread'] ?? 0,
+                  roomId: chat['Room_Id'] ?? '',
                 );
               },
             ),
@@ -302,15 +308,6 @@ class ChatItem extends StatelessWidget {
     required this.roomId,
   });
 
-//  String formatTime(DateTime? time) {
-//   if (time == null) return '';
-//   final now = DateTime.now();
-//   if (now.difference(time).inDays == 0) {
-//     return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}';
-//   } else {
-//     return '${time.day}/${time.month}/${time.year}';
-//   }
-// }
 
   Widget _shimmerAvatar(double size) {
     return Shimmer.fromColors(
@@ -363,8 +360,13 @@ class ChatItem extends StatelessWidget {
       trailing: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            context.read<NavigationProvider>().formatDateLabel(time, showTodaysJam: true),
+        Text(
+  time != null
+      ? context.read<NavigationProvider>().formatDateLabel(
+            time!,
+            showTodaysJam: true,
+          )
+      : '', // kalau null tampilkan string kosong
             style: const TextStyle(
               color: Constants.primaryColor,
               fontSize: 12,

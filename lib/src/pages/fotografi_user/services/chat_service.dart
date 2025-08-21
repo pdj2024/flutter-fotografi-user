@@ -34,7 +34,7 @@ Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
   // SIGNALR SECTION
   // ===========================
 
-Future<void> connect(String currentUserId, ApiClient apiClient) async {
+Future<int> connect(String currentUserId, ApiClient apiClient) async {
   print("======= INI MULAI CONNECT " + hubUrl);
 
   // Ambil token & role dari ApiClient
@@ -44,7 +44,7 @@ Future<void> connect(String currentUserId, ApiClient apiClient) async {
   // Pastikan token ada
   if (token == null || token.isEmpty) {
     print("[SignalR] ❌ Gagal connect: token kosong");
-    return;
+    return -1;
   }
 
   // Buat URL hub dengan query string supaya backend bisa baca
@@ -134,6 +134,8 @@ _connection!.on("RoomCreated", (args) {
     await joinUserChannel(currentUserId);
     _lastConnectedUserId = currentUserId;
   }
+
+  return 99;
 }
 
 

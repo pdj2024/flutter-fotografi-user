@@ -10,21 +10,41 @@ class ChatProvider extends ChangeNotifier {
 
   String? _currentUserId;
   bool _initialized = false;
-  bool _isLoading = false; // ✅ buat flag loading
+  bool _isLoading = false;
 
+  // =======================
+  // GETTER
+  // =======================
   List<Map<String, dynamic>> get rooms => _rooms;
+
   List<Map<String, dynamic>> getMessages(String roomId) =>
       _messages[roomId] ?? [];
 
   bool get isReady => _initialized;
-  bool get isLoading => _isLoading; // ✅ getter loading
+  bool get isLoading => _isLoading;
+  bool get isConnected => _chatService.isConnected;
 
+  // =======================
+  // INIT & CONNECTION
+  // =======================
   Future<void> init(String userId) async {
-    if (_initialized) return; // sudah pernah init
+    if (_initialized) return;
+
+     if (userId == null || userId.isEmpty) return;
+     
+   
 
     _currentUserId = userId;
-    await _chatService.connect(userId, apiClient);
 
+   
+
+  final cobaConnect = await _chatService.connect(userId, apiClient);
+  if (cobaConnect != 99) {
+      print("===== GAGAL CONNECT");
+  }
+    
+
+    // handle pesan masuk
     _chatService.onRoomMessageReceived =
         (roomId, sender, message, sentAt) {
       final idx = _rooms.indexWhere((r) => r['Room_Id'] == roomId);
@@ -35,14 +55,15 @@ class ChatProvider extends ChangeNotifier {
 
       final msgs = _messages[roomId] ?? [];
       msgs.add({
-        'Sender': sender ?? '',
-        'Text': message ?? '',
-        'SentAt': sentAt ?? DateTime.now(),
+        'Sender': sender,
+        'Text': message,
+        'SentAt': sentAt,
       });
       _messages[roomId] = msgs;
       notifyListeners();
     };
 
+    // handle room baru
     _chatService.onRoomCreated =
         (roomId, roomName, createdAt) async {
       final room = await _chatService.fetchRoomsForUser(userId, room_id: roomId);
@@ -56,22 +77,51 @@ class ChatProvider extends ChangeNotifier {
     _initialized = true;
   }
 
+  Future<void> disposeConnection() async {
+    _rooms.clear();
+    _messages.clear();
+    _currentUserId = null;
+    _initialized = false;
+    await _chatService.disconnect();
+    notifyListeners();
+  }
+
+  // =======================
+  // ROOM & MESSAGE HANDLER
+  // =======================
   Future<void> fetchRooms() async {
     if (_currentUserId == null) return;
 
-    _isLoading = true; // ✅ mulai loading
+    print("=== MASUK FETCH ROOMS");
+
+    _isLoading = true;
     notifyListeners();
 
     try {
       final rooms = await _chatService.fetchRoomsForUser(_currentUserId!);
       _rooms = rooms;
-      if (rooms.isNotEmpty) {
-        await _chatService.joinMultipleRooms(
-           rooms.map((r) => r['Room_Id']?.toString() ?? '').where((id) => id.isNotEmpty).toList());
 
+      if (rooms.isNotEmpty) {
+
+        try {
+        await _chatService.joinMultipleRooms(
+                rooms
+                    .map((r) => r['Room_Id']?.toString() ?? '')
+                    .where((id) => id.isNotEmpty)
+                    .toList(),
+              );
+              print("=== JOIN MULTIPLE ROOM BERHASIL");
+        } catch(e) {
+          print("=== JOIN MULTIPLE GAGAL: $e");
+        }
+      
+
+        
+      } else {
+        print("=== ROOM EMPTY");
       }
     } finally {
-      _isLoading = false; // ✅ selesai loading
+      _isLoading = false;
       notifyListeners();
     }
   }
@@ -96,12 +146,22 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> disposeConnection() async {
-    _rooms.clear();
-    _messages.clear();
-    _currentUserId = null;
-    _initialized = false;
-    await _chatService.disconnect(); // tambahin method disconnect di ChatService
-    notifyListeners();
+  Future<bool> postChat(Map<String, dynamic> payload) async {
+    return await _chatService.postChat(payload);
+  }
+
+  // =======================
+  // SIGNALR WRAPPER
+  // =======================
+  Future<void> joinRoom(String roomId) async {
+    await _chatService.joinRoom(roomId);
+  }
+
+  Future<void> joinMultipleRooms(List<String> roomIds) async {
+    await _chatService.joinMultipleRooms(roomIds);
+  }
+
+  Future<void> joinUserChannel(String userId) async {
+    await _chatService.joinUserChannel(userId);
   }
 }
