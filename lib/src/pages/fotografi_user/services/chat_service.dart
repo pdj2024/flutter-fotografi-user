@@ -34,6 +34,22 @@ Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
   // SIGNALR SECTION
   // ===========================
 
+  Map<String, Object?> safeParse(dynamic obj) {
+  if (obj is Map) {
+    // cast aman → String, Object?
+    return obj.map((key, value) => MapEntry(key.toString(), value as Object?));
+  }
+  if (obj is String) {
+    final decoded = jsonDecode(obj);
+    if (decoded is Map) {
+      return decoded.map((key, value) => MapEntry(key.toString(), value as Object?));
+    }
+  }
+  throw Exception("Unsupported payload type: ${obj.runtimeType}");
+}
+
+
+
 Future<int> connect(String currentUserId, ApiClient apiClient) async {
   print("======= INI MULAI CONNECT " + hubUrl);
 
@@ -68,47 +84,60 @@ Future<int> connect(String currentUserId, ApiClient apiClient) async {
 
 
     // Listener untuk pesan masuk
-    _connection!.on("ReceiveMessage", (args) {
-      try {
-        final Map<String, dynamic> msg = jsonDecode(jsonEncode(args![0]));
-        final roomId = msg["roomId"] ?? "";
-        final sender = msg["sender"] ?? "";
-        final text = msg["message"] ?? "";
-       final sentAt = msg["sentAt"] != null
-    ? DateTime.tryParse(msg["sentAt"])?.toLocal() ?? DateTime.now()
-    : DateTime.now();
+  _connection!.on("ReceiveMessage", (args) {
+  try {
+    if (args == null || args.isEmpty) return;
+
+    final msg = safeParse(args[0]);
+
+    final roomId = msg["roomId"]?.toString() ?? "";
+    final sender = msg["sender"]?.toString() ?? "";
+    final text   = msg["message"]?.toString() ?? "";
+
+    final sentAt = msg["sentAt"] != null
+        ? DateTime.tryParse(msg["sentAt"].toString())?.toLocal() ?? DateTime.now()
+        : DateTime.now();
+
+    if (!_joinedRooms.contains(roomId)) {
+      _joinedRooms.add(roomId);
+    }
+
+    onMessageReceived?.call(sender, text, sentAt);
+    onRoomMessageReceived?.call(roomId, sender, text, sentAt);
+  } catch (e, st) {
+    print("[SignalR] Error parsing ReceiveMessage: $e\n$st");
+  }
+});
 
 
-        if (!_joinedRooms.contains(roomId)) {
-          _joinedRooms.add(roomId);
-        }
 
-        onMessageReceived?.call(sender, text, sentAt);
-        onRoomMessageReceived?.call(roomId, sender, text, sentAt);
-      } catch (e) {
-        print("[SignalR] Error parsing ReceiveMessage: $e");
-      }
-    });
+
 
     // Listener untuk room baru
 _connection!.on("RoomCreated", (args) {
   try {
-    final Map<String, dynamic> payload = jsonDecode(jsonEncode(args![0]));
-    final roomId = payload["roomId"] ?? "";
-    final roomName = payload["roomName"] ?? "";
+    if (args == null || args.isEmpty) return;
+
+    final Map<String, dynamic> payload;
+    if (args[0] is Map) {
+      payload = Map<String, dynamic>.from(args[0] as Map);
+    } else {
+      payload = jsonDecode(args[0].toString());
+    }
+
+    final roomId = payload["roomId"]?.toString() ?? "";
+    final roomName = payload["roomName"]?.toString() ?? "";
     final createdAt = payload["createdAt"] != null
-        ? DateTime.tryParse(payload["createdAt"]) ?? DateTime.now()
+        ? DateTime.tryParse(payload["createdAt"].toString()) ?? DateTime.now()
         : DateTime.now();
 
-    // panggil callback baru
     onRoomCreated?.call(roomId, roomName, createdAt);
-
-    // kalau masih mau pakai yang lama
     onNewRoomDetected?.call(roomId);
-  } catch (e) {
-    print("[SignalR] Error parsing RoomCreated: $e");
+  } catch (e, st) {
+    print("[SignalR] Error parsing RoomCreated: $e\n$st");
   }
 });
+
 
 
     // Auto reconnect kalau koneksi terputus

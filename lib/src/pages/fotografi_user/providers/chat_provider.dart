@@ -29,46 +29,41 @@ class ChatProvider extends ChangeNotifier {
   // =======================
   Future<void> init(String userId) async {
     if (_initialized) return;
-
-     if (userId == null || userId.isEmpty) return;
-     
-   
+    if (userId.isEmpty) return;
 
     _currentUserId = userId;
 
-   
-
-  final cobaConnect = await _chatService.connect(userId, apiClient);
-  if (cobaConnect != 99) {
+    final cobaConnect = await _chatService.connect(userId, apiClient);
+    if (cobaConnect != 99) {
       print("===== GAGAL CONNECT");
-  }
-    
+    }
 
     // handle pesan masuk
     _chatService.onRoomMessageReceived =
-        (roomId, sender, message, sentAt) {
-      final idx = _rooms.indexWhere((r) => r['Room_Id'] == roomId);
-      if (idx >= 0) {
-        _rooms[idx]['Last_Message'] = message;
-        _rooms[idx]['Last_Message_At'] = sentAt.toIso8601String();
-      }
+    (String roomId, String sender, String message, DateTime sentAt) {
+  final idx = _rooms.indexWhere((r) => r['Room_Id'] == roomId);
+  if (idx >= 0) {
+    _rooms[idx]['Last_Message'] = message;
+    _rooms[idx]['Last_Message_At'] = sentAt; // <-- simpan langsung DateTime
+  }
 
-      final msgs = _messages[roomId] ?? [];
-      msgs.add({
-        'Sender': sender,
-        'Text': message,
-        'SentAt': sentAt,
-      });
-      _messages[roomId] = msgs;
-      notifyListeners();
-    };
+  final msgs = _messages[roomId] ?? [];
+  msgs.add({
+    'Sender': sender,
+    'Text': message,
+    'SentAt': sentAt, // <-- DateTime
+  });
+  _messages[roomId] = List<Map<String, dynamic>>.from(msgs);
+  notifyListeners();
+};
+
 
     // handle room baru
     _chatService.onRoomCreated =
-        (roomId, roomName, createdAt) async {
+        (String roomId, String roomName, DateTime createdAt) async {
       final room = await _chatService.fetchRoomsForUser(userId, room_id: roomId);
       if (room.isNotEmpty && room.first['Room_Id'] != null) {
-        _rooms.add(room.first);
+        _rooms.add(Map<String, dynamic>.from(room.first)); // <-- cast aman
         notifyListeners();
       }
     };
@@ -99,24 +94,20 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       final rooms = await _chatService.fetchRoomsForUser(_currentUserId!);
-      _rooms = rooms;
+      _rooms = List<Map<String, dynamic>>.from(rooms); // <-- cast aman
 
-      if (rooms.isNotEmpty) {
-
+      if (_rooms.isNotEmpty) {
         try {
-        await _chatService.joinMultipleRooms(
-                rooms
-                    .map((r) => r['Room_Id']?.toString() ?? '')
-                    .where((id) => id.isNotEmpty)
-                    .toList(),
-              );
-              print("=== JOIN MULTIPLE ROOM BERHASIL");
-        } catch(e) {
+          await _chatService.joinMultipleRooms(
+            _rooms
+                .map((r) => r['Room_Id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+                .toList(),
+          );
+          print("=== JOIN MULTIPLE ROOM BERHASIL");
+        } catch (e) {
           print("=== JOIN MULTIPLE GAGAL: $e");
         }
-      
-
-        
       } else {
         print("=== ROOM EMPTY");
       }
@@ -132,7 +123,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       final msgs = await _chatService.fetchMessagesForRoom(roomId);
-      _messages[roomId] = msgs;
+      _messages[roomId] = List<Map<String, dynamic>>.from(msgs); // <-- cast aman
       await _chatService.joinRoom(roomId);
     } finally {
       _isLoading = false;

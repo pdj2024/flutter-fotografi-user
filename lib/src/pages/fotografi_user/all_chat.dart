@@ -185,10 +185,17 @@ DateTime? parseIsoDate(String? iso) {
     final List<Map<String, dynamic>> sortedChats = [..._chats];
     // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
     sortedChats.sort((a, b) {
-  final timeB = b['Last_Message_At'] ?? DateTime.fromMillisecondsSinceEpoch(0);
-  final timeA = a['Last_Message_At'] ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final timeA = a['Last_Message_At'] is DateTime
+      ? a['Last_Message_At'] as DateTime
+      : parseIsoDate(a['Last_Message_At'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+  final timeB = b['Last_Message_At'] is DateTime
+      ? b['Last_Message_At'] as DateTime
+      : parseIsoDate(b['Last_Message_At'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
   return timeB.compareTo(timeA);
 });
+
 
     final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
       final name = chat['Username_Lawan'].toString().toLowerCase();
@@ -229,9 +236,9 @@ DateTime? parseIsoDate(String? iso) {
                    username: chat['Username_Lawan'] ?? '',
                   avatar: chat['Id_Media_Lawan'] as String?,
                   message: chat['Last_Message'] as String?,
-                 time: chat['Last_Message_At'] != null
-    ? parseIsoDate(chat['Last_Message_At'])
-    : null,
+                time: chat['Last_Message_At'] is DateTime
+    ? chat['Last_Message_At'] as DateTime
+    : parseIsoDate(chat['Last_Message_At'] as String?),
                   unreadCount: chat['unread'] ?? 0,
                   roomId: chat['Room_Id'] ?? '',
                 );
@@ -399,9 +406,9 @@ class ChatItem extends StatelessWidget {
           context,
           SingleChat(
             receiverUserName: username,
-            receiverEmail: 'INI RECEIVER EMAIL',
+           
             receiverID: 'INI RECEIVER ID',
-            // roomId: roomId,
+            roomId: roomId,
           ),
           targetTabIndex: 1,
         );
