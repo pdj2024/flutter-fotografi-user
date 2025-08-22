@@ -551,7 +551,32 @@ print("======= LOAD DATA: MAX $maxPrice");
                           ),
                           const SizedBox(height: 15),
                           isLoadingPorto
-                              ? const Center(child: CircularProgressIndicator())
+                                  ? ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 4, // tampilkan 4 baris shimmer
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4.0),
+                    child: shimmerPortoItem(),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 4.0),
+                    child: shimmerPortoItem(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      )
                               : portofolioList.isEmpty
                                   ? const Center(child: Text('Tidak ada hasil'))
                                   : ListView(
@@ -680,4 +705,55 @@ class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
     return false;
   }
+}
+
+Widget shimmerPortoItem() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // kotak gambar
+      Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: double.infinity,
+          height: 185,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Row(
+        children: [
+          // avatar bulat
+          Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // nama fotografer
+          Expanded(
+            child: Shimmer.fromColors(
+              baseColor: Colors.grey[300]!,
+              highlightColor: Colors.grey[100]!,
+              child: Container(
+                height: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
 }

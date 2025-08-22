@@ -592,10 +592,65 @@ Widget build(BuildContext context) {
             ),
 
             // ===================== DAFTAR PORTOFOLIO =====================
-            if (isLoadingPorto)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
+          if (isLoadingPorto)
+  SliverList(
+    delegate: SliverChildBuilderDelegate(
+      (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(15),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 6,
+                color: Colors.grey.withOpacity(0.1),
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Shimmer untuk gambar utama
+              ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(15)),
+                child: _shimmerPlaceholder(
+                  height: 160, // kira-kira aspect ratio card
+                  radius: 15,
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    // Shimmer avatar
+                    ClipOval(
+                      child: _shimmerPlaceholder(width: 32, height: 32, radius: 16),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Shimmer nama fotografer
+                    Expanded(
+                      child: _shimmerPlaceholder(height: 14, radius: 4),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Shimmer rating
+                    _shimmerPlaceholder(width: 40, height: 14, radius: 4),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      childCount: 5, // tampilkan 5 dummy shimmer card
+    ),
+  )
             else if (errorPorto != null)
               SliverFillRemaining(
                 child: Center(
