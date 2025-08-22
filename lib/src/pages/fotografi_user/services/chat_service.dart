@@ -243,6 +243,7 @@ _connection!.on("RoomCreated", (args) {
       return {
         'Room_Id': e['Room_Id'],
         'Room_Type': e['Room_Type'],
+         'Id_Lawan': e['Id_Lawan'],
         'Username_Lawan': e['Username_Lawan'],
         'Id_Media_Lawan': e['Id_Media_Lawan'],
         'Tipe_User_Lawan': e['Tipe_User_Lawan'],

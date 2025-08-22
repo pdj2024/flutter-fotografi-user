@@ -84,7 +84,7 @@ class ChatProvider extends ChangeNotifier {
   // =======================
   // ROOM & MESSAGE HANDLER
   // =======================
-  Future<void> fetchRooms() async {
+  Future<void> fetchRooms({String? room_id = null}) async {
     if (_currentUserId == null) return;
 
     print("=== MASUK FETCH ROOMS");

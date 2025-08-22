@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/pages/fotografi_user/detil_bayar.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/user_provider.dart';
+import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -13,14 +16,12 @@ import '../providers/navigation_provider.dart';
 
 
 class SingleChat extends StatefulWidget {
-  final String receiverUserName;
-  final String receiverID;
+  
   final String roomId;
 
   const SingleChat({
     super.key,
-    required this.receiverUserName,
-    required this.receiverID,
+ 
     required this.roomId,
   });
 
@@ -31,12 +32,23 @@ class SingleChat extends StatefulWidget {
 class _SingleChatState extends State<SingleChat> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Map<String, dynamic>? _roomInfo;
 
   @override
   void initState() {
     super.initState();
     // Fetch pesan room ini
-    Future.microtask(() {
+     final userId = context.read<UserProvider>().userId ?? '';
+
+    Future.microtask(() async {
+      final rooms = await ChatService()
+        .fetchRoomsForUser(userId, room_id: widget.roomId);
+    if (rooms.isNotEmpty) {
+      setState(() {
+        _roomInfo = rooms.first;
+      });
+    }
+    // fetch messages
       context.read<ChatProvider>().fetchMessages(widget.roomId);
     });
   }
@@ -67,8 +79,7 @@ class _SingleChatState extends State<SingleChat> {
       }
     });
 
-    final String imgUrl = context.read<NavigationProvider>().ambilGambar(
-        'd00c8632-393e-49e8-847f-3c01a4dbf701-image_cropper_1748677823909.jpg');
+    final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? "";
 
     return Scaffold(
       appBar: AppBar(
@@ -79,7 +90,7 @@ class _SingleChatState extends State<SingleChat> {
           onTap: () {
             context.read<NavigationProvider>().navigateToPage(
                   context,
-                  PhotographerBio(idVendor: 'ven_100'),
+                  PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? "ven_000"),
                   targetTabIndex: 0,
                 );
           },
@@ -114,7 +125,7 @@ class _SingleChatState extends State<SingleChat> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  widget.receiverUserName,
+                  _roomInfo?['Username_Lawan'] ?? "",
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,

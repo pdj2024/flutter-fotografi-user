@@ -274,9 +274,7 @@ class ChatItem extends StatelessWidget {
         context.read<NavigationProvider>().navigateToPage(
           context,
           SingleChat(
-            receiverUserName: username,
            
-            receiverID: 'INI RECEIVER ID',
             roomId: roomId,
           ),
           targetTabIndex: 1,
