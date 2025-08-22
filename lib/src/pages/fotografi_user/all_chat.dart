@@ -97,28 +97,74 @@ DateTime? parseIsoDate(String? iso) {
             },
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: filteredChats.length,
-              itemBuilder: (context, index) {
-                final chat = filteredChats[index];
-                return ChatItem(
-                   username: chat['Username_Lawan'] ?? '',
-                  avatar: chat['Id_Media_Lawan'] as String?,
-                  message: chat['Last_Message'] as String?,
-                time: chat['Last_Message_At'] is DateTime
-    ? chat['Last_Message_At'] as DateTime
-    : parseIsoDate(chat['Last_Message_At'] as String?),
-                  unreadCount: chat['unread'] ?? 0,
-                  roomId: chat['Room_Id'] ?? '',
-                );
-              },
-            ),
-          ),
+  child: context.watch<ChatProvider>().isLoading
+      ? ListView.builder(
+          itemCount: 6, // jumlah skeleton dummy
+          itemBuilder: (context, index) {
+            return const ChatItemShimmer();
+          },
+        )
+      : ListView.builder(
+          itemCount: filteredChats.length,
+          itemBuilder: (context, index) {
+            final chat = filteredChats[index];
+            return ChatItem(
+              username: chat['Username_Lawan'] ?? '',
+              avatar: chat['Id_Media_Lawan'] as String?,
+              message: chat['Last_Message'] as String?,
+              time: chat['Last_Message_At'] is DateTime
+                  ? chat['Last_Message_At'] as DateTime
+                  : parseIsoDate(chat['Last_Message_At'] as String?),
+              unreadCount: chat['unread'] ?? 0,
+              roomId: chat['Room_Id'] ?? '',
+            );
+          },
+        ),
+),
+
         ],
       ),
     );
   }
 }
+
+class ChatItemShimmer extends StatelessWidget {
+  const ChatItemShimmer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: const CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.white,
+        ),
+      ),
+      title: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: double.infinity,
+          height: 14,
+          color: Colors.white,
+          margin: const EdgeInsets.only(bottom: 6),
+        ),
+      ),
+      subtitle: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.4,
+          height: 12,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
 
 class ChatHeader extends StatelessWidget {
   final int unreadCount;
