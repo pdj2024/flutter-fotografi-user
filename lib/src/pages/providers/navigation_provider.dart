@@ -363,6 +363,8 @@ Future<void> navigateToPage(
 
   int targetIndex = targetTabIndex;
 
+   print("🔑 navigatorKeys[targetIndex].currentState: ${navigatorKeys[targetIndex].currentState}");
+
   navigatorKeys[targetIndex].currentState?.push(
     MaterialPageRoute(builder: (_) => page),
   );

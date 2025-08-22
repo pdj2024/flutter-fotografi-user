@@ -5,6 +5,7 @@ import 'package:mpjnew/src/pages/fotografi_user/models/portofolio_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
 import 'package:mpjnew/src/pages/providers/constants.dart';
+import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
@@ -309,11 +310,16 @@ class _PhotographerBioState extends State<PhotographerBio> {
                       }
 
                       return GestureDetector(
-                        onTap: () => NavigationProvider().navigateToPage(
+                        onTap: ()  { 
+                          // print("====== PINDAH PAGE: " + p.noId);
+                           context.read<NavigationProvider>().navigateToPage(
                           context,
                           SinglePostPage(noId: p.noId),
-                          targetTabIndex: 0,
-                        ),
+                          targetTabIndex: 0);
+
+
+                        }
+                       ,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: CachedNetworkImage(

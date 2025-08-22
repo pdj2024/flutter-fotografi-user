@@ -97,31 +97,30 @@ class _SingleChatState extends State<SingleChat> {
           child: Row(
             children: [
               CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.grey.shade300,
-                child: ClipOval(
-                  child: CachedNetworkImage(
-                    imageUrl: imgUrl,
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Shimmer.fromColors(
-                      baseColor: Colors.grey.shade300,
-                      highlightColor: Colors.grey.shade100,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        color: Colors.white,
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => const Icon(
-                      Icons.error,
-                      size: 18,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-              ),
+  radius: 18,
+  backgroundColor: Colors.grey.shade300,
+  child: CachedNetworkImage(
+    imageUrl: imgUrl,
+    imageBuilder: (context, imageProvider) => CircleAvatar(
+      radius: 18,
+      backgroundImage: imageProvider,
+    ),
+    placeholder: (context, url) => Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: const CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.white,
+      ),
+    ),
+    errorWidget: (context, url, error) => const CircleAvatar(
+      radius: 18,
+      backgroundColor: Colors.grey,
+      child: Icon(Icons.person, color: Colors.white, size: 18),
+    ),
+  ),
+),
+
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -143,56 +142,86 @@ class _SingleChatState extends State<SingleChat> {
       body: Column(
         children: [
           // Daftar pesan
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              reverse: true,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final msg = messages[messages.length - 1 - index]; // urutkan
+         Expanded(
+  child: Builder(
+    builder: (context) {
+      // urutkan pesan descending
+      final sorted = [...messages]..sort((a, b) => b['SentAt'].compareTo(a['SentAt']));
 
-                final message = ChatMessage(
-                  text: msg['Text'] ?? '',
-                  time: msg['SentAt'] ?? DateTime.now(),
-                  isMe: msg['Sender'] == chatProv.isReady ? true : false,
-                  category: msg['Category'] ?? 'chat',
-                  hargaPaket: msg['Harga_Paket'],
-                  tglRealisasi: msg['Tgl_Realisasi'],
-                  lokasiPaket: msg['Lokasi'],
-                  namaPaket: msg['Nama_Paket'],
-                );
+      // mapping ke ChatMessage
+      final chatMessages = sorted.map((msg) => ChatMessage(
+        text: msg['Text'] ?? '',
+        time: msg['SentAt'] ?? DateTime.now(),
+        isMe: msg['Sender'] == chatProv.isReady,
+        category: msg['Category'] ?? 'chat',
+        hargaPaket: msg['Harga_Paket'],
+        tglRealisasi: msg['Tgl_Realisasi'],
+        lokasiPaket: msg['Lokasi'],
+        namaPaket: msg['Nama_Paket'],
+      )).toList();
 
-                if (message.category == "package") {
-                  return Column(
-                    crossAxisAlignment: message.isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      _buildPackageCard(
-                        namaPaket: message.namaPaket ?? '',
-                        hargaPaket: message.hargaPaket ?? 0,
-                        isMe: message.isMe,
-                      ),
-                      if (message.text.isNotEmpty) _buildChatBubble(message),
-                    ],
-                  );
-                } else if (message.category == "payment") {
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: _buildPaymentCard(
-                      context,
-                      harga: message.hargaPaket ?? 0,
-                      tglRealisasi: message.tglRealisasi,
-                      lokasi: message.lokasiPaket ?? "-",
+      // group per tanggal
+      final grouped = groupMessagesByDate(chatMessages);
+
+      return ListView(
+        controller: _scrollController,
+        reverse: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        children: grouped.entries.expand((entry) {
+          final dateLabel = entry.key;
+          final groupMsgs = entry.value;
+
+          return [
+            ...groupMsgs.map((message) {
+              if (message.category == "package") {
+                return Column(
+                  crossAxisAlignment: message.isMe
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    _buildPackageCard(
+                      namaPaket: message.namaPaket ?? '',
+                      hargaPaket: message.hargaPaket ?? 0,
+                      isMe: message.isMe,
                     ),
-                  );
-                } else {
-                  return _buildChatBubble(message);
-                }
-              },
+                    if (message.text.isNotEmpty) _buildChatBubble(message),
+                  ],
+                );
+              } else if (message.category == "payment") {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildPaymentCard(
+                    context,
+                    harga: message.hargaPaket ?? 0,
+                    tglRealisasi: message.tglRealisasi,
+                    lokasi: message.lokasiPaket ?? "-",
+                  ),
+                );
+              } else {
+                return _buildChatBubble(message);
+              }
+            }),
+            // label tanggal
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDEDED),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  dateLabel,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ),
             ),
-          ),
+          ];
+        }).toList(),
+      );
+    },
+  ),
+),
 
           // Input box
           Container(
@@ -421,4 +450,25 @@ class ChatMessage {
     this.lokasiPaket,
     this.namaPaket,
   });
+}
+
+
+Map<String, List<ChatMessage>> groupMessagesByDate(List<ChatMessage> messages) {
+  final Map<String, List<ChatMessage>> grouped = {};
+  for (var message in messages) {
+    final key = _formatDateLabel(message.time);
+    grouped.putIfAbsent(key, () => []).add(message);
+  }
+  return grouped;
+}
+
+String _formatDateLabel(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final messageDate = DateTime(date.year, date.month, date.day);
+
+  if (messageDate == today) return "Hari ini";
+  if (messageDate == today.subtract(const Duration(days: 1))) return "Kemarin";
+
+  return DateFormat("d MMM yyyy", "id_ID").format(date);
 }
