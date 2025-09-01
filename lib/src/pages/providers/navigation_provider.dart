@@ -376,6 +376,7 @@ Future<void> navigateToPage(
 }
 
 
+
   Future<void> vendorNavigateToPage(BuildContext context, Widget page,
       {int targetTabIndex = 0,
       bool hrsLogin = true,
@@ -405,6 +406,8 @@ Future<void> navigateToPage(
     _navigationHistory.add(targetIndex); // <== INI BENAR
     notifyListeners();
   }
+
+  
 
  
 

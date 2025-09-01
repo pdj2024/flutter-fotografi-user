@@ -308,9 +308,9 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
     );
 
     final lokasi = photographerRes.map((e) => {
-     'id': e.noId,              // "ven_1", "ven_2"
-    'username': e.username,    // "vendA", "brandon.honanta"
-    'name': e.namaDisplay,     // "Vendor A", "Brandon H"
+     'id': e.no_id,              // "ven_1", "ven_2"
+    'username': e.user_name,    // "vendA", "brandon.honanta"
+    'name': e.nama_display,     // "Vendor A", "Brandon H"
     'avatar': e.id_media,       // URL avatar (nullable)
     }).toList();
 

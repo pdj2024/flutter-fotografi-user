@@ -54,9 +54,9 @@ class _PhotographerBioState extends State<PhotographerBio> {
       vendor = vendorData.isNotEmpty
           ? vendorData.first
           : VendorModel(
-              noId: widget.idVendor,
-              username: notFoundUsername,
-              namaDisplay: 'Vendor Tidak Ditemukan',
+              no_id: widget.idVendor,
+              user_name: notFoundUsername,
+              nama_display: 'Vendor Tidak Ditemukan',
               email: '',
               kota: '-',
               rating: 0,
@@ -64,15 +64,15 @@ class _PhotographerBioState extends State<PhotographerBio> {
               paket: [],
               hargaMinPaket: 0,
               hargaMaxPaket: 0,
-              tglCreated: DateTime(2000),
+              tgl_created: DateTime(2000),
               id_media: '',
               deskripsi_bio: '',
             );
     } catch (_) {
       vendor = VendorModel(
-        noId: widget.idVendor,
-        username: notFoundUsername,
-        namaDisplay: 'Vendor Tidak Ditemukan',
+        no_id: widget.idVendor,
+        user_name: notFoundUsername,
+        nama_display: 'Vendor Tidak Ditemukan',
         email: '',
         kota: '-',
         rating: 0,
@@ -80,13 +80,13 @@ class _PhotographerBioState extends State<PhotographerBio> {
         paket: [],
         hargaMinPaket: 0,
         hargaMaxPaket: 0,
-        tglCreated: DateTime(2000),
+        tgl_created: DateTime(2000),
         id_media: '',
         deskripsi_bio: '',
       );
     }
 
-    if(vendor?.username == notFoundUsername) {
+    if(vendor?.user_name == notFoundUsername) {
 
     } else {
         try {
@@ -130,7 +130,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
         elevation: 1,
         leading: CustomBackButton(),
         title: Text(
-          vendor?.username ?? '',
+          vendor?.user_name ?? '',
           style: const TextStyle(
               color: Colors.black, fontWeight: FontWeight.bold),
         ),
@@ -173,7 +173,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              vendor!.namaDisplay,
+                              vendor!.nama_display,
                               style: const TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.bold),
                             ),
@@ -213,7 +213,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                     ),
                   ],
                   const SizedBox(height: 20),
-                  if (vendor!.username != notFoundUsername) ...[
+                  if (vendor!.user_name != notFoundUsername) ...[
                     Row(
                       children: [
                         Expanded(
@@ -231,11 +231,11 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => PilihanPaket(
-                                      namaVendor: vendor!.namaDisplay,
-                                      userName: vendor!.username,
+                                      namaVendor: vendor!.nama_display,
+                                      userName: vendor!.user_name,
                                       kotaVendor: vendor!.kota,
                                       ratingVendor: vendor!.rating,
-                                      idVendor: vendor!.noId,
+                                      idVendor: vendor!.no_id,
                                       fotoProfil: vendor!.id_media ?? '',
                                     ),
                                   ),
@@ -267,8 +267,8 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                             // roomId dikosongin karena kemungkinan besar ini chat baru
                                             roomId: null,
                                             // kirim userIds lawan (vendor.id)
-                                           id_lawan: vendor!.noId.toString(),
-                                           username_lawan: vendor!.username,
+                                           id_lawan: vendor!.no_id.toString(),
+                                           username_lawan: vendor!.user_name,
                                            avatar_lawan: vendor!.id_media,
                                            
                                           ),

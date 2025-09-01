@@ -10,6 +10,25 @@ class VendorService {
   final String controller = 'vendor';
   final ApiClient _client = apiClient; // ← pakai nama beda
 
+  Future<VendorModel?> checkGoogleLogin() async {
+    try {
+      final response = await _client.post('/auth/cek-login-google');
+
+      print("==== SERVICE RESPONSE: " + response.body);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return VendorModel.fromJson(data);
+      } else if (response.statusCode == 401) {
+        return null; // Token invalid / belum login
+      } else {
+        throw Exception('Gagal cek login Google (${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Error saat cek login Google: $e');
+    }
+  }
+
   /// GET ALL dengan parameter opsional
   Future<List<VendorModel>> getAll({
     String? no_id,
@@ -77,7 +96,7 @@ class VendorService {
 Future<void> update(VendorModel model) async {
   final response = await apiClient.put(
     '/$controller/update',
-    queryParameters: {'no_id': model.noId}, // Asumsinya noId adalah string di VendorModel
+    queryParameters: {'no_id': model.no_id}, // Asumsinya noId adalah string di VendorModel
     body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
     headers: {'Content-Type': 'application/json'},
   );

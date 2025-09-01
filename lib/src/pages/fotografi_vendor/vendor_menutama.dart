@@ -32,6 +32,8 @@ class _Vendor_MenuUtamaState extends State<Vendor_MenuUtama> {
 
   @override
   Widget build(BuildContext context) {
+
+    print("====== >>> MASUK Vendor_MenuUtama build");
  if (!_sudahCekLogin) {
       _sudahCekLogin = true;
 
@@ -51,9 +53,10 @@ class _Vendor_MenuUtamaState extends State<Vendor_MenuUtama> {
           builder: (context, navigationProvider, child) {
            return Stack(
   children: [
-    _buildOffstageNavigator(0, (_) => VendorHome()),
-    _buildOffstageNavigator(1, (_) => UploadPhotoPage()),
-    _buildOffstageNavigator(2, (_) => VendorBio()),
+   
+    _buildOffstageNavigator(0, (_) => VendorHome()),       // Beranda
+    _buildOffstageNavigator(1, (_) => VendorAllChat()),    // Pesan
+    _buildOffstageNavigator(2, (_) => PemasukanPage()),    // Pemasukan
   ],
 );
 

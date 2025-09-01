@@ -1,7 +1,7 @@
 class VendorModel {
-  final String noId;
-  final String username;
-  final String namaDisplay;
+  final String no_id;
+  final String user_name;
+  final String nama_display;
   final String email;
   final String kota;
   final double rating;
@@ -11,14 +11,14 @@ class VendorModel {
       paket; // Nama paket, bisa digunakan untuk fetch detail paket
   final int hargaMinPaket;
   final int hargaMaxPaket;
-  final DateTime tglCreated;
+  final DateTime tgl_created;
   final String id_media;
   final String deskripsi_bio;
 
   VendorModel({
-    required this.noId,
-    required this.username,
-    required this.namaDisplay,
+    required this.no_id,
+    required this.user_name,
+    required this.nama_display,
     required this.email,
     required this.kota,
     required this.rating,
@@ -26,15 +26,15 @@ class VendorModel {
     required this.paket,
     required this.hargaMinPaket,
     required this.hargaMaxPaket,
-    required this.tglCreated,
+    required this.tgl_created,
     required this.id_media,
     required this.deskripsi_bio,
   });
 
   factory VendorModel.fromJson(Map<String, dynamic> json) => VendorModel(
-        noId: json['No_Id'] ?? '',
-        username: json['UserName'] ?? '',
-        namaDisplay: json['Nama_Display'] ?? '',
+        no_id: json['No_Id'] ?? '',
+        user_name: json['UserName'] ?? '',
+        nama_display: json['Nama_Display'] ?? '',
         email: json['Email'] ?? '',
         kota: json['Kota'] ?? '',
         rating: (json['Rating'] ?? 0).toDouble(),
@@ -44,7 +44,7 @@ class VendorModel {
         paket: (json['Paket'] as List? ?? []).map((e) => e.toString()).toList(),
         hargaMinPaket: json['Harga_Min_Paket'] ?? 0,
         hargaMaxPaket: json['Harga_Max_Paket'] ?? 0,
-        tglCreated:
+        tgl_created:
             DateTime.tryParse(json['Tgl_Created'] ?? '') ?? DateTime(2000),
         id_media: json['Id_Media'] ??  '',
          deskripsi_bio: json['Deskripsi_Bio'] ??  '',
@@ -52,9 +52,9 @@ class VendorModel {
 
       Map<String, dynamic> toJson() {
   return {
-    'No_Id': noId,
-    'UserName': username,
-    'Nama_Display': namaDisplay,
+    'No_Id': no_id,
+    'UserName': user_name,
+    'Nama_Display': nama_display,
     'Email': email,
     'Kota': kota,
     'Rating': rating,
@@ -62,7 +62,7 @@ class VendorModel {
     'Paket': paket,
     'Harga_Min_Paket': hargaMinPaket,
     'Harga_Max_Paket': hargaMaxPaket,
-    'Tgl_Created': tglCreated.toIso8601String(),
+    'Tgl_Created': tgl_created.toIso8601String(),
     'Id_Media': id_media,
     'Deskripsi_Bio': deskripsi_bio,
   };

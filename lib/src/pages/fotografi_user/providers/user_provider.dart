@@ -38,13 +38,13 @@ class UserProvider with ChangeNotifier {
 
     String? get userId {
     if (_role == 'customer') return _customer?.no_id;
-    if (_role == 'vendor') return _vendor?.noId;
+    if (_role == 'vendor') return _vendor?.no_id;
     return null;
   }
 
   String get displayName {
     if (_role == 'customer') return _customer?.nama_display ?? '';
-    if (_role == 'vendor') return _vendor?.namaDisplay ?? '';
+    if (_role == 'vendor') return _vendor?.nama_display ?? '';
     return '';
   }
 
@@ -79,7 +79,7 @@ class UserProvider with ChangeNotifier {
         _customer = await _customerService.checkGoogleLogin();
         _vendor = null;
       } else if (role == 'vendor') {
-        // _vendor = await _vendorService.checkGoogleLogin();
+        _vendor = await _vendorService.checkGoogleLogin();
         _customer = null;
       }
     } catch (e) {
