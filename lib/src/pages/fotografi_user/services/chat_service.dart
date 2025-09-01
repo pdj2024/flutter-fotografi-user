@@ -300,23 +300,41 @@ _connection!.on("RoomCreated", (args) {
 
   
 
-Future<List<Map<String, dynamic>>> fetchMessagesForRoom( String roomId) async 
-{ 
-  final response = await _client.get( '/$controller/getAll', queryParameters: {'room_id': roomId}, ); 
-  if (response.statusCode == 200) 
-  { 
-    final Map<String, dynamic> json = jsonDecode(response.body); 
-    final List<dynamic> data = json['Data']; 
-   return data.map((m) => {
-  'Sender': m['Sender_Id']?.toString() ?? '',
-  'Text': m['Message']?.toString() ?? '',
-  'SentAt': m['Sent_At'] != null
-      ? DateTime.tryParse(m['Sent_At']) ?? DateTime.now()
-      : DateTime.now(),
-}).toList();
-  } 
+Future<List<Map<String, dynamic>>> fetchMessagesForRoom(String roomId) async {
+  final response = await _client.get(
+    '/$controller/getAll',
+    queryParameters: {'room_id': roomId},
+  );
+
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> json = jsonDecode(response.body);
+    final List<dynamic> data = json['Data'] ?? [];
+
+    return data.map((m) {
+      final rawSentAt = m['Sent_At']?.toString();
+      DateTime sentAt;
+
+      if (rawSentAt != null) {
+        try {
+          sentAt = DateTime.parse(rawSentAt).toLocal(); // pastikan ke local
+        } catch (_) {
+          sentAt = DateTime.now();
+        }
+      } else {
+        sentAt = DateTime.now();
+      }
+
+      return {
+        'Sender': m['Sender_Id']?.toString() ?? '',
+        'Text': m['Message']?.toString() ?? '',
+        'SentAt': sentAt,
+      };
+    }).toList();
+  }
+
   return [];
- }
+}
+
 
   
 
