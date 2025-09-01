@@ -19,6 +19,7 @@ class ChatProvider extends ChangeNotifier {
   // GETTER
   // =======================
   List<Map<String, dynamic>> get rooms => _rooms;
+  String? get currentUserId => _currentUserId;
 
   List<Map<String, dynamic>> getMessages(String roomId) =>
       _messages[roomId] ?? [];

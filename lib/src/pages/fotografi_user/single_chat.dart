@@ -196,7 +196,7 @@ class _SingleChatState extends State<SingleChat> {
       return const Center(child: Text("Tidak ada chat"));
     }
 
-    final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? widget.avatar_lawan;
+    final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? widget.avatar_lawan ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -269,7 +269,7 @@ class _SingleChatState extends State<SingleChat> {
       final chatMessages = sorted.map((msg) => ChatMessage(
         text: msg['Text'] ?? '',
         time: msg['SentAt'] ?? DateTime.now(),
-        isMe: msg['Sender'] == chatProv.isReady,
+          isMe: (msg['Sender']?.toString() ?? '') == (chatProv.currentUserId ?? ''),
         category: msg['Category'] ?? 'chat',
         hargaPaket: msg['Harga_Paket'],
         tglRealisasi: msg['Tgl_Realisasi'],
