@@ -260,16 +260,21 @@ class _PhotographerBioState extends State<PhotographerBio> {
                               padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
-                              // NavigationProvider().navigateToPage(
-                              //   context,
-                              //   SingleChat(
-                              //     receiverUserName: vendor!.username,
-                              //     receiverEmail: vendor!.email,
-                              //     receiverID: vendor!.noId.toString(),
-                              //   ),
-                              //   targetTabIndex: 1,
-                              // );
-                            },
+                                  
+                                  context.read<NavigationProvider>().navigateToPage(
+                                    context,
+                                      SingleChat(
+                                            // roomId dikosongin karena kemungkinan besar ini chat baru
+                                            roomId: null,
+                                            // kirim userIds lawan (vendor.id)
+                                           id_lawan: vendor!.noId.toString(),
+                                           username_lawan: vendor!.username,
+                                           avatar_lawan: vendor!.id_media,
+                                           
+                                          ),
+                                          targetTabIndex: 1,
+                                       );
+                                },
                             child: const Icon(Icons.chat_outlined,
                                 color: Constants.primaryColor),
                           ),

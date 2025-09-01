@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:path/path.dart';
+
+import '../../providers/navigation_provider.dart';
 import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {
@@ -84,38 +87,49 @@ class ChatProvider extends ChangeNotifier {
   // =======================
   // ROOM & MESSAGE HANDLER
   // =======================
-  Future<void> fetchRooms({String? room_id = null}) async {
-    if (_currentUserId == null) return;
+Future<List<Map<String, dynamic>>> fetchRooms({String? room_id, String? id_lawan}) async {
+  if (_currentUserId == null) return [];
 
-    print("=== MASUK FETCH ROOMS");
+  print("=== MASUK FETCH ROOMS");
 
-    _isLoading = true;
-    notifyListeners();
+  _isLoading = true;
+  notifyListeners();
 
-    try {
-      final rooms = await _chatService.fetchRoomsForUser(_currentUserId!);
-      _rooms = List<Map<String, dynamic>>.from(rooms); // <-- cast aman
+  try {
+    final rooms = await _chatService.fetchRoomsForUser(
+      _currentUserId!,
+      room_id: room_id,
+      id_lawan: id_lawan,
+    );
 
-      if (_rooms.isNotEmpty) {
-        try {
-          await _chatService.joinMultipleRooms(
-            _rooms
-                .map((r) => r['Room_Id']?.toString() ?? '')
-                .where((id) => id.isNotEmpty)
-                .toList(),
-          );
-          print("=== JOIN MULTIPLE ROOM BERHASIL");
-        } catch (e) {
-          print("=== JOIN MULTIPLE GAGAL: $e");
-        }
-      } else {
-        print("=== ROOM EMPTY");
-      }
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    // kalau tidak filter (ambil semua room)
+    if (room_id == null && id_lawan == null) {
+      _rooms = List<Map<String, dynamic>>.from(rooms); // simpan ke state global
     }
+
+    if (_rooms.isNotEmpty) {
+      try {
+        await _chatService.joinMultipleRooms(
+          _rooms
+              .map((r) => r['Room_Id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty)
+              .toList(),
+        );
+        print("=== JOIN MULTIPLE ROOM BERHASIL");
+      } catch (e) {
+        print("=== JOIN MULTIPLE GAGAL: $e");
+      }
+    } else {
+      print("=== ROOM EMPTY");
+    }
+
+    return rooms; // <- bisa dipakai di SingleChat
+  } finally {
+    _isLoading = false;
+    notifyListeners();
   }
+}
+
 
   Future<void> fetchMessages(String roomId) async {
     _isLoading = true;
@@ -131,9 +145,14 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String roomId, String text) async {
+  Future<void> sendMessage(String roomId, String text, String? idPaket, String? noInvoice, List<String> userIds) async {
+
+     print("====== CHAT PROVIDER 1: " + _currentUserId.toString());
     if (_currentUserId != null) {
-      await _chatService.sendMessage(roomId, _currentUserId!, text);
+      final role = apiClient.getRole() ?? 'customer';
+
+      print("====== MASUK CHAT PROVIDER");
+      await _chatService.sendMessage(roomId, _currentUserId!, role, text, idPaket, noInvoice, userIds);
     }
   }
 

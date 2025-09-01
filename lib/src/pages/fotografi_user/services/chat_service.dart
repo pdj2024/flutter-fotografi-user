@@ -51,7 +51,7 @@ Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
 
 
 Future<int> connect(String currentUserId, ApiClient apiClient) async {
-  print("======= INI MULAI CONNECT " + hubUrl);
+  print("======= INI MULAI CONNECT: " + currentUserId);
 
   // Ambil token & role dari ApiClient
   final token = await apiClient.getIdToken();
@@ -193,18 +193,54 @@ _connection!.on("RoomCreated", (args) {
     }
   }
 
+  // Future<void> sendMessage(
+  //     String roomId, String senderUserId, String message) async {
+  //       print("======= MASUK ATAS");
+
+  //   if (_connection?.state == HubConnectionState.Connected) {
+
+  //        print("======= MASUK BAWAH");
+  //     await _connection!
+  //         .invoke("SendMessageToRoom", args: [roomId, senderUserId, message]);
+  //     print("================ [SignalR] Sent message to $roomId: $message");
+  //   }
+  // }
   Future<void> sendMessage(
-      String roomId, String senderUserId, String message) async {
-        print("======= MASUK ATAS");
+  String roomId,
+  String senderUserId,
+  String tipeUser,
+  String message,
+  String? idPaket,
+  String? noInvoice,
+  List<String> userIds,
+) async {
+  final payload = {
+    "chat": {
+      "sender_Id": senderUserId,
+      "tipe_User": tipeUser,
+      "id_Paket": idPaket,
+      "no_Invoice": noInvoice,
+      "message": message,
+    },
+    "room_Id": roomId,
+    "user_Ids": userIds,
+  };
 
-    if (_connection?.state == HubConnectionState.Connected) {
+  print("====== MASUK CHAT SERVICE");
 
-         print("======= MASUK BAWAH");
-      await _connection!
-          .invoke("SendMessageToRoom", args: [roomId, senderUserId, message]);
-      print("================ [SignalR] Sent message to $roomId: $message");
-    }
+  final response = await _client.post(
+    '/$controller/create',
+    body: jsonEncode(payload),
+    headers: {'Content-Type': 'application/json'},
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception('Gagal mengirim pesan ke room $roomId');
   }
+
+  print("[API] ✅ Pesan terkirim ke $roomId: $message");
+}
+
 
   Future<void> disconnect() async {
   if (_connection != null &&
@@ -222,11 +258,12 @@ _connection!.on("RoomCreated", (args) {
   // API SECTION
   // ===========================
 
-  Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId, {String? room_id = null}) async {
+  Future<List<Map<String, dynamic>>> fetchRoomsForUser(String userId, {String? room_id = null, String? id_lawan = null}) async {
   print('======== MASUK GET ROOM: $userId');
 
    final queryParams = {
     'user_id': userId,
+    if (id_lawan != null) 'id_lawan': id_lawan,
     if (room_id != null) 'room_id': room_id, // hanya dikirim kalau tidak null
   };
 

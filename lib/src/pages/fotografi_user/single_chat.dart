@@ -16,13 +16,22 @@ import '../providers/navigation_provider.dart';
 
 
 class SingleChat extends StatefulWidget {
+  final String? roomId;
+
   
-  final String roomId;
+  final String? id_lawan;
+  final String? username_lawan;
+
+  final String? avatar_lawan;
 
   const SingleChat({
     super.key,
- 
-    required this.roomId,
+    this.roomId,
+   
+  
+    this.id_lawan,
+    this.username_lawan,
+    this.avatar_lawan
   });
 
   @override
@@ -30,47 +39,147 @@ class SingleChat extends StatefulWidget {
 }
 
 class _SingleChatState extends State<SingleChat> {
-  final TextEditingController _messageController = TextEditingController();
+    final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  String? _activeRoomId;
   Map<String, dynamic>? _roomInfo;
+  bool _isLoading = true;
 
   @override
   void initState() {
-    super.initState();
-    // Fetch pesan room ini
-     final userId = context.read<UserProvider>().userId ?? '';
+     super.initState();
 
-    Future.microtask(() async {
-      final rooms = await ChatService()
-        .fetchRoomsForUser(userId, room_id: widget.roomId);
-    if (rooms.isNotEmpty) {
+     
+      print("===== SINGLE CHAT (room id): " + widget.roomId.toString());
+       print("===== SINGLE CHAT (user ids): " + widget.id_lawan.toString());
+      final userId = context.read<UserProvider>().userId ?? '';
+    Future.microtask(() {
+      context.read<ChatProvider>().init(userId);
+    });
+     
+    _initChat();
+  }
+
+  Future<void> _initChat() async {
+    final userId = context.read<UserProvider>().userId ?? '';
+    final chatProv = context.read<ChatProvider>();
+
+    if (widget.roomId != null) {
+      // ✅ langsung pakai roomId yang ada
+      _activeRoomId = widget.roomId;
+      await chatProv.fetchMessages(_activeRoomId!);
+
+      final rooms = await chatProv.fetchRooms(
+        
+        room_id: _activeRoomId,
+      );
+      if (rooms.isNotEmpty) {
+        setState(() => _roomInfo = rooms.first);
+      }
+    } else if (widget.id_lawan != null) {
+      // ✅ coba cari room existing dengan lawan
+    
+      final rooms = await chatProv.fetchRooms(
+        
+        id_lawan: widget.id_lawan,
+      );
+
+      if (rooms.isNotEmpty) {
+        // ✅ ketemu existing room
+        setState(() {
+          _activeRoomId = rooms.first['Room_Id'];
+          _roomInfo = rooms.first;
+        });
+        await chatProv.fetchMessages(_activeRoomId!);
+      } else {
+        // ✅ belum ada room, tunggu sampai kirim pesan pertama
+        setState(() {
+          _activeRoomId = null;
+          _roomInfo = null;
+        });
+      }
+    } else {
+      // ❌ tidak ada roomId & userIds
       setState(() {
-        _roomInfo = rooms.first;
+        _activeRoomId = null;
+        _roomInfo = null;
       });
     }
-    // fetch messages
-      context.read<ChatProvider>().fetchMessages(widget.roomId);
-    });
+
+    setState(() => _isLoading = false);
   }
 
-  void _sendMessage(BuildContext context) async {
-    if (_messageController.text.isNotEmpty) {
-      await context.read<ChatProvider>().sendMessage(
-            widget.roomId,
-            _messageController.text,
-          );
-      _messageController.clear();
+ void _sendMessage(BuildContext context) async {
+
+  print("==== SINGLE CHAT: INI SATU");
+    if (_messageController.text.isEmpty) return;
+      print("==== SINGLE CHAT: INI DUA");
+
+    final chatProv = context.read<ChatProvider>();
+    final currentUserId = context.read<UserProvider>().userId ?? '';
+
+   List<String> userIds = [];
+
+  if (_roomInfo == null) {
+    // ✅ new chat harus ada id lawan
+    if (widget.id_lawan == null) {
+      print('============= Single Chat: id_lawan kosong, tidak bisa kirim pesan');
+      return;
+    }
+
+    userIds = [
+      currentUserId,
+      widget.id_lawan!, // ambil lawan dari widget
+    ];
+  } else {
+    // ✅ kalau roomInfo ada, ambil dari room
+    final ids = _roomInfo!['User_Ids'];
+    if (ids is List) {
+      userIds = ids.map((e) => e.toString()).toList();
     }
   }
 
-  @override
+
+
+    await chatProv.sendMessage(
+      _activeRoomId ?? "", // kosong kalau new chat
+      _messageController.text,
+      null, // idPaket
+      null, // noInvoice
+      userIds,
+    );
+
+    _messageController.clear();
+
+    // setelah kirim pesan pertama, ambil room baru
+    if (_activeRoomId == null) {
+      final rooms = await chatProv.fetchRooms(
+       
+        id_lawan: userIds.firstWhere((id) => id != currentUserId, orElse: () => ""),
+      );
+      if (rooms.isNotEmpty) {
+        setState(() {
+          _activeRoomId = rooms.first['Room_Id'];
+          _roomInfo = rooms.first;
+        });
+        await chatProv.fetchMessages(_activeRoomId!);
+      }
+    }
+  }
+
+
+
+@override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
-    final messages = chatProv.getMessages(widget.roomId);
+    final messages = _activeRoomId != null
+        ? chatProv.getMessages(_activeRoomId!)
+        : [];
 
-    // auto-scroll ke bawah
+    // auto-scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (_scrollController.hasClients && messages.isNotEmpty) {
         _scrollController.animateTo(
           0.0,
           duration: const Duration(milliseconds: 300),
@@ -79,7 +188,15 @@ class _SingleChatState extends State<SingleChat> {
       }
     });
 
-    final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? "";
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_activeRoomId == null && (widget.id_lawan == null)) {
+      return const Center(child: Text("Tidak ada chat"));
+    }
+
+    final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? widget.avatar_lawan;
 
     return Scaffold(
       appBar: AppBar(
@@ -90,7 +207,7 @@ class _SingleChatState extends State<SingleChat> {
           onTap: () {
             context.read<NavigationProvider>().navigateToPage(
                   context,
-                  PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? "ven_000"),
+                  PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? widget.id_lawan),
                   targetTabIndex: 0,
                 );
           },
@@ -124,7 +241,7 @@ class _SingleChatState extends State<SingleChat> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _roomInfo?['Username_Lawan'] ?? "",
+                  _roomInfo?['Username_Lawan'] ?? widget.username_lawan,
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
