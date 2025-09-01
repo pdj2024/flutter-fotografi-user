@@ -44,7 +44,8 @@ class NavigationProvider with ChangeNotifier {
 
 Future<String?> getStatusUser() async {
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('status_user');
+  return 'aktif';
+  //return prefs.getString('status_user');
 }
 
   
@@ -429,7 +430,7 @@ Future<void> navigateToPage(
         MaterialPageRoute(builder: (_) => VendorStatus()),
       );
       break;
-    case 'accepted':
+    case 'aktif':
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => Vendor_MenuUtama()),
       );

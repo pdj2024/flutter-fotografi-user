@@ -1,107 +1,72 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
+import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/user_provider.dart';
+// import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
+
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
-import 'vendor_single_chat.dart';
+
+
 
 class VendorAllChat extends StatefulWidget {
-  
-
   const VendorAllChat({super.key});
 
   @override
-  State<VendorAllChat> createState() => _VendorAllChatState();
+  State<VendorAllChat> createState() => _AllChatState();
 }
 
-class _VendorAllChatState extends State<VendorAllChat> {
-  final List<Map<String, dynamic>> _chats = [
-    {
-      'name': 'Michael Williams',
-      'avatar': 'default_user.jpg',
-      'message': 'Apakah kamu tersedia untuk sesi prewedding?',
-      'time': DateTime.now().subtract(Duration(minutes: 5)),
-      'unread': 2
-    },
-    {
-      'name': 'Emily Photos',
-       'avatar': 'default_user.jpg',
-      'message': 'File hasil foto sudah dikirim via email ya!',
-      'time': DateTime.now().subtract(Duration(minutes: 30)),
-      'unread': 0
-    },
-    {
-      'name': 'Davis Miller',
-       'avatar': 'default_user.jpg',
-      'message': 'Kapan jadwal sesi foto berikutnya?',
-      'time': DateTime.now().subtract(Duration(hours: 1, minutes: 20)),
-      'unread': 1
-    },
-    {
-      'name': 'Amanda Reed Photo',
-     'avatar': 'default_user.jpg',
-      'message': 'Terima kasih untuk sesi kemarin!',
-      'time': DateTime.now().subtract(Duration(hours: 3)),
-      'unread': 3
-    },
-    {
-      'name': 'Sarah Lee',
-      'avatar': 'default_user.jpg',
-      'message': 'Besok kita ketemu jam 10 ya',
-      'time': DateTime.now().subtract(Duration(days: 1)),
-      'unread': 0
-    },
-    {
-      'name': 'Runita Diah',
-      'avatar': 'default_user.jpg',
-      'message': 'Ada slot untuk bulan depan?',
-      'time': DateTime.now().subtract(Duration(days: 2)),
-      'unread': 4
-    },
-    {
-      'name': 'Bridals Photos',
-       'avatar': 'default_user.jpg',
-      'message': 'Saya butuh file high-res ya',
-      'time': DateTime.now().subtract(Duration(days: 3, hours: 2)),
-      'unread': 0
-    },
-    {
-      'name': 'Nikita Lusi',
-       'avatar': 'default_user.jpg',
-      'message': 'Mantap hasil fotonya!',
-      'time': DateTime.now().subtract(Duration(days: 5)),
-      'unread': 1
-    },
-    {
-      'name': 'Andi Utami',
-      'avatar': 'default_user.jpg',
-      'message': 'Foto wisuda saya bagus banget',
-      'time': DateTime.now().subtract(Duration(days: 6)),
-      'unread': 0
-    },
-    {
-      'name': 'Budi Bali',
-      'avatar': 'default_user.jpg',
-      'message': 'Nanti ada diskon untuk repeat client?',
-      'time': DateTime.now().subtract(Duration(days: 8)),
-      'unread': 0
-    },
-  ];
-
+class _AllChatState extends State<VendorAllChat> {
+  // final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // List<Map<String, dynamic>> _chats = [];
+  late String currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    final userId = context.read<UserProvider>().userId ?? '';
+    Future.microtask(() {
+      context.read<ChatProvider>().init(userId);
+    });
+  }
+
+DateTime? parseIsoDate(String? iso) {
+  if (iso == null || iso.isEmpty) return null;
+  try {
+    return DateTime.parse(iso).toLocal(); // konversi ke local timezone
+  } catch (_) {
+    return null;
+  }
+}
+
   @override
   Widget build(BuildContext context) {
+      final _chats = context.watch<ChatProvider>().rooms;
+
     final List<Map<String, dynamic>> sortedChats = [..._chats];
-    sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
+    // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
+    sortedChats.sort((a, b) {
+  final timeA = a['Last_Message_At'] is DateTime
+      ? a['Last_Message_At'] as DateTime
+      : parseIsoDate(a['Last_Message_At'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+  final timeB = b['Last_Message_At'] is DateTime
+      ? b['Last_Message_At'] as DateTime
+      : parseIsoDate(b['Last_Message_At'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+  return timeB.compareTo(timeA);
+});
+
 
     final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
-      final name = chat['name'].toString().toLowerCase();
+      final name = chat['Username_Lawan'].toString().toLowerCase();
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -109,7 +74,7 @@ class _VendorAllChatState extends State<VendorAllChat> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
-      leading: CustomBackButton(),
+        leading: CustomBackButton(),
         title: const Text(
           "Semua Pesan",
           style: TextStyle(
@@ -121,7 +86,8 @@ class _VendorAllChatState extends State<VendorAllChat> {
       body: Column(
         children: [
           ChatHeader(
-            unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
+            // unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
+             unreadCount: sortedChats.where((c) => (c['unread'] ?? 0) > 0).length,
             searchController: _searchController,
             onChanged: (value) {
               setState(() {
@@ -130,25 +96,74 @@ class _VendorAllChatState extends State<VendorAllChat> {
             },
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: filteredChats.length,
-              itemBuilder: (context, index) {
-                final chat = filteredChats[index];
-                return ChatItem(
-                  name: chat['name'],
-                  avatar: chat['avatar'],
-                  message: chat['message'],
-                  time: chat['time'],
-                  unreadCount: chat['unread'],
-                );
-              },
-            ),
-          ),
+  child: context.watch<ChatProvider>().isLoading
+      ? ListView.builder(
+          itemCount: 6, // jumlah skeleton dummy
+          itemBuilder: (context, index) {
+            return const ChatItemShimmer();
+          },
+        )
+      : ListView.builder(
+          itemCount: filteredChats.length,
+          itemBuilder: (context, index) {
+            final chat = filteredChats[index];
+            return ChatItem(
+              username: chat['Username_Lawan'] ?? '',
+              avatar: chat['Id_Media_Lawan'] as String?,
+              message: chat['Last_Message'] as String?,
+              time: chat['Last_Message_At'] is DateTime
+                  ? chat['Last_Message_At'] as DateTime
+                  : parseIsoDate(chat['Last_Message_At'] as String?),
+              unreadCount: chat['unread'] ?? 0,
+              roomId: chat['Room_Id'] ?? '',
+            );
+          },
+        ),
+),
+
         ],
       ),
     );
   }
 }
+
+class ChatItemShimmer extends StatelessWidget {
+  const ChatItemShimmer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: const CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.white,
+        ),
+      ),
+      title: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: double.infinity,
+          height: 14,
+          color: Colors.white,
+          margin: const EdgeInsets.only(bottom: 6),
+        ),
+      ),
+      subtitle: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.4,
+          height: 12,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
 
 class ChatHeader extends StatelessWidget {
   final int unreadCount;
@@ -177,7 +192,8 @@ class ChatHeader extends StatelessWidget {
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Colors.grey[200],
-              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(30),
                 borderSide: BorderSide.none,
@@ -192,74 +208,88 @@ class ChatHeader extends StatelessWidget {
 }
 
 class ChatItem extends StatelessWidget {
-  final String name;
-  final String avatar;
-  final String message;
-  final DateTime time;
-  final int unreadCount;
+  final String username;
+
+
+  final String? avatar;
+ final String? message;
+  final DateTime? time;
+  final int unreadCount; 
+  final String roomId;
 
   const ChatItem({
     super.key,
-    required this.name,
+   
+    required this.username,
+
     required this.avatar,
     required this.message,
     required this.time,
     required this.unreadCount,
+    required this.roomId,
   });
 
-  String formatTime(DateTime time) {
-    final now = DateTime.now();
-    if (now.difference(time).inDays == 0) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${time.day}/${time.month}/${time.year}';
-    }
+
+  Widget _shimmerAvatar(double size) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-      final String imgUrl = context.read<NavigationProvider>().ambilGambar(avatar);
-    return ListTile(
-      leading: ClipOval(
-  child: CachedNetworkImage(
-    imageUrl: imgUrl,
-    width: 48, // 2 * radius (24)
-    height: 48,
-    fit: BoxFit.cover,
-    placeholder: (context, url) => Shimmer.fromColors(
-      baseColor: Colors.grey.shade300,
-      highlightColor: Colors.grey.shade100,
-      child: Container(
-        width: 48,
-        height: 48,
-        color: Colors.white,
-      ),
-    ),
-    errorWidget: (context, url, error) => Container(
-      width: 48,
-      height: 48,
-      decoration: const BoxDecoration(
-        color: Colors.grey,
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(Icons.error, color: Colors.red),
-    ),
-  ),
-),
+    final String imgUrl =
+       avatar ?? '';
 
-      title: Text(name),
+    return ListTile(
+      leading: CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey[200],
+        child: ClipOval(
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Image.network(
+              imgUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return _shimmerAvatar(48);
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.person, size: 24);
+              },
+            ),
+          ),
+        ),
+      ),
+      title: Text(username),
       subtitle: Text(
-        message,
+        message ?? '',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            formatTime(time),
+        Text(
+  time != null
+      ? context.read<NavigationProvider>().formatDateLabel(
+            time!,
+            showTodaysJam: true,
+          )
+      : '', // kalau null tampilkan string kosong
             style: const TextStyle(
-              color: Constants.primaryColorVendor,
+              color: Constants.primaryColor,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -270,7 +300,7 @@ class ChatItem extends StatelessWidget {
               width: 24,
               height: 24,
               decoration: const BoxDecoration(
-                color: Constants.primaryColorVendor,
+                color: Constants.primaryColor,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
@@ -286,8 +316,14 @@ class ChatItem extends StatelessWidget {
         ],
       ),
       onTap: () {
-        context.read<NavigationProvider>().vendorNavigateToPage(
-                          context, VendorSingleChat(), targetTabIndex:1, );
+        // context.read<NavigationProvider>().navigateToPage(
+        //   context,
+        //   SingleChat(
+           
+        //     roomId: roomId,
+        //   ),
+        //   targetTabIndex: 1,
+        // );
       },
     );
   }

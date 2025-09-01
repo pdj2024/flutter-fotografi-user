@@ -45,7 +45,7 @@ class _VendorStatusState extends State<VendorStatus> {
             final statusUser = 'nonregistered';
 
             // 🚀 Auto-navigate jika status berubah jadi accepted
-            if (statusUser == 'accepted') {
+            if (statusUser == 'aktif') {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 nav.startNavigateVendor(context);
               });
@@ -75,7 +75,7 @@ class _VendorStatusState extends State<VendorStatus> {
                 showRetryButton = true;
                 imageAsset = 'assets/rejected_illustration.png';
                 break;
-             case 'accepted':
+             case 'aktif':
               titleText = 'Pendaftaran Berhasil';
               descriptionText = 'Selamat! Pendaftaran Anda telah diterima.\nSilakan lanjutkan untuk menggunakan aplikasi.';
               showRetryButton = false; // atau mungkin jadi tombol "Lanjut"
