@@ -35,8 +35,8 @@ dependencies:
   saver_gallery: ^4.0.1
   device_info_plus: ^9.1.2
 
-  # midtrans_sdk: ^0.4.0
-  midtrans_sdk: 1.0.0
+  midtrans_sdk: ^0.4.0
+  # midtrans_sdk: 1.0.1
   fl_chart: ^0.68.0
   shimmer: ^3.0.0
   shared_preferences: ^2.2.2
