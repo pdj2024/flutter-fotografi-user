@@ -39,8 +39,16 @@ class VendorSingleChat extends StatefulWidget {
 }
 
 class _SingleChatState extends State<VendorSingleChat> {
+
     final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+
+   bool showOverlay = false;
+  void toggleOverlay() => setState(() => showOverlay = !showOverlay);
+
+
+
 
   String? _activeRoomId;
   Map<String, dynamic>? _roomInfo;
@@ -170,6 +178,10 @@ class _SingleChatState extends State<VendorSingleChat> {
 
 
 
+
+
+
+
 @override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
@@ -198,185 +210,250 @@ class _SingleChatState extends State<VendorSingleChat> {
 
     final String imgUrl = _roomInfo?['Id_Media_Lawan'] ?? widget.avatar_lawan ?? '';
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        leading: CustomBackButton(),
-        title: GestureDetector(
-          onTap: () {
-            // context.read<NavigationProvider>().navigateToPage(
-            //       context,
-            //       PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? widget.id_lawan),
-            //       targetTabIndex: 0,
-            //     );
-          },
-          child: Row(
-            children: [
-              CircleAvatar(
-  radius: 18,
-  backgroundColor: Colors.grey.shade300,
-  child: CachedNetworkImage(
-    imageUrl: imgUrl,
-    imageBuilder: (context, imageProvider) => CircleAvatar(
-      radius: 18,
-      backgroundImage: imageProvider,
-    ),
-    placeholder: (context, url) => Shimmer.fromColors(
-      baseColor: Colors.grey.shade300,
-      highlightColor: Colors.grey.shade100,
-      child: const CircleAvatar(
-        radius: 18,
-        backgroundColor: Colors.white,
-      ),
-    ),
-    errorWidget: (context, url, error) => const CircleAvatar(
-      radius: 18,
-      backgroundColor: Colors.grey,
-      child: Icon(Icons.person, color: Colors.white, size: 18),
-    ),
-  ),
-),
-
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _roomInfo?['Username_Lawan'] ?? widget.username_lawan,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        toolbarHeight: 72,
-      ),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: Column(
-        children: [
-          // Daftar pesan
-         Expanded(
-  child: Builder(
-    builder: (context) {
-      // urutkan pesan descending
-      final sorted = [...messages]..sort((a, b) => b['SentAt'].compareTo(a['SentAt']));
-
-      // mapping ke ChatMessage
-      final chatMessages = sorted.map((msg) => ChatMessage(
-        text: msg['Text'] ?? '',
-        time: msg['SentAt'] ?? DateTime.now(),
-       isMe: (msg['Sender']?.toString() ?? '') == (chatProv.currentUserId ?? ''),
-
-        category: msg['Category'] ?? 'chat',
-        hargaPaket: msg['Harga_Paket'],
-        tglRealisasi: msg['Tgl_Realisasi'],
-        lokasiPaket: msg['Lokasi'],
-        namaPaket: msg['Nama_Paket'],
-      )).toList();
-
-      // group per tanggal
-      final grouped = groupMessagesByDate(chatMessages);
-
-      return ListView(
-        controller: _scrollController,
-        reverse: true,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-        children: grouped.entries.expand((entry) {
-          final dateLabel = entry.key;
-          final groupMsgs = entry.value;
-
-          return [
-            ...groupMsgs.map((message) {
-              if (message.category == "package") {
-                return Column(
-                  crossAxisAlignment: message.isMe
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
-                  children: [
-                    _buildPackageCard(
-                      namaPaket: message.namaPaket ?? '',
-                      hargaPaket: message.hargaPaket ?? 0,
-                      isMe: message.isMe,
-                    ),
-                    if (message.text.isNotEmpty) _buildChatBubble(message),
-                  ],
-                );
-              } else if (message.category == "payment") {
-                return Align(
-                  alignment: Alignment.centerLeft,
-                  child: _buildPaymentCard(
-                    context,
-                    harga: message.hargaPaket ?? 0,
-                    tglRealisasi: message.tglRealisasi,
-                    lokasi: message.lokasiPaket ?? "-",
-                  ),
-                );
-              } else {
-                return _buildChatBubble(message);
-              }
-            }),
-            // label tanggal
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEDEDED),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  dateLabel,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-          ];
-        }).toList(),
-      );
+    return WillPopScope(
+       onWillPop: () async {
+      if (showOverlay) {
+        toggleOverlay();
+        return false;
+      }
+      return true;
     },
-  ),
-),
 
-          // Input box
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.white.withOpacity(0),
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          leading: CustomBackButton(),
+          title: GestureDetector(
+            onTap: () {
+              // context.read<NavigationProvider>().navigateToPage(
+              //       context,
+              //       PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? widget.id_lawan),
+              //       targetTabIndex: 0,
+              //     );
+            },
             child: Row(
               children: [
+          CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.grey.shade300,
+              child: CachedNetworkImage(
+                imageUrl: imgUrl ?? '',
+                imageBuilder: (context, imageProvider) =>
+                    CircleAvatar(radius: 18, backgroundImage: imageProvider),
+                placeholder: (context, url) => Shimmer.fromColors(
+                  baseColor: Colors.grey.shade300,
+                  highlightColor: Colors.grey.shade100,
+                  child: const CircleAvatar(radius: 18, backgroundColor: Colors.white),
+                ),
+                errorWidget: (context, url, error) =>
+                    const CircleAvatar(radius: 18, child: Icon(Icons.person)),
+              ),
+            ),
+
+      
+                const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
-                    cursorColor: Constants.primaryColor,
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 16),
-                      hintText: "Ketik pesan...",
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      filled: true,
-                      fillColor: const Color(0xFFE8E8E8),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
+                  child: Text(
+                    _roomInfo?['Username_Lawan'] ?? widget.username_lawan,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      letterSpacing: -0.2,
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Constants.primaryColor),
-                  onPressed: () => _sendMessage(context),
                 ),
               ],
             ),
           ),
-        ],
+          toolbarHeight: 72,
+        ),
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: Column(
+          children: [
+            // Daftar pesan
+           Expanded(
+        child: Builder(
+      builder: (context) {
+        // urutkan pesan descending
+        final sorted = [...messages]..sort((a, b) => b['SentAt'].compareTo(a['SentAt']));
+      
+        // mapping ke ChatMessage
+        final chatMessages = sorted.map((msg) => ChatMessage(
+          text: msg['Text'] ?? '',
+          time: msg['SentAt'] ?? DateTime.now(),
+         isMe: (msg['Sender']?.toString() ?? '') == (chatProv.currentUserId ?? ''),
+      
+          category: msg['Category'] ?? 'chat',
+          hargaPaket: msg['Harga_Paket'],
+          tglRealisasi: msg['Tgl_Realisasi'],
+          lokasiPaket: msg['Lokasi'],
+          namaPaket: msg['Nama_Paket'],
+        )).toList();
+      
+        // group per tanggal
+        final grouped = groupMessagesByDate(chatMessages);
+      
+        return ListView(
+          controller: _scrollController,
+          reverse: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          children: grouped.entries.expand((entry) {
+            final dateLabel = entry.key;
+            final groupMsgs = entry.value;
+      
+            return [
+              ...groupMsgs.map((message) {
+                if (message.category == "package") {
+                  return Column(
+                    crossAxisAlignment: message.isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      _buildPackageCard(
+                        namaPaket: message.namaPaket ?? '',
+                        hargaPaket: message.hargaPaket ?? 0,
+                        isMe: message.isMe,
+                      ),
+                      if (message.text.isNotEmpty) _buildChatBubble(message),
+                    ],
+                  );
+                } else if (message.category == "payment") {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildPaymentCard(
+                      context,
+                      harga: message.hargaPaket ?? 0,
+                      tglRealisasi: message.tglRealisasi,
+                      lokasi: message.lokasiPaket ?? "-",
+                    ),
+                  );
+                } else {
+                  return _buildChatBubble(message);
+                }
+              }),
+              // label tanggal
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDEDED),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    dateLabel,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ];
+          }).toList(),
+        );
+      },
+        ),
+      ),
+      // 🔹 Overlay background
+          if (showOverlay)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: toggleOverlay,
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+
+
+          // 🔹 Overlay menu
+          if (showOverlay)
+            Positioned(
+              bottom: 72,
+              left: 0,
+              right: 0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Material(
+                  color: const Color(0xFFFAFAFA),
+                  elevation: 8,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 0),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildOverlayItem(Icons.receipt_long, "Paket", () {}),
+                        _buildOverlayItem(Icons.edit_note, "Penawaran", () {}),
+                        _buildOverlayItem(Icons.image, "Gambar", () {}),
+                        _buildOverlayItem(Icons.insert_drive_file, "File", () {}),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Input box
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.white.withOpacity(0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      cursorColor: Constants.primaryColor,
+                      controller: _messageController,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10, horizontal: 16),
+                        hintText: "Ketik pesan...",
+                        hintStyle: const TextStyle(color: Colors.grey),
+                        filled: true,
+                        fillColor: const Color(0xFFE8E8E8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                   
+                  const SizedBox(width: 8),
+                  IconButton(
+                      icon: const Icon(Icons.add, color: Constants.primaryColor),
+                      onPressed: toggleOverlay,
+                    ),
+
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Constants.primaryColor),
+                    onPressed: () => _sendMessage(context),
+                  ),
+                ],
+              ),
+            ),
+           
+
+          ],
+        ),
       ),
     );
   }
+
+Widget _buildOverlayItem(IconData icon, String label, VoidCallback onTap) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Column(
+      children: [
+        CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.white,
+          child: Icon(icon, color: Constants.primaryColor, size: 24),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+      ],
+    ),
+  );
+}
+
 
   Widget _buildChatBubble(ChatMessage message) {
     return Align(
