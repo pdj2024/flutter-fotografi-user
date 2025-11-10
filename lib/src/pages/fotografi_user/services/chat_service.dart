@@ -72,7 +72,7 @@ Future<int> connect(String currentUserId, ApiClient apiClient) async {
   if (_connection == null) {
     _connection = HubConnectionBuilder()
       .withUrl(
-          'http://43.228.212.41:15/api/chathub?role=$role',
+          '${Constants.baseUrl}/api/chathub?role=$role',
           options: HttpConnectionOptions(
             accessTokenFactory: () async => token,
              transport: HttpTransportType.WebSockets, // paksa langsung WS
