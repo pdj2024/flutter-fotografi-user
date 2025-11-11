@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_chat.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/customer_service.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/auth_service_fotografi.dart';
-import '../providers/constants.dart';
-import 'menutama.dart';
-import 'providers/user_provider.dart';
-import 'singlepage.dart';
-import 'fotographerbio.dart';
-import '../providers/navigation_provider.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import '../services/auth_service.dart';
+import '../services/user_provider.dart';
+import '../../../pages/fotografi_user/singlepage.dart';
+import '../../../pages/fotografi_user/fotographerbio.dart';
+import '../../../core/routing/navigation_provider.dart';
 
 
 class UserLogin extends StatefulWidget {

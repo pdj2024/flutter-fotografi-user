@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 
-import '../providers/constants.dart';
 import 'bayarCounter.dart';
 import 'bayarQR.dart';
 import 'bayarVa.dart';

@@ -1,9 +1,8 @@
 import 'dart:convert';
 
-import '../../core/api_client.dart';
-import '../models/portofolio_model.dart';
-import 'package:mpjnew/src/pages/core/api_client.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import '../../../core/services/api_client.dart';
+import '../../../data/models/portofolio_model.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 class PortofolioService {
   final String entity = 'Portofolio';

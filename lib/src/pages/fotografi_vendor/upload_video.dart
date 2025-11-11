@@ -11,7 +11,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_editor/video_editor.dart';
 import 'package:http/http.dart' as http;
 
-import '../providers/constants.dart';
 import 'package:flutter/services.dart'; 
 
 

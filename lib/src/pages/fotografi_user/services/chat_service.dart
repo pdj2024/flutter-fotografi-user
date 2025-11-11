@@ -1,10 +1,8 @@
 import 'dart:convert';
-import 'package:path/path.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:signalr_netcore/signalr_client.dart';
-import '../../core/api_client.dart';
-import '../../core/api_singleton.dart';
-import '../../providers/constants.dart';
-import '../providers/user_provider.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_singleton.dart';
 
 class ChatService {
   final String controller = 'chat';

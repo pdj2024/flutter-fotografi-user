@@ -1,19 +1,19 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/models/kategori_model.dart';
+import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import '../providers/constants.dart';
-import 'models/portofolio_model.dart';
+import '../../data/models/portofolio_model.dart';
 import 'services/portofolio_service.dart';
 import 'singlepage.dart';
-import 'user_login.dart';
+import '../../features/auth/view/user_login.dart';
 import 'filter_overlay.dart';
 import 'fotographerbio.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 
 class SearchPage extends StatefulWidget {

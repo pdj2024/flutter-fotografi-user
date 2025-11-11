@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/kategori_model.dart';
+import '../../../data/models/kategori_model.dart';
 import '../services/kategori_service.dart';
 
 class KategoriProvider with ChangeNotifier {

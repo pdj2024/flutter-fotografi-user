@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 // import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
 
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
-import 'providers/user_provider.dart';
+import '../../features/auth/services/user_provider.dart';
 
 import 'single_chat.dart';
 

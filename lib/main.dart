@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
 
@@ -13,21 +15,19 @@ import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/biodata.dart';
-import 'package:mpjnew/src/pages/providers/constants.dart';
 import 'package:provider/provider.dart';
 
-import 'src/pages/fotografi_user/providers/user_provider.dart';
+import 'src/features/auth/services/user_provider.dart';
 import 'src/pages/fotografi_user/services/customer_service.dart';
-import 'src/pages/providers/auth_service_fotografi.dart';
-import 'src/pages/providers/navigation_provider.dart';
+import 'src/features/auth/services/auth_service.dart';
+import 'src/core/routing/navigation_provider.dart';
 import 'src/pages/fotografi_vendor/vendor_login.dart';
 import 'src/pages/fotografi_vendor/vendor_status.dart';
 import 'src/pages/fotografi_vendor/vendor_menutama.dart';
-import 'src/pages/fotografi_user/providers/portofolio_provider.dart';
 import 'src/pages/fotografi_user/services/portofolio_service.dart';
-import 'src/pages/pilih_role.dart';
+import 'src/features/auth/view/pilih_role.dart';
 
-import 'src/pages/core/api_singleton.dart'; // ← pakai ini
+import 'src/core/services/api_singleton.dart'; // ← pakai ini
 
 /// ✅ API Client: semua request HTTP lewat sini
 import 'package:http/http.dart' as http;
@@ -53,15 +53,27 @@ void main() async {
         /// ✅ Semua service pake ApiClient, jadi token & baseUrl tersentralisasi
         ChangeNotifierProvider(
           create: (_) => UserProvider(
-              customerService: CustomerService(),
-              vendorService: VendorService(),
-              authService: AuthService()),
+            customerService: CustomerService(),
+            vendorService: VendorService(),
+            authService: AuthService(),
+          ),
+        ),
+
+        // Provider untuk portofolio yang mengambil userProvider dari atasnya
+        ChangeNotifierProxyProvider<UserProvider, PortofolioProvider>(
+          create: (context) => PortofolioProvider(
+            portofolioService: PortofolioService(),
+            userProvider: context.read<UserProvider>(),
+          ),
+          update: (context, userProvider, previous) => PortofolioProvider(
+            portofolioService:
+                previous?.portofolioService ?? PortofolioService(),
+            userProvider: userProvider,
+          ),
         ),
 
         ChangeNotifierProvider(
-          create: (_) => KategoriProvider(
-            service: KategoriService(),
-          ),
+          create: (_) => KategoriProvider(KategoriService()),
         ),
         ChangeNotifierProvider(
           create: (_) => PaketProvider(
@@ -71,11 +83,6 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => VendorProvider(
             service: VendorService(),
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => PortofolioProvider(
-            service: PortofolioService(),
           ),
         ),
 

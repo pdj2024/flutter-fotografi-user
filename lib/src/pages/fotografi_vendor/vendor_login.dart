@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_chat.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/user_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 
 
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
@@ -9,11 +10,10 @@ import 'package:mpjnew/src/pages/fotografi_vendor/vendor_bio.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_home.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/auth_service_fotografi.dart';
-import '../providers/constants.dart';
+import '../../features/auth/services/auth_service.dart';
 
-import '../providers/navigation_provider.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import '../../core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 
 class VendorLogin extends StatefulWidget {

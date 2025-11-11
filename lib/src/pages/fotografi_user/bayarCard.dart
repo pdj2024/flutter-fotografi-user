@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:midtrans_sdk/midtrans_sdk.dart';
 import 'package:intl/intl.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 
-import '../providers/constants.dart';
 
 class BayarCard extends StatefulWidget {
   final String orderId;
