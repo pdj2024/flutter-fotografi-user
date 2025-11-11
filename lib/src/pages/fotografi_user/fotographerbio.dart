@@ -46,10 +46,8 @@ class _PhotographerBioState extends State<PhotographerBio> {
     });
 
     try {
-      final vendorData = await VendorService().getAll(
-        no_id: widget.idVendor,
-        status: 'aktif'
-      );
+      final vendorData =
+          await VendorService().getAll(no_id: widget.idVendor, status: 'aktif');
 
       vendor = vendorData.isNotEmpty
           ? vendorData.first
@@ -86,21 +84,19 @@ class _PhotographerBioState extends State<PhotographerBio> {
       );
     }
 
-    if(vendor?.user_name == notFoundUsername) {
-
+    if (vendor?.user_name == notFoundUsername) {
     } else {
-        try {
-            portofolioList = await PortofolioService().getAll(
-            idVendor: widget.idVendor,
-            status: 'aktif',
-            orderBy: 'tgl_created',
-            orderDir: 'desc',
-          );
-        } catch (_) {
-          portofolioList = [];
-        }
+      try {
+        portofolioList = await PortofolioService().getAll(
+          idVendor: widget.idVendor,
+          status: 'aktif',
+          orderBy: 'tgl_created',
+          orderDir: 'desc',
+        );
+      } catch (_) {
+        portofolioList = [];
+      }
     }
-   
 
     setState(() {
       isLoadingVendor = false;
@@ -131,8 +127,8 @@ class _PhotographerBioState extends State<PhotographerBio> {
         leading: CustomBackButton(),
         title: Text(
           vendor?.user_name ?? '',
-          style: const TextStyle(
-              color: Colors.black, fontWeight: FontWeight.bold),
+          style:
+              const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       backgroundColor: const Color(0xFFF9F9F9),
@@ -260,21 +256,19 @@ class _PhotographerBioState extends State<PhotographerBio> {
                               padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
-                                  
-                                  context.read<NavigationProvider>().navigateToPage(
+                              context.read<NavigationProvider>().navigateToPage(
                                     context,
-                                      SingleChat(
-                                            // roomId dikosongin karena kemungkinan besar ini chat baru
-                                            roomId: null,
-                                            // kirim userIds lawan (vendor.id)
-                                           id_lawan: vendor!.no_id.toString(),
-                                           username_lawan: vendor!.user_name,
-                                           avatar_lawan: vendor!.id_media,
-                                           
-                                          ),
-                                          targetTabIndex: 1,
-                                       );
-                                },
+                                    SingleChat(
+                                      // roomId dikosongin karena kemungkinan besar ini chat baru
+                                      roomId: null,
+                                      // kirim userIds lawan (vendor.id)
+                                      id_lawan: vendor!.no_id.toString(),
+                                      username_lawan: vendor!.user_name,
+                                      avatar_lawan: vendor!.id_media,
+                                    ),
+                                    targetTabIndex: 1,
+                                  );
+                            },
                             child: const Icon(Icons.chat_outlined,
                                 color: Constants.primaryColor),
                           ),
@@ -289,8 +283,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                 else if (portofolioList.isNotEmpty) ...[
                   const Text(
                     "Portofolio",
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   GridView.count(
@@ -315,16 +308,12 @@ class _PhotographerBioState extends State<PhotographerBio> {
                       }
 
                       return GestureDetector(
-                        onTap: ()  { 
+                        onTap: () {
                           // print("====== PINDAH PAGE: " + p.noId);
-                           context.read<NavigationProvider>().navigateToPage(
-                          context,
-                          SinglePostPage(noId: p.noId),
-                          targetTabIndex: 0);
-
-
-                        }
-                       ,
+                          context.read<NavigationProvider>().navigateToPage(
+                              context, SinglePostPage(noId: p.noId),
+                              targetTabIndex: 0);
+                        },
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: CachedNetworkImage(

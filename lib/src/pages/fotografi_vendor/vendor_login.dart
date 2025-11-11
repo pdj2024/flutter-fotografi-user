@@ -44,9 +44,9 @@ class _VendorLoginState extends State<VendorLogin> {
       // ✅ Login sukses: tutup dialog dan navigasi
 
        // Delay navigation until the current frame is complete
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<NavigationProvider>().startNavigateVendor(context);
-    });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<NavigationProvider>().startNavigateVendor(context);
+      });
 
 
     

@@ -29,11 +29,8 @@ import 'src/pages/pilih_role.dart';
 
 import 'src/pages/core/api_singleton.dart'; // ← pakai ini
 
-
 /// ✅ API Client: semua request HTTP lewat sini
 import 'package:http/http.dart' as http;
-
-
 
 var companyNameGlobal = 'PT. ABC';
 
@@ -47,7 +44,6 @@ void main() async {
   await Firebase.initializeApp();
 
   /// ✅ Buat API Client sekali aja
-  
 
   runApp(
     MultiProvider(
@@ -57,16 +53,10 @@ void main() async {
         /// ✅ Semua service pake ApiClient, jadi token & baseUrl tersentralisasi
         ChangeNotifierProvider(
           create: (_) => UserProvider(
-            customerService: CustomerService(),
-            vendorService: VendorService(),
-            authService: AuthService()
-          ),
+              customerService: CustomerService(),
+              vendorService: VendorService(),
+              authService: AuthService()),
         ),
-       
-       
-        
-
-
 
         ChangeNotifierProvider(
           create: (_) => KategoriProvider(
@@ -83,14 +73,13 @@ void main() async {
             service: VendorService(),
           ),
         ),
-         ChangeNotifierProvider(
+        ChangeNotifierProvider(
           create: (_) => PortofolioProvider(
             service: PortofolioService(),
           ),
         ),
 
-
-         /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat
+        /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat
         ChangeNotifierProvider(
           create: (_) => ChatProvider(),
         ),
@@ -152,33 +141,31 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
   }
 
   Future<void> _loadInitialData() async {
-  final nav = Provider.of<NavigationProvider>(context, listen: false);
-  // await nav.restoreLoginState(); ABAIKAN DULU
+    final nav = Provider.of<NavigationProvider>(context, listen: false);
+    // await nav.restoreLoginState(); ABAIKAN DULU
 
-  // final role = null;
-  final role = await context.read<NavigationProvider>().getRole();
-  
-  await context.read<NavigationProvider>().handleLogout(context);
+    // final role = null;
+    final role = await context.read<NavigationProvider>().getRole();
 
-  print("================= MAIN.DART: ROLE = $role");
+    // Tiap buka app, logout dulu
+    await context.read<NavigationProvider>().handleLogout(context);
 
+    print("================= MAIN.DART: ROLE = $role");
 
-  if (role == null || role.isEmpty) {
-    _startPage = const PilihRole();
-  } else if (role == Constants.customer) {
-    _startPage = const Ecommerce_MenuUtama();
-  } else if (role == Constants.vendor) {
-       _startPage = const Vendor_MenuUtama();
+    // User diarahkan memilih ROLE
+    if (role == null || role.isEmpty) {
+      _startPage = const PilihRole();
+    } else if (role == Constants.customer) {
+      _startPage = const Ecommerce_MenuUtama();
+    } else if (role == Constants.vendor) {
+      _startPage = const Vendor_MenuUtama();
     }
     setState(() {
-    _isLoading = false;
-  });
+      _isLoading = false;
+    });
   }
 
   // ✅ Tambahkan ini supaya loading selesai dan UI update
-  
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +187,3 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
     }
   }
 }
-
-
-
-
