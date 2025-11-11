@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/pages/fotografi_user/models/portofolio_model.dart';
+import 'package:mpjnew/src/data/models/portofolio_model.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
-import 'models/vendor_model.dart';
+import '../../data/models/vendor_model.dart';
 import 'singlepage.dart';
 import 'pilihan_paket.dart';
 import 'single_chat.dart';

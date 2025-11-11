@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/user_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_single_chat.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/portofolio_model.dart';
+import '../../../data/models/portofolio_model.dart';
 import '../services/portofolio_service.dart';
 
 class PortofolioProvider with ChangeNotifier {

@@ -1,11 +1,10 @@
 import 'dart:convert';
 
-import '../../core/api_client.dart';
+import '../../../core/services/api_client.dart';
 
-import 'package:mpjnew/src/pages/core/api_client.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
-import '../models/kota_model.dart';
+import '../../../data/models/kota_model.dart';
 
 class KotaService {
 

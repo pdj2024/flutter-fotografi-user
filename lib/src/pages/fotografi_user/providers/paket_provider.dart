@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/paket_model.dart';
+import '../../../data/models/paket_model.dart';
 import '../services/paket_service.dart';
 
 class PaketProvider with ChangeNotifier {

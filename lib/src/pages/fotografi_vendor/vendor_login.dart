@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_service_fotografi.dart';
 
 import '../providers/navigation_provider.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 
 class VendorLogin extends StatefulWidget {

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:mpjnew/src/pages/fotografi_user/models/customer_model.dart';
-import 'package:mpjnew/src/pages/core/api_client.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/data/models/customer_model.dart';
+import 'package:mpjnew/src/core/services/api_client.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 class CustomerService {
   final String entity = 'Customer';

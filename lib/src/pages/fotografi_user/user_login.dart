@@ -13,7 +13,7 @@ import 'providers/user_provider.dart';
 import 'singlepage.dart';
 import 'fotographerbio.dart';
 import '../providers/navigation_provider.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 
 class UserLogin extends StatefulWidget {

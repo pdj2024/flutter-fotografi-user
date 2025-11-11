@@ -1,8 +1,7 @@
 import 'dart:convert';
-import 'package:mpjnew/src/pages/fotografi_user/models/vendor_model.dart';
-import '../../core/api_client.dart';
-import 'package:mpjnew/src/pages/core/api_client.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/data/models/vendor_model.dart';
+import '../../../core/services/api_client.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 
 class VendorService {

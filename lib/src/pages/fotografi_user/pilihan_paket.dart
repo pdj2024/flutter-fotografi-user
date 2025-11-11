@@ -8,7 +8,7 @@ import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
 import 'single_chat.dart';
 import 'fotographerbio.dart';
-import 'package:mpjnew/src/pages/fotografi_user/models/paket_model.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 
 class PilihanPaket extends StatefulWidget {

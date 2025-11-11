@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/vendor_model.dart';
+import '../../../data/models/vendor_model.dart';
 import '../services/vendor_service.dart';
 
 class VendorProvider with ChangeNotifier {

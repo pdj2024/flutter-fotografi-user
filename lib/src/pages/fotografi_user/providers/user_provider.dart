@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/pages/core/api_singleton.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/pages/providers/auth_service_fotografi.dart';
-import '../models/customer_model.dart';
-import '../models/vendor_model.dart';
+import '../../../data/models/customer_model.dart';
+import '../../../data/models/vendor_model.dart';
 import '../services/customer_service.dart';
-import '../../core/api_client.dart';
 import '../services/vendor_service.dart'; // Untuk setRole()
 
 class UserProvider with ChangeNotifier {

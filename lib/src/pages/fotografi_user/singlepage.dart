@@ -8,8 +8,8 @@ import '../providers/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
 
 import 'fotographerbio.dart';
-import 'models/portofolio_model.dart';
-import 'models/paket_model.dart';
+import '../../data/models/portofolio_model.dart';
+import '../../data/models/paket_model.dart';
 import 'providers/user_provider.dart';
 import 'services/portofolio_service.dart';
 import 'services/paket_service.dart';
