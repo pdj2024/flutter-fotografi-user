@@ -24,8 +24,8 @@ dependencies:
   uuid: ^4.2.1
 
   # For Formating Numbers
-  intl: ^0.19.0
-  # intl: ^0.20.2
+  # intl: ^0.19.0
+  intl: ^0.20.2
   decimal: ^3.0.2
   flutter_masked_text2: ^0.9.1
 
