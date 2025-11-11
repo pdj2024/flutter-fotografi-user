@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/pages/providers/auth_service_fotografi.dart';
+import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import '../../../data/models/customer_model.dart';
 import '../../../data/models/vendor_model.dart';
-import '../services/customer_service.dart';
-import '../services/vendor_service.dart'; // Untuk setRole()
+import '../../../pages/fotografi_user/services/customer_service.dart';
+import '../../../pages/fotografi_user/services/vendor_service.dart'; // Untuk setRole()
 
 class UserProvider with ChangeNotifier {
   final AuthService _authService;
@@ -20,7 +20,7 @@ class UserProvider with ChangeNotifier {
         _vendorService = vendorService;
 
 
-  String? _role; // "customer" atau "vendor"
+  String? _role;
   CustomerModel? _customer;
   VendorModel? _vendor;
 
@@ -47,16 +47,11 @@ class UserProvider with ChangeNotifier {
     return '';
   }
 
-
-  
-
   void setRole(String role) {
   _role = role;
   apiClient.setRole(role); // tetap pastikan header ikut di-set
   notifyListeners();
 }
-
-
 
   Future<void> checkLoginGoogle({required String role, bool silent = false}) async {
     _setLoading(true);

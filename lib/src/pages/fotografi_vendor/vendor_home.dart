@@ -6,7 +6,7 @@ import 'package:mpjnew/src/pages/fotografi_vendor/vendor_bio.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_single_order.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 class VendorHome extends StatelessWidget {
   const VendorHome({super.key});

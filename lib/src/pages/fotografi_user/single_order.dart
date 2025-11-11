@@ -6,7 +6,7 @@ import 'package:shimmer/shimmer.dart';
 
 import 'fotographerbio.dart';
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 import 'single_chat.dart';
 
 class SingleOrder extends StatelessWidget {

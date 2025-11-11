@@ -8,9 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
-import 'providers/user_provider.dart';
+import '../../features/auth/services/user_provider.dart';
 
 import 'single_chat.dart';
 

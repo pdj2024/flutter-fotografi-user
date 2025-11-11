@@ -8,7 +8,7 @@ import 'package:mpjnew/src/pages/fotografi_vendor/vendor_bio.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_home.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/navigation_provider.dart';  // Import NavigationProvider
+import '../../core/routing/navigation_provider.dart';  // Import NavigationProvider
 import 'coba_text_field.dart';
 import 'imageupload.dart';
 import 'upload_video.dart';

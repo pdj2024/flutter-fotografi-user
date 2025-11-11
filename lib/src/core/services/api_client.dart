@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:mpjnew/src/core/constants/constants.dart';
 
-import '../../pages/providers/auth_service_fotografi.dart';
+import '../../features/auth/services/auth_service.dart';
 
 
 class ApiClient {

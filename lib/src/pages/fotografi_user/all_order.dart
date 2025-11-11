@@ -7,7 +7,7 @@ import 'package:mpjnew/src/pages/fotografi_user/single_order.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 class AllOrder extends StatefulWidget {
   const AllOrder({super.key});

@@ -5,7 +5,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 import 'single_chat.dart';
 import 'fotographerbio.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';

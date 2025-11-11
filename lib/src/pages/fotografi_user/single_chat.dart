@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_user/detil_bayar.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/user_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart';
 
 import 'package:provider/provider.dart';
@@ -12,7 +12,7 @@ import 'package:shimmer/shimmer.dart';
 
 import 'fotographerbio.dart';
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 
 class SingleChat extends StatefulWidget {

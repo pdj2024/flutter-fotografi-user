@@ -7,7 +7,7 @@ import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
 import '../../data/models/vendor_model.dart';
 import 'singlepage.dart';

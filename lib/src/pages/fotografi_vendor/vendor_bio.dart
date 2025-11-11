@@ -5,7 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 import 'vendor_pilihan_paket.dart';
 import 'vendor_singlepage.dart';
 

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'all_chat.dart';
 import 'all_order.dart';
 import 'home.dart';
-import '../providers/navigation_provider.dart';  // Import NavigationProvider
+import '../../core/routing/navigation_provider.dart';  // Import NavigationProvider
 import 'video_player.dart';
 
 class Ecommerce_MenuUtama extends StatelessWidget {
@@ -23,7 +24,7 @@ class Ecommerce_MenuUtama extends StatelessWidget {
           builder: (context, navigationProvider, child) {
             return Stack(
               children: [
-                _buildOffstageNavigator(0, EcommerceHome()),
+                _buildOffstageNavigator(0, CustomerHomePage()),
                 _buildOffstageNavigator(1, AllChat()),
                 _buildOffstageNavigator(2, AllOrder()),
               ],

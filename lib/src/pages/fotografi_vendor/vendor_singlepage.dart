@@ -7,7 +7,7 @@ import 'package:shimmer/shimmer.dart';
 
 
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 
 class VendorSinglePostPage extends StatefulWidget {

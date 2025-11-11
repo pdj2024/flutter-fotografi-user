@@ -10,7 +10,7 @@ import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 import 'services/kategori_service.dart';
 import 'services/kota_service.dart';
 import 'services/vendor_service.dart';

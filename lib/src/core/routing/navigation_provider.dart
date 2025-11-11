@@ -1,26 +1,20 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/pages/fotografi_user/fotographerbio.dart';
-import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/portofolio_provider.dart';
-import 'package:mpjnew/src/pages/pilih_role.dart';
-import 'package:path/path.dart';
+import 'package:mpjnew/src/features/auth/view/pilih_role.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../fotografi_user/providers/user_provider.dart';
-import '../fotografi_user/singlepage.dart';
-import '../fotografi_user/user_login.dart';
-import '../fotografi_vendor/biodata.dart';
-import '../fotografi_vendor/vendor_login.dart';
-import '../fotografi_vendor/vendor_menutama.dart';
-import '../fotografi_vendor/vendor_status.dart';
-import 'auth_service_fotografi.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../../features/auth/services/user_provider.dart';
+import '../../pages/fotografi_user/singlepage.dart';
+import '../../features/auth/view/user_login.dart';
+import '../../pages/fotografi_vendor/biodata.dart';
+import '../../pages/fotografi_vendor/vendor_login.dart';
+import '../../pages/fotografi_vendor/vendor_menutama.dart';
+import '../../pages/fotografi_vendor/vendor_status.dart';
+import '../../features/auth/services/auth_service.dart';
 
 class NavigationProvider with ChangeNotifier {
   // ─────────────── State

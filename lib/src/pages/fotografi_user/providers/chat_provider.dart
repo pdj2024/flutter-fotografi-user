@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:path/path.dart';
 
-import '../../providers/navigation_provider.dart';
+import '../../../core/routing/navigation_provider.dart';
 import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {

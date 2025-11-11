@@ -10,10 +10,10 @@ import 'package:shimmer/shimmer.dart';
 import '../../data/models/portofolio_model.dart';
 import 'services/portofolio_service.dart';
 import 'singlepage.dart';
-import 'user_login.dart';
+import '../../features/auth/view/user_login.dart';
 import 'filter_overlay.dart';
 import 'fotographerbio.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 
 class SearchPage extends StatefulWidget {

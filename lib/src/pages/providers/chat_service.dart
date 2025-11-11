@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 
-import 'navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 class ChatService {
   // get instance of firestore

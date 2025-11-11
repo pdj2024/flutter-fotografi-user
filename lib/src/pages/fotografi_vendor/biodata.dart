@@ -5,7 +5,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:provider/provider.dart';
 import '../providers/custom_back_button.dart';
-import '../providers/navigation_provider.dart';
+import '../../core/routing/navigation_provider.dart';
 
 class BiodataPage extends StatefulWidget {
   const BiodataPage({super.key});
