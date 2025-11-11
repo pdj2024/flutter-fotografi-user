@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dropdown_search/dropdown_search.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:provider/provider.dart';
-import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
 

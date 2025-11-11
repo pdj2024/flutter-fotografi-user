@@ -1,9 +1,9 @@
 import 'dart:convert';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:path/path.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../../core/api_client.dart';
 import '../../core/api_singleton.dart';
-import '../../providers/constants.dart';
 import '../providers/user_provider.dart';
 
 class ChatService {

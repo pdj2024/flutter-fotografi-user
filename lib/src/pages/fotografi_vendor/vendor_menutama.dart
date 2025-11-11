@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/image_crop2.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/pemasukan.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_all_chat.dart';
@@ -7,7 +8,6 @@ import 'package:mpjnew/src/pages/fotografi_vendor/vendor_bio.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/vendor_home.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/constants.dart';
 import '../providers/navigation_provider.dart';  // Import NavigationProvider
 import 'coba_text_field.dart';
 import 'imageupload.dart';

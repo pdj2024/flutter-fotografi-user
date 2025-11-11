@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 class Constants {
   static const Color primaryColor = Color(0xff3b3add); //Color(0xffEE4D2D);
@@ -9,9 +8,5 @@ class Constants {
   static const String vendor = 'vendor';
 
   static const String baseUrl = 'https://fotoapi.padajaya.biz.id';
-      // 'https://fotoapi.pdj.web.id'; // Ganti dengan URL API Anda
-
-  static formatCurrency(num value, {String prefix = "IDR "}) {
-    return "$prefix${NumberFormat("#,##0", "id_ID").format(value)}";
-  }
+  // 'https://fotoapi.pdj.web.id'; // Ganti dengan URL API Anda
 }

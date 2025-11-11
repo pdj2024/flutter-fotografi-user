@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-
-import '../providers/constants.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 
 class BayarVA extends StatefulWidget {
   final String orderId;

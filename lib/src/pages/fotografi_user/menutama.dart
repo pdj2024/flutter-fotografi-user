@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
-import '../providers/constants.dart';
 import 'all_chat.dart';
 import 'all_order.dart';
 import 'home.dart';

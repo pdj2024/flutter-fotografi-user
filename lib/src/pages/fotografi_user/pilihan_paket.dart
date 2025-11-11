@@ -1,8 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
 import 'single_chat.dart';
@@ -123,7 +124,7 @@ class _PilihanPaketState extends State<PilihanPaket> {
                     return buildPackageCard(
                       context: context,
                       title: paket.nama_paket,
-                      price: Constants.formatCurrency(paket.harga),
+                      price: Helper.formatCurrency(paket.harga),
                       rincian: paket.rincian
                      
                     );

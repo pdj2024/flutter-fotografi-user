@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/core/api_singleton.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 // import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart' show ChatService;
@@ -6,7 +7,6 @@ import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 import '../providers/navigation_provider.dart';
 

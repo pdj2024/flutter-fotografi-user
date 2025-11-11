@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:provider/provider.dart';
-import '../providers/constants.dart';
 import '../providers/custom_back_button.dart';
 
 class ChatOffer extends StatefulWidget {

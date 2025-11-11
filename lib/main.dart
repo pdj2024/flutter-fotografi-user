@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
@@ -13,7 +14,6 @@ import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
 import 'package:mpjnew/src/pages/fotografi_vendor/biodata.dart';
-import 'package:mpjnew/src/pages/providers/constants.dart';
 import 'package:provider/provider.dart';
 
 import 'src/pages/fotografi_user/providers/user_provider.dart';
