@@ -13,10 +13,12 @@ class Ecommerce_MenuUtama extends StatelessWidget {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        final provider = Provider.of<NavigationProvider>(context, listen: false);
+        final provider =
+            Provider.of<NavigationProvider>(context, listen: false);
         return await provider.onWillPop();
       },
       child: Scaffold(
+        key: const PageStorageKey('EcommerceMenuUtama'),
         body: Consumer<NavigationProvider>(
           builder: (context, navigationProvider, child) {
             return Stack(
@@ -58,17 +60,16 @@ class Ecommerce_MenuUtama extends StatelessWidget {
   }
 
   Widget _buildOffstageNavigator(int index, Widget page) {
-  return Consumer<NavigationProvider>(
-    builder: (context, provider, _) {
-      return Offstage(
-        offstage: provider.selectedIndex != index,
-        child: Navigator(
-          key: provider.navigatorKeys[index],
-          onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => page),
-        ),
-      );
-    },
-  );
-}
-
+    return Consumer<NavigationProvider>(
+      builder: (context, provider, _) {
+        return Offstage(
+          offstage: provider.selectedIndex != index,
+          child: Navigator(
+            key: provider.navigatorKeys[index],
+            onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => page),
+          ),
+        );
+      },
+    );
+  }
 }

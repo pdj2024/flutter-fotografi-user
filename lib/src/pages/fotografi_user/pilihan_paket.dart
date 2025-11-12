@@ -2,12 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../providers/custom_back_button.dart';
 import '../../core/routing/navigation_provider.dart';
-import 'single_chat.dart';
-import 'fotographerbio.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 
@@ -151,7 +150,7 @@ class _PilihanPaketState extends State<PilihanPaket> {
       child: GestureDetector(
         onTap: () => NavigationProvider().navigateToPage(
           context,
-          PhotographerBio(idVendor: widget.idVendor),
+          VendorBioPage(idVendor: widget.idVendor),
           targetTabIndex: 0,
         ),
         child: Row(

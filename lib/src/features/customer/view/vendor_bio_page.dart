@@ -1,28 +1,28 @@
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
-
+import 'package:mpjnew/src/data/models/vendor_model.dart';
+import 'package:mpjnew/src/pages/fotografi_user/pilihan_paket.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
+import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
+import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
+import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import '../../core/routing/navigation_provider.dart';
-import '../providers/custom_back_button.dart';
-import '../../data/models/vendor_model.dart';
-import 'singlepage.dart';
-import 'pilihan_paket.dart';
-import 'single_chat.dart';
 
-class PhotographerBio extends StatefulWidget {
+class VendorBioPage extends StatefulWidget {
   final String idVendor;
-  const PhotographerBio({super.key, required this.idVendor});
+
+  const VendorBioPage({super.key, required this.idVendor});
 
   @override
-  State<PhotographerBio> createState() => _PhotographerBioState();
+  State<VendorBioPage> createState() => _VendorBioPageState();
 }
 
-class _PhotographerBioState extends State<PhotographerBio> {
+class _VendorBioPageState extends State<VendorBioPage> {
   final ScrollController _scrollController = ScrollController();
 
   bool isLoadingVendor = true;
@@ -30,14 +30,8 @@ class _PhotographerBioState extends State<PhotographerBio> {
 
   final String notFoundUsername = 'vendor-not-found';
 
-  VendorModel? vendor;
+  late VendorModel vendor;
   List<PortofolioModel> portofolioList = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchData();
-  }
 
   Future<void> _fetchData() async {
     setState(() {
@@ -84,7 +78,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
       );
     }
 
-    if (vendor?.user_name == notFoundUsername) {
+    if (vendor.user_name == notFoundUsername) {
     } else {
       try {
         portofolioList = await PortofolioService().getAll(
@@ -104,19 +98,11 @@ class _PhotographerBioState extends State<PhotographerBio> {
     });
   }
 
-  Widget _shimmerBox({double? w, double? h, double r = 0}) =>
-      Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
-        child: Container(
-          width: w,
-          height: h,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(r),
-          ),
-        ),
-      );
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +112,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
         elevation: 1,
         leading: CustomBackButton(),
         title: Text(
-          vendor?.user_name ?? '',
+          vendor.user_name,
           style:
               const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
@@ -143,7 +129,9 @@ class _PhotographerBioState extends State<PhotographerBio> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isLoadingVendor)
-                  Row(children: [_shimmerBox(w: 60, h: 60, r: 30)])
+                  Row(children: [
+                    ShimmerPlaceholder(width: 60, height: 60, radius: 30)
+                  ])
                 else ...[
                   Row(
                     children: [
@@ -152,12 +140,12 @@ class _PhotographerBioState extends State<PhotographerBio> {
                         backgroundColor: Colors.grey[200],
                         child: ClipOval(
                           child: CachedNetworkImage(
-                            imageUrl: vendor!.id_media ?? '',
+                            imageUrl: vendor.id_media,
                             width: 60,
                             height: 60,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) =>
-                                _shimmerBox(w: 60, h: 60, r: 30),
+                            placeholder: (context, url) => ShimmerPlaceholder(
+                                width: 60, height: 60, radius: 30),
                             errorWidget: (context, url, error) =>
                                 const Icon(Icons.person, size: 30),
                           ),
@@ -168,40 +156,48 @@ class _PhotographerBioState extends State<PhotographerBio> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              vendor!.nama_display,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  vendor.nama_display,
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                if (vendor.rating > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 10),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.star,
+                                            color: Colors.amber, size: 18),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          vendor.rating.toString(),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              vendor!.kota,
+                              vendor.kota,
                               style: const TextStyle(
                                   fontSize: 13, color: Colors.grey),
                             ),
                           ],
                         ),
                       ),
-                      if (vendor!.rating != null && vendor!.rating! > 0)
-                        Row(
-                          children: [
-                            const Icon(Icons.star,
-                                color: Colors.amber, size: 18),
-                            const SizedBox(width: 4),
-                            Text(
-                              vendor!.rating!.toString(),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        )
                     ],
                   ),
-                  if (vendor!.deskripsi_bio != null &&
-                      vendor!.deskripsi_bio!.isNotEmpty) ...[
+                  if (vendor.deskripsi_bio.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
-                      vendor!.deskripsi_bio!,
+                      vendor.deskripsi_bio,
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,
@@ -209,7 +205,7 @@ class _PhotographerBioState extends State<PhotographerBio> {
                     ),
                   ],
                   const SizedBox(height: 20),
-                  if (vendor!.user_name != notFoundUsername) ...[
+                  if (vendor.user_name != notFoundUsername) ...[
                     Row(
                       children: [
                         Expanded(
@@ -227,18 +223,20 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => PilihanPaket(
-                                      namaVendor: vendor!.nama_display,
-                                      userName: vendor!.user_name,
-                                      kotaVendor: vendor!.kota,
-                                      ratingVendor: vendor!.rating,
-                                      idVendor: vendor!.no_id,
-                                      fotoProfil: vendor!.id_media ?? '',
+                                      namaVendor: vendor.nama_display,
+                                      userName: vendor.user_name,
+                                      kotaVendor: vendor.kota,
+                                      ratingVendor: vendor.rating,
+                                      idVendor: vendor.no_id,
+                                      fotoProfil: vendor.id_media,
                                     ),
                                   ),
                                 );
                               },
-                              child: const Text("Lihat Pilihan Paket",
-                                  style: TextStyle(color: Colors.white)),
+                              child: const Text(
+                                "Lihat Pilihan Paket",
+                                style: TextStyle(color: Colors.white),
+                              ),
                             ),
                           ),
                         ),
@@ -262,9 +260,9 @@ class _PhotographerBioState extends State<PhotographerBio> {
                                       // roomId dikosongin karena kemungkinan besar ini chat baru
                                       roomId: null,
                                       // kirim userIds lawan (vendor.id)
-                                      id_lawan: vendor!.no_id.toString(),
-                                      username_lawan: vendor!.user_name,
-                                      avatar_lawan: vendor!.id_media,
+                                      id_lawan: vendor.no_id.toString(),
+                                      username_lawan: vendor.user_name,
+                                      avatar_lawan: vendor.id_media,
                                     ),
                                     targetTabIndex: 1,
                                   );
@@ -279,22 +277,37 @@ class _PhotographerBioState extends State<PhotographerBio> {
                   ]
                 ],
                 if (isLoadingPorto)
-                  const Center(child: CircularProgressIndicator())
+                  const Center(
+                    child: Column(
+                      children: [
+                        ShimmerPlaceholder(
+                          height: 100,
+                          width: 100,
+                          radius: 10,
+                        ),
+                      ],
+                    ),
+                  )
                 else if (portofolioList.isNotEmpty) ...[
                   const Text(
                     "Portofolio",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
+                  GridView.builder(
                     padding: const EdgeInsets.only(top: 8),
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    children: portofolioList.map((p) {
-                      final List<MediaItem> mediaList = p.mediaUrls ?? [];
+                    itemCount: portofolioList.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemBuilder: (context, index) {
+                      final p = portofolioList[index];
+                      final List<MediaItem> mediaList = p.mediaUrls;
                       final firstMedia =
                           mediaList.isNotEmpty ? mediaList.first : null;
                       final isVideo =
@@ -309,23 +322,43 @@ class _PhotographerBioState extends State<PhotographerBio> {
 
                       return GestureDetector(
                         onTap: () {
-                          // print("====== PINDAH PAGE: " + p.noId);
                           context.read<NavigationProvider>().navigateToPage(
                               context, SinglePostPage(noId: p.noId),
                               targetTabIndex: 0);
                         },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: CachedNetworkImage(
-                            imageUrl: mediaUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => _shimmerBox(),
-                            errorWidget: (context, url, error) =>
-                                const Icon(Icons.broken_image_outlined),
+                        child: Container(
+                          height: 100,
+                          width: 100,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.blue,
+                            image: !isVideo
+                                ? DecorationImage(
+                                    image: NetworkImage(mediaUrl),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
+                          child: isVideo
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.network(
+                                      mediaUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                          Icons.broken_image_outlined),
+                                    ),
+                                    const Center(
+                                      child: Icon(Icons.play_circle_fill,
+                                          color: Colors.white, size: 32),
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
                       );
-                    }).toList(),
+                    },
                   ),
                 ] else
                   const Text("Belum ada portofolio."),

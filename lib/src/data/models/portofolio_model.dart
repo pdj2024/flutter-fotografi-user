@@ -1,7 +1,7 @@
 class PortofolioModel {
   final String noId;
   final String idVendor;
- 
+
   final String idMedia;
   final String idMediaVendor;
   final String idKategori;
@@ -21,7 +21,7 @@ class PortofolioModel {
   final int matchKota;
   final int fromSavedVendor;
   final bool isSaved;
-   final bool isLiked;
+  final bool isLiked;
   final double skorTotal;
   final String contentType;
   final String thumbUrl;
@@ -30,7 +30,6 @@ class PortofolioModel {
   PortofolioModel({
     required this.noId,
     required this.idVendor,
-   
     required this.idMedia,
     required this.idMediaVendor,
     required this.idKategori,
@@ -50,7 +49,7 @@ class PortofolioModel {
     required this.matchKota,
     required this.fromSavedVendor,
     required this.isSaved,
-     required this.isLiked,
+    required this.isLiked,
     required this.skorTotal,
     required this.contentType,
     required this.thumbUrl,
@@ -59,9 +58,12 @@ class PortofolioModel {
 
   factory PortofolioModel.fromJson(Map<String, dynamic> json) {
     final mediaRaw = json['MediaUrls'] as List<dynamic>?;
+    print("CEK MEDIA URL RAW ${mediaRaw?.first}");
 
     final mediaList = mediaRaw != null
-        ? mediaRaw.map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList()
+        ? mediaRaw
+            .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+            .toList()
         : <MediaItem>[];
 
     final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
@@ -69,7 +71,6 @@ class PortofolioModel {
     return PortofolioModel(
       noId: json['No_Id']?.toString() ?? "",
       idVendor: json['Id_Vendor']?.toString() ?? "",
-      
       idMedia: json['Id_Media']?.toString() ?? "",
       idMediaVendor: json['Id_Media_Vendor']?.toString() ?? "",
       idKategori: json['Id_Kategori']?.toString() ?? "",
@@ -79,22 +80,26 @@ class PortofolioModel {
       idPaket: (json['Id_Paket'] is List)
           ? (json['Id_Paket'] as List).map((e) => e.toString()).toList()
           : [],
-      tglCreated: DateTime.tryParse(json['Tgl_Created']?.toString() ?? "") ?? DateTime(2000),
+      tglCreated: DateTime.tryParse(json['Tgl_Created']?.toString() ?? "") ??
+          DateTime(2000),
       jumlahPaket: json['Jumlah_Paket'] is int ? json['Jumlah_Paket'] : 0,
       status: json['Status']?.toString() ?? "",
       ratingVendor: (json['Rating_Vendor'] is num)
           ? (json['Rating_Vendor'] as num).toDouble()
           : 0.0,
-      hargaMinPaket: (json['Harga_Min_Paket'] is num) ? json['Harga_Min_Paket'] : 0,
-      hargaMaxPaket: (json['Harga_Max_Paket'] is num) ? json['Harga_Max_Paket'] : 0,
-      jumlahPortofolio: json['Jumlah_Portofolio'] is int ? json['Jumlah_Portofolio'] : 0,
+      hargaMinPaket:
+          (json['Harga_Min_Paket'] is num) ? json['Harga_Min_Paket'] : 0,
+      hargaMaxPaket:
+          (json['Harga_Max_Paket'] is num) ? json['Harga_Max_Paket'] : 0,
+      jumlahPortofolio:
+          json['Jumlah_Portofolio'] is int ? json['Jumlah_Portofolio'] : 0,
       likes: json['Likes'] is int ? json['Likes'] : 0,
       saves: json['Saves'] is int ? json['Saves'] : 0,
       matchKota: json['Match_Kota'] is int ? json['Match_Kota'] : 0,
       fromSavedVendor:
           json['From_Saved_Vendor'] is int ? json['From_Saved_Vendor'] : 0,
       isSaved: json['Is_Saved'] == true,
-        isLiked: json['Is_Liked'] == true,
+      isLiked: json['Is_Liked'] == true,
       skorTotal: (json['Skor_Total'] is num)
           ? (json['Skor_Total'] as num).toDouble()
           : 0.0,
@@ -149,7 +154,7 @@ class MediaItem {
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
     return MediaItem(
-      url: json['Url']?.toString(),
+      url: json['Id_Media']?.toString(),
       contentType: json['ContentType']?.toString(),
       thumbUrl: json['ThumbUrl']?.toString(),
     );

@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
-import 'package:mpjnew/src/pages/fotografi_user/fotographerbio.dart';
-import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -101,14 +99,6 @@ class NavigationProvider with ChangeNotifier {
 
       // 4️⃣ Reset navigation index atau state lain
       clearSelectedIndex();
-
-      // 5️⃣ Terakhir, baru arahkan ke halaman login / pilih role
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => Ecommerce_MenuUtama()),
-          (route) => false,
-        );
-      }
 
       print("===== [handleLogout] Selesai ====");
     } catch (e, s) {
@@ -329,7 +319,7 @@ class NavigationProvider with ChangeNotifier {
     String? noIdVendor;
 
     if (page is SinglePostPage) noIdPortofolio = page.noId;
-    if (page is PhotographerBio) noIdVendor = page.idVendor;
+    if (page is VendorBioPage) noIdVendor = page.idVendor;
 
     print("====================== TARGET: $targetPage");
 

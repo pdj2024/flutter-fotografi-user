@@ -1,10 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'fotographerbio.dart';
 import '../providers/custom_back_button.dart';
 import '../../core/routing/navigation_provider.dart';
 import 'single_chat.dart';
@@ -96,7 +96,7 @@ class SingleOrder extends StatelessWidget {
       onTap: () {
         // Aksi saat klik avatar + nama
        context.read<NavigationProvider>().navigateToPage(
-                          context, PhotographerBio(idVendor: 'ven_100',), targetTabIndex:0, );  //Ubah idVendor agar sesuai dengan data yang ada
+                          context, VendorBioPage(idVendor: 'ven_100',), targetTabIndex:0, );  //Ubah idVendor agar sesuai dengan data yang ada
         // Navigasi ke profil atau lainnya bisa ditaruh di sini
       },
       child: Row(

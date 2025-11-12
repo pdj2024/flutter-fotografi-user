@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
@@ -10,7 +11,6 @@ import '../../core/routing/navigation_provider.dart';
 import '../../features/auth/services/user_provider.dart';
 import '../../data/models/portofolio_model.dart';
 import '../../data/models/kategori_model.dart';
-import 'fotographerbio.dart';
 import 'singlepage.dart';
 
 class EcommerceHome extends StatefulWidget {
@@ -376,9 +376,9 @@ class _EcommerceHomeState extends State<EcommerceHome> {
           GestureDetector(
             onTap: () => nav.navigateToPage(
               context,
-              PhotographerBio(idVendor: idVendor),
+              VendorBioPage(idVendor: idVendor),
               targetTabIndex: 0,
-              targetPage: 'PhotographerBio',
+              targetPage: 'VendorBioPage',
             ),
             child: Padding(
               padding: const EdgeInsets.all(12),

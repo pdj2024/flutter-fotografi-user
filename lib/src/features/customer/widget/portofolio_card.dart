@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/pages/fotografi_user/fotographerbio.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
 import 'package:provider/provider.dart';
 
@@ -83,9 +83,9 @@ class PortofolioCard extends StatelessWidget {
           GestureDetector(
             onTap: () => nav.navigateToPage(
               context,
-              PhotographerBio(idVendor: idVendor),
+              VendorBioPage(idVendor: idVendor),
               targetTabIndex: 0,
-              targetPage: 'PhotographerBio',
+              targetPage: 'VendorBioPage',
             ),
             child: Padding(
               padding: const EdgeInsets.all(12),
