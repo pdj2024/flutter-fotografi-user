@@ -1,7 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/kategori_provider.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/__kategori_provider.dart';
 
 import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
@@ -12,7 +13,6 @@ import 'services/portofolio_service.dart';
 import 'singlepage.dart';
 import '../../features/auth/view/user_login.dart';
 import 'filter_overlay.dart';
-import 'fotographerbio.dart';
 import '../../core/routing/navigation_provider.dart';
 
 
@@ -264,9 +264,9 @@ print("======= LOAD DATA: MAX $maxPrice");
           GestureDetector(
             onTap: () => context.read<NavigationProvider>().navigateToPage(
                   context,
-                  PhotographerBio(idVendor: idVendor),
+                  VendorBioPage(idVendor: idVendor),
                   targetTabIndex: 0,
-                  targetPage: "PhotographerBio",
+                  targetPage: "VendorBioPage",
                 ),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -379,11 +379,11 @@ print("======= LOAD DATA: MAX $maxPrice");
         GestureDetector(
           onTap: () => context.read<NavigationProvider>().navigateToPage(
                 context,
-                PhotographerBio(
+                VendorBioPage(
                   idVendor: idVendor,
                 ),
                 targetTabIndex: 0,
-                targetPage: "PhotographerBio",
+                targetPage: "VendorBioPage",
               ),
           child: Row(
             children: [

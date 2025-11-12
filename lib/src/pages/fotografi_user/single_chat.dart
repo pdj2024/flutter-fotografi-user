@@ -2,15 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/detil_bayar.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/chat_service.dart';
 
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'fotographerbio.dart';
 import '../providers/custom_back_button.dart';
 import '../../core/routing/navigation_provider.dart';
 
@@ -207,7 +206,7 @@ class _SingleChatState extends State<SingleChat> {
           onTap: () {
             context.read<NavigationProvider>().navigateToPage(
                   context,
-                  PhotographerBio(idVendor: _roomInfo?['Id_Lawan'] ?? widget.id_lawan),
+                  VendorBioPage(idVendor: _roomInfo?['Id_Lawan'] ?? widget.id_lawan),
                   targetTabIndex: 0,
                 );
           },

@@ -29,6 +29,7 @@ class PortofolioProvider with ChangeNotifier {
   }) async {
     _isLoadingPorto = true;
     _errorPorto = null;
+    print("==== Memuat portofolio...");
     notifyListeners();
 
     try {
@@ -39,11 +40,13 @@ class PortofolioProvider with ChangeNotifier {
       print("==== USER ID: $userId");
 
       // Panggil service untuk ambil data
+      print("==== Memuat getall portofolio...");
       final result = await portofolioService.getAll(
         id_customer: userId,
         status: status,
         untuk_keperluan: untukKeperluan,
       );
+      print("CEK MEDIA URL ${result.first.mediaUrls.first.url}");
 
       _portofolioList = result;
     } catch (e) {
@@ -51,6 +54,7 @@ class PortofolioProvider with ChangeNotifier {
       _errorPorto = "Error memuat portofolio";
     } finally {
       _isLoadingPorto = false;
+      print("==== Selesai memuat portofolio");
       notifyListeners();
     }
   }

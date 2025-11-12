@@ -2,171 +2,163 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/pages/fotografi_user/fotographerbio.dart';
-import 'package:mpjnew/src/features/auth/view/pilih_role.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/services/user_provider.dart';
 import '../../pages/fotografi_user/singlepage.dart';
 import '../../features/auth/view/user_login.dart';
-import '../../pages/fotografi_vendor/biodata.dart';
-import '../../pages/fotografi_vendor/vendor_login.dart';
-import '../../pages/fotografi_vendor/vendor_menutama.dart';
-import '../../pages/fotografi_vendor/vendor_status.dart';
 import '../../features/auth/services/auth_service.dart';
 
 class NavigationProvider with ChangeNotifier {
   // ─────────────── State
   int _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
- 
+
 //  bool get _isLoggedIn => FirebaseAuth.instance.currentUser != null;
 
- void clearSelectedIndex() async {
-   
-      _selectedIndex = 0;
-      notifyListeners();
-   
+  void clearSelectedIndex() async {
+    _selectedIndex = 0;
+    notifyListeners();
   }
 
- Future<void> saveStatusUser(String status) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('status_user', status);
-}
+  Future<void> saveStatusUser(String status) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('status_user', status);
+  }
 
-Future<String?> getStatusUser() async {
-  final prefs = await SharedPreferences.getInstance();
-  return 'aktif';
-  //return prefs.getString('status_user');
-}
+  Future<String?> getStatusUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return 'aktif';
+    //return prefs.getString('status_user');
+  }
 
-  
-Future<void> checkLogin(BuildContext context, String role, {Type? currentPage}) async {
-  print("===== [checkLogin] start for role: $role");
+  Future<void> checkLogin(BuildContext context, String role,
+      {Type? currentPage}) async {
+    print("===== [checkLogin] start for role: $role");
 
-  final auth = AuthService();
-  String? idToken;
+    final auth = AuthService();
+    String? idToken;
 
-  // 🔍 Cek token dari cache atau silent login
-  idToken = await auth.getIdToken(forceRefresh: false);
-
-  if (idToken == null) {
-    print("===== [checkLogin] user belum login, coba silent login...");
-    idToken = await auth.login(silent: true);
+    // 🔍 Cek token dari cache atau silent login
+    idToken = await auth.getIdToken(forceRefresh: false);
 
     if (idToken == null) {
-      print("===== [checkLogin] silent login gagal, redirect ke halaman login");
+      print("===== [checkLogin] user belum login, coba silent login...");
+      idToken = await auth.login(silent: true);
 
-      if (role == Constants.vendor) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const VendorLogin()));
-      } else {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const UserLogin()));
+      if (idToken == null) {
+        print(
+            "===== [checkLogin] silent login gagal, redirect ke halaman login");
+
+        if (role == Constants.customer) {
+          Navigator.pushReplacement(
+              context, MaterialPageRoute(builder: (_) => const UserLogin()));
+        }
+        return;
       }
-      return;
-    }
-  } else {
-    print("===== [checkLogin] sudah login, pakai token cache");
-  }
-
-  print("===== [checkLogin] ambil status user dari backend");
-  final status = await checkStatusUser(idToken, role);
-
-  if (status.toLowerCase() == 'nonaktif') {
-    print("===== [checkLogin] status == nonaktif, redirect ke VendorStatus");
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const VendorStatus()));
-    return;
-  } else {
-    print("===== [checkLogin] sudah aktif, lanjut ke halaman saat ini");
-  }
-
-  notifyListeners();
-
-  // ⛔ Jangan redirect ke halaman yang sama
-  print("===== [checkLogin] selesai");
-}
-
-
-Future<void> handleLogout(BuildContext context) async {
-  print("===== [handleLogout] Mulai logout");
-
-  // Logout dari Google
-  await AuthService().logout();
-  print("===== [handleLogout] Logout dari Google selesai");
-
-  // Clear SharedPreferences (role dan status user)
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('role');
-  await prefs.remove('statusUser');
-  print("===== [handleLogout] SharedPreferences dibersihkan");
-
-  Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-  MaterialPageRoute(builder: (_) => const PilihRole()),
-  (route) => false,
-);
-
- clearSelectedIndex();
-
-
-
-  print("===== [handleLogout] Selesai");
-}
-
-
-
-Future<String> checkStatusUser(String idToken, String role) async {
-  // Kirim idToken ke API dan cek status user di backend
-  final status = 'aktif';// await fetchUserStatusFromApi(idToken, role);
-
-  return status;
-}
-
-
-Future<void> saveRole(String role) async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('role', role);
-
-      apiClient.setRole(role);
-}
-Future<String?> getRole() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('role');
-}
-
-String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-
-  if (date == null) {
-    date = now;
-  }
-
-  final messageDate = DateTime(date.year, date.month, date.day);
-
-  if (messageDate == today) {
-    if (showTodaysJam) {
-      // Tampilkan jam
-      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
     } else {
-      return "Hari ini";
+      print("===== [checkLogin] sudah login, pakai token cache");
+    }
+
+    print("===== [checkLogin] ambil status user dari backend");
+    final status = await checkStatusUser(idToken, role);
+
+    if (status.toLowerCase() == 'nonaktif') {
+      print("===== [checkLogin] status == nonaktif, redirect ke VendorStatus");
+      // Navigator.pushReplacement(
+      //     context, MaterialPageRoute(builder: (_) => const VendorStatus()));
+      return;
+    } else {
+      print("===== [checkLogin] sudah aktif, lanjut ke halaman saat ini");
+    }
+
+    notifyListeners();
+
+    // ⛔ Jangan redirect ke halaman yang sama
+    print("===== [checkLogin] selesai");
+  }
+
+  Future<void> handleLogout(BuildContext context) async {
+    print("===== [handleLogout] Mulai logout");
+
+    try {
+      // 1️⃣ Hapus semua data lokal dulu (role, status user, dsb)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('role');
+      await prefs.remove('statusUser');
+      print("===== [handleLogout] SharedPreferences dibersihkan");
+
+      // 2️⃣ Hapus role dari API client agar header ikut bersih
+      apiClient.clearRole();
+
+      // 3️⃣ Logout dari Google
+      await AuthService().logout();
+      print("===== [handleLogout] Logout Google selesai");
+
+      // 4️⃣ Reset navigation index atau state lain
+      clearSelectedIndex();
+
+      print("===== [handleLogout] Selesai ====");
+    } catch (e, s) {
+      print("❌ Error saat handleLogout: $e");
+      print(s);
     }
   }
 
-  if (messageDate == today.subtract(const Duration(days: 1))) {
-    return "Kemarin";
+  Future<String> checkStatusUser(String idToken, String role) async {
+    // Kirim idToken ke API dan cek status user di backend
+    final status = 'aktif'; // await fetchUserStatusFromApi(idToken, role);
+
+    return status;
   }
 
-  // Format dengan singkatan bulan dan locale Indonesia
-  return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
-}
+  Future<void> saveRole(String role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('role', role);
 
-void setSelectedIndex(int index) {
+    apiClient.setRole(role);
+  }
+
+  Future<String?> getRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('role');
+  }
+
+  String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (date == null) {
+      date = now;
+    }
+
+    final messageDate = DateTime(date.year, date.month, date.day);
+
+    if (messageDate == today) {
+      if (showTodaysJam) {
+        // Tampilkan jam
+        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      } else {
+        return "Hari ini";
+      }
+    }
+
+    if (messageDate == today.subtract(const Duration(days: 1))) {
+      return "Kemarin";
+    }
+
+    // Format dengan singkatan bulan dan locale Indonesia
+    return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
+  }
+
+  void setSelectedIndex(int index) {
     if (_selectedIndex != index) {
       _selectedIndex = index;
       notifyListeners();
     }
   }
-
 
   final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
     3,
@@ -224,7 +216,7 @@ void setSelectedIndex(int index) {
   }
 
   void onItemTappedVendor(int index, BuildContext context) {
-    if (context.read<UserProvider>().userId != null  || index == 0) {
+    if (context.read<UserProvider>().userId != null || index == 0) {
       // Asumsi tab pertama tidak perlu login (misalnya Home)
       if (_selectedIndex != index) {
         _selectedIndex = index;
@@ -315,133 +307,69 @@ void setSelectedIndex(int index) {
         img;
   }
 
-Future<void> navigateToPage(
-  BuildContext context,
-  Widget page, {
-  int targetTabIndex = 0,
-  bool hrsLogin = true,
-  String targetPage = 'EcommerceHome',
-  String searchPageArg = '',
-}) async {
-  String? noIdPortofolio;
-  String? noIdVendor;
+  Future<void> navigateToPage(
+    BuildContext context,
+    Widget page, {
+    int targetTabIndex = 0,
+    bool hrsLogin = true,
+    String targetPage = 'EcommerceHome',
+    String searchPageArg = '',
+  }) async {
+    String? noIdPortofolio;
+    String? noIdVendor;
 
-  if (page is SinglePostPage) noIdPortofolio = page.noId;
-  if (page is PhotographerBio) noIdVendor = page.idVendor;
+    if (page is SinglePostPage) noIdPortofolio = page.noId;
+    if (page is VendorBioPage) noIdVendor = page.idVendor;
 
-  print("====================== TARGET: $targetPage");
+    print("====================== TARGET: $targetPage");
 
-  // ✅ Cek login dari AuthService, bukan dari _isLoggedIn yang tidak akurat
-  final idToken = await AuthService().getIdToken(); // atau authKeGoogle(silent: true)
-  final sudahLogin = idToken != null;
+    // ✅ Cek login dari AuthService, bukan dari _isLoggedIn yang tidak akurat
+    final idToken =
+        await AuthService().getIdToken(); // atau authKeGoogle(silent: true)
+    final sudahLogin = idToken != null;
 
-  if (!sudahLogin && hrsLogin) {
-    print("🔒 BELUM LOGIN, redirect ke UserLogin");
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => UserLogin(),
-        settings: RouteSettings(arguments: {
-          'targetPage': targetPage,
-          'tabIndex': targetTabIndex,
-          'noIdPortofolio': noIdPortofolio,
-          'noIdVendor': noIdVendor,
-          'searchPageArg': searchPageArg,
-        }),
-      ),
-    );
-    return;
-  }
-
-  print("✅ SUDAH LOGIN");
-  print("==== HISTORY: $_navigationHistory");
-
-  int targetIndex = targetTabIndex;
-
-   print("🔑 navigatorKeys[targetIndex].currentState: ${navigatorKeys[targetIndex].currentState}");
-
-  navigatorKeys[targetIndex].currentState?.push(
-    MaterialPageRoute(builder: (_) => page),
-  );
-  await Future.delayed(const Duration(milliseconds: 50));
-
-  _selectedIndex = targetIndex;
-  _navigationHistory.add(targetIndex);
-  notifyListeners();
-}
-
-
-
-  Future<void> vendorNavigateToPage(BuildContext context, Widget page,
-      {int targetTabIndex = 0,
-      bool hrsLogin = true,
-      String targetPage = 'VendorHome'}) async {
-    if (context.read<UserProvider>().userId == null  && hrsLogin) {
-      // Menggunakan root navigator agar login tampil di layar penuh terpisah
+    if (!sudahLogin && hrsLogin) {
+      print("🔒 BELUM LOGIN, redirect ke UserLogin");
       Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
-          builder: (context) => VendorLogin(),
+          builder: (_) => UserLogin(),
           settings: RouteSettings(arguments: {
             'targetPage': targetPage,
             'tabIndex': targetTabIndex,
+            'noIdPortofolio': noIdPortofolio,
+            'noIdVendor': noIdVendor,
+            'searchPageArg': searchPageArg,
           }),
         ),
       );
       return;
     }
 
+    print("✅ SUDAH LOGIN");
+    print("==== HISTORY: $_navigationHistory");
+
     int targetIndex = targetTabIndex;
 
+    print(
+        "🔑 navigatorKeys[targetIndex].currentState: ${navigatorKeys[targetIndex].currentState}");
+
     navigatorKeys[targetIndex].currentState?.push(
-          MaterialPageRoute(builder: (context) => page),
+          MaterialPageRoute(builder: (_) => page),
         );
-    await Future.delayed(Duration(milliseconds: 50));
+    await Future.delayed(const Duration(milliseconds: 50));
 
     _selectedIndex = targetIndex;
-    _navigationHistory.add(targetIndex); // <== INI BENAR
+    _navigationHistory.add(targetIndex);
     notifyListeners();
   }
 
-  
 
- 
-
-  Future<void> startNavigateVendor(BuildContext context) async {
-  final status = (await getStatusUser())?.toLowerCase();
-
-  print("====== STATUS: $status");
-
-  switch (status) {
-    case 'notregistered':
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => BiodataPage()),
-      );
-      break;
-    case 'pending':
-    case 'rejected':
-    case 'nonaktif':
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => VendorStatus()),
-      );
-      break;
-    case 'aktif':
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => Vendor_MenuUtama()),
-      );
-      break;
-    default:
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Status tidak dikenali: $status')),
-      );
+  String? getMediaUrl(dynamic p) {
+    final mediaList = p.mediaUrls ?? [];
+    final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
+    final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
+    return isVideo
+        ? (firstMedia?.thumbUrl ?? firstMedia?.url)
+        : firstMedia?.url;
   }
-}
-
-String? getMediaUrl(dynamic p) {
-  final mediaList = p.mediaUrls ?? [];
-  final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-  final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
-  return isVideo
-      ? (firstMedia?.thumbUrl ?? firstMedia?.url)
-      : firstMedia?.url;
-}
-
 }

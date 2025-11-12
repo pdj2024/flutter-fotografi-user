@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../core/routing/navigation_provider.dart';
 import '../providers/custom_back_button.dart';
 
-import 'fotographerbio.dart';
-import '../../data/models/portofolio_model.dart';
 import '../../data/models/paket_model.dart';
 import '../../features/auth/services/user_provider.dart';
 import 'services/portofolio_service.dart';
 import 'services/paket_service.dart';
-import 'single_chat.dart';
 
 class SinglePostPage extends StatefulWidget {
   final String noId;
@@ -199,7 +197,7 @@ Widget _buildVendorHeader(Map<String, dynamic> data) {
           child: GestureDetector(
             onTap: () => context.read<NavigationProvider>().navigateToPage(
                   context,
-                  PhotographerBio(idVendor: data['Id_Vendor']),
+                  VendorBioPage(idVendor: data['Id_Vendor']),
                   targetTabIndex: 0,
                 ),
             child: Row(

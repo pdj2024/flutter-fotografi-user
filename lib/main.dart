@@ -14,23 +14,15 @@ import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
-import 'package:mpjnew/src/pages/fotografi_vendor/biodata.dart';
 import 'package:provider/provider.dart';
 
 import 'src/features/auth/services/user_provider.dart';
 import 'src/pages/fotografi_user/services/customer_service.dart';
 import 'src/features/auth/services/auth_service.dart';
 import 'src/core/routing/navigation_provider.dart';
-import 'src/pages/fotografi_vendor/vendor_login.dart';
-import 'src/pages/fotografi_vendor/vendor_status.dart';
-import 'src/pages/fotografi_vendor/vendor_menutama.dart';
 import 'src/pages/fotografi_user/services/portofolio_service.dart';
-import 'src/features/auth/view/pilih_role.dart';
 
 import 'src/core/services/api_singleton.dart'; // ← pakai ini
-
-/// ✅ API Client: semua request HTTP lewat sini
-import 'package:http/http.dart' as http;
 
 var companyNameGlobal = 'PT. ABC';
 
@@ -144,32 +136,40 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
 
   Future<void> _loadInitialData() async {
     final nav = Provider.of<NavigationProvider>(context, listen: false);
-    // await nav.restoreLoginState(); ABAIKAN DULU
 
-    // final role = null;
-    final role = await context.read<NavigationProvider>().getRole();
+    try {
+      String? role = await nav.getRole();
+      print("================= MAIN.DART: ROLE Sebelum Logout = $role");
 
-    // Tiap buka app, logout dulu
-    await context.read<NavigationProvider>().handleLogout(context);
+      // 1️⃣ Logout dulu sepenuhnya
+      print("=== LOGOUT DIMULAI ===");
+      await nav.handleLogout(context);
+      print("=== LOGOUT SELESAI ===");
 
-    print("================= MAIN.DART: ROLE = $role");
+      // 2️⃣ Setelah logout selesai, set kembali ke Customer (untuk versi demo saja)
+      await nav.saveRole(Constants.customer);
+      print("================= MAIN.DART: ROLE = $role");
 
-    // User diarahkan memilih ROLE
-    if (role == null || role.isEmpty) {
-      _startPage = const PilihRole();
-    } else if (role == Constants.customer) {
       _startPage = const Ecommerce_MenuUtama();
-    } else if (role == Constants.vendor) {
-      _startPage = const Vendor_MenuUtama();
+
+    } catch (e, s) {
+      print("❌ Error saat init: $e");
+      print(s);
+      _startPage = const Scaffold(
+        body: Center(child: Text("Terjadi kesalahan saat memuat data")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   // ✅ Tambahkan ini supaya loading selesai dan UI update

@@ -37,13 +37,13 @@ class UserProvider with ChangeNotifier {
 
     String? get userId {
     if (_role == 'customer') return _customer?.no_id;
-    if (_role == 'vendor') return _vendor?.no_id;
+    if (_role == 'vendor') return _vendor?.noId;
     return null;
   }
 
   String get displayName {
     if (_role == 'customer') return _customer?.nama_display ?? '';
-    if (_role == 'vendor') return _vendor?.nama_display ?? '';
+    if (_role == 'vendor') return _vendor?.namaDisplay ?? '';
     return '';
   }
 

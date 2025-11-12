@@ -294,7 +294,7 @@ Future<void> fetchCategorysFromApi(String? no_id, String? query) async {
   }
 }
 
-Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
+Future<void> fetchPhotographersFromApi(String? noId, String? query) async {
 
   setState(() {
     isPhotographerLoading = true; // mulai loading
@@ -304,14 +304,14 @@ Future<void> fetchPhotographersFromApi(String? no_id, String? query) async {
     final photographerRes = await VendorService().getAll(
       orderBy: 'username',
       username: query,
-      no_id: no_id, // kalau kosong, kirim null
+      no_id: noId, // kalau kosong, kirim null
     );
 
     final lokasi = photographerRes.map((e) => {
-     'id': e.no_id,              // "ven_1", "ven_2"
-    'username': e.user_name,    // "vendA", "brandon.honanta"
-    'name': e.nama_display,     // "Vendor A", "Brandon H"
-    'avatar': e.id_media,       // URL avatar (nullable)
+     'id': e.noId,              // "ven_1", "ven_2"
+    'username': e.username,    // "vendA", "brandon.honanta"
+    'name': e.namaDisplay,     // "Vendor A", "Brandon H"
+    'avatar': e.idMedia,       // URL avatar (nullable)
     }).toList();
 
     setState(() {

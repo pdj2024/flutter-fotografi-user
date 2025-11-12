@@ -4,13 +4,11 @@ class RoleCard extends StatelessWidget {
   const RoleCard(
       {super.key,
       required this.image,
-      required this.title,
       required this.width,
       required this.height,
       required this.onTap});
-      
+
   final String image;
-  final String title;
   final double width;
   final double height;
   final VoidCallback onTap;
@@ -32,30 +30,7 @@ class RoleCard extends StatelessWidget {
         child: Stack(
           children: [
             Positioned(
-              bottom: 60,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    shadows: [
-                      Shadow(
-                        offset: Offset(0, 1),
-                        blurRadius: 2,
-                        color: Colors.grey,
-                      )
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 15,
+              bottom: 30,
               left: width * 0.15,
               right: width * 0.15,
               child: Container(
