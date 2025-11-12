@@ -35,7 +35,7 @@ class _UserLoginState extends State<UserLogin> {
 ) async {
   try {
     final provider = context.read<UserProvider>();
-    await provider.checkLoginGoogle(role: Constants.customer); // ⬅️ gunakan provider
+    await provider.checkLoginGoogle(role: Constants.customer);
 
     if (provider.customer != null) {
       // ✅ Login sukses: tutup dialog dan navigasi

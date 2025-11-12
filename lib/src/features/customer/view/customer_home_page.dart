@@ -44,14 +44,13 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Future<void> loadData() async {
     try {
-      // 1️⃣ Pastikan user sudah di-load dulu
       await _loadCustomerId();
 
-      // 2️⃣ Ambil provider yang dibutuhkan
+      if (!mounted) return;
+
       final kategoriProvider = context.read<KategoriProvider>();
       final portofolioProvider = context.read<PortofolioProvider>();
 
-      // 3️⃣ Jalankan keduanya paralel biar cepat
       await Future.wait([
         kategoriProvider.loadKategori(),
         portofolioProvider.loadPortofolio(),
@@ -70,13 +69,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   @override
   void initState() {
     super.initState();
-
-    _loadCustomerId();
     _scrollController.addListener(_onScroll);
 
-    // load data pertama kali (tidak menggunakan provider, langsung dari service)
-    Future.microtask(() {
-      loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadCustomerId();
+
+      // Jangan lanjut kalau user belum login
+      final userId = context.read<UserProvider>().userId;
+      if (userId == null || userId.isEmpty) {
+        debugPrint("⚠️ Belum login, skip loadData()");
+        return;
+      }
+
+      await loadData();
     });
   }
 

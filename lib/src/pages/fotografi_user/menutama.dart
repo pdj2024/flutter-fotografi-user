@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
 import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 import 'all_chat.dart';
 import 'all_order.dart';
-import 'home.dart';
-import '../../core/routing/navigation_provider.dart';  // Import NavigationProvider
-import 'video_player.dart';
 
 class Ecommerce_MenuUtama extends StatelessWidget {
   const Ecommerce_MenuUtama({super.key});
