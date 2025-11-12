@@ -95,7 +95,7 @@ class VendorService {
 Future<void> update(VendorModel model) async {
   final response = await apiClient.put(
     '/$controller/update',
-    queryParameters: {'no_id': model.no_id}, // Asumsinya noId adalah string di VendorModel
+    queryParameters: {'no_id': model.noId}, // Asumsinya noId adalah string di VendorModel
     body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
     headers: {'Content-Type': 'application/json'},
   );

@@ -1,68 +1,66 @@
 import 'dart:convert';
 
-import '../../../core/services/api_client.dart';
-import '../../../data/models/paket_model.dart';
+import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
 
 class PaketService {
-
-
   final String entity = 'Paket';
   final String controller = 'paket';
 
-   final ApiClient _client = apiClient; // ← pakai nama beda
+  final ApiClient _client = apiClient; // ← pakai nama beda
 
   /// GET ALL
   Future<List<PaketModel>> getAll({
-  String? noId,
-  String? namaPaket,
-  String? idVendor,
-  int? hargaMin,
-  int? hargaMax,
-  String? status,
-  String? orderBy,
-  String? orderDir,
-  List<String>? idList, // ✅ Tambahkan ini
-}) async {
-  try {
-    final response = await apiClient.get(
-      '/$controller/getAll',
-      queryParameters: {
-        if (noId != null) 'no_id': noId,
-        if (namaPaket != null) 'nama_paket': namaPaket,
-        if (idVendor != null) 'id_vendor': idVendor,
-        if (hargaMin != null) 'harga_min': hargaMin.toString(),
-        if (hargaMax != null) 'harga_max': hargaMax.toString(),
-        if (status != null) 'status': status,
-        if (orderBy != null) 'orderBy': orderBy,
-        if (orderDir != null) 'orderDir': orderDir,
-        if (idList != null && idList.isNotEmpty)
-          'idList': idList, // ✅ biarkan ini list, dio akan handle jadi idList=..&idList=..
-      },
-    );
+    String? noId,
+    String? namaPaket,
+    String? idVendor,
+    int? hargaMin,
+    int? hargaMax,
+    String? status,
+    String? orderBy,
+    String? orderDir,
+    List<String>? idList,
+  }) async {
+    try {
+      final response = await apiClient.get(
+        '/$controller/getAll',
+        queryParameters: {
+          if (noId != null) 'no_id': noId,
+          if (namaPaket != null) 'nama_paket': namaPaket,
+          if (idVendor != null) 'id_vendor': idVendor,
+          if (hargaMin != null) 'harga_min': hargaMin.toString(),
+          if (hargaMax != null) 'harga_max': hargaMax.toString(),
+          if (status != null) 'status': status,
+          if (orderBy != null) 'orderBy': orderBy,
+          if (orderDir != null) 'orderDir': orderDir,
+          if (idList != null && idList.isNotEmpty)
+            'idList':
+                idList, // ✅ biarkan ini list, dio akan handle jadi idList=..&idList=..
+        },
+      );
 
-    print('==============================');
-  print('Response Body: ${response.body}');
-  print('Status Code: ${response.statusCode}');
-  print('==============================');
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
 
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((e) => PaketModel.fromJson(e)).toList();
-    } 
-    else if (response.statusCode == 204) {
+      if (response.statusCode == 200) {
+        final dataRaw = jsonDecode(response.body);
+        final List<PaketModel> data = (dataRaw['Data'] as List)
+            .map((e) => PaketModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        return data;
+      } else if (response.statusCode == 204) {
         // Tidak ada data
         return [];
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
       }
-    else {
-      throw Exception('Gagal load $entity (${response.statusCode})');
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
     }
-  } catch (e) {
-    throw Exception('Error saat mengambil $entity: $e');
   }
-}
-
 
   /// CREATE
   Future<void> create(PaketModel model) async {
