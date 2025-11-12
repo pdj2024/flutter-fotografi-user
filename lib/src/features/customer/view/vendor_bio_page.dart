@@ -302,8 +302,8 @@ class _VendorBioPageState extends State<VendorBioPage> {
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 5,
+                      mainAxisSpacing: 5,
                     ),
                     itemBuilder: (context, index) {
                       final p = portofolioList[index];
@@ -327,10 +327,8 @@ class _VendorBioPageState extends State<VendorBioPage> {
                               targetTabIndex: 0);
                         },
                         child: Container(
-                          height: 100,
-                          width: 100,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(5),
                             color: Colors.blue,
                             image: !isVideo
                                 ? DecorationImage(

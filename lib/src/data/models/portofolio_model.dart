@@ -1,8 +1,7 @@
 class PortofolioModel {
   final String noId;
   final String idVendor;
-
-  final String idMedia;
+  final List<String> idMedia;
   final String idMediaVendor;
   final String idKategori;
   final String usernameVendor;
@@ -71,7 +70,9 @@ class PortofolioModel {
     return PortofolioModel(
       noId: json['No_Id']?.toString() ?? "",
       idVendor: json['Id_Vendor']?.toString() ?? "",
-      idMedia: json['Id_Media']?.toString() ?? "",
+      idMedia: (json['Id_Media'] is List)
+          ? (json['Id_Media'] as List).map((e) => e.toString()).toList()
+          : [],
       idMediaVendor: json['Id_Media_Vendor']?.toString() ?? "",
       idKategori: json['Id_Kategori']?.toString() ?? "",
       usernameVendor: json['Username_Vendor']?.toString() ?? "",
@@ -145,11 +146,19 @@ class MediaItem {
   final String? url;
   final String? contentType;
   final String? thumbUrl;
+  final String? noIdMedia;
+  final bool? isCompressed;
+  final int? size;
+  final DateTime? expiredAt;
 
   MediaItem({
     this.url,
     this.contentType,
     this.thumbUrl,
+    this.noIdMedia,
+    this.isCompressed,
+    this.size,
+    this.expiredAt,
   });
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -157,14 +166,22 @@ class MediaItem {
       url: json['Id_Media']?.toString(),
       contentType: json['ContentType']?.toString(),
       thumbUrl: json['ThumbUrl']?.toString(),
+      noIdMedia: json['No_Id_Media']?.toString(),
+      isCompressed: json['IsCompressed'] == true,
+      size: json['Size'] is int ? json['Size'] : null,
+      expiredAt: DateTime.tryParse(json['Expired_At']?.toString() ?? ""),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'Url': url,
+      'Id_Media': url,
       'ContentType': contentType,
       'ThumbUrl': thumbUrl,
+      'No_Id_Media': noIdMedia,
+      'IsCompressed': isCompressed,
+      'Size': size,
+      'Expired_At': expiredAt?.toIso8601String(),
     };
   }
 }
