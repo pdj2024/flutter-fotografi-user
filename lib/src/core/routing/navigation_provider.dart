@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/services/user_provider.dart';
-import '../../pages/fotografi_user/singlepage.dart';
 import '../../features/auth/view/user_login.dart';
 import '../../features/auth/services/auth_service.dart';
 

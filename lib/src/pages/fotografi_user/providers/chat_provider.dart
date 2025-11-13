@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:path/path.dart';
 
-import '../../../core/routing/navigation_provider.dart';
 import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {
@@ -36,6 +34,7 @@ class ChatProvider extends ChangeNotifier {
     if (userId.isEmpty) return;
 
     _currentUserId = userId;
+    print("===== Current User ID: " + _currentUserId.toString());
 
     final cobaConnect = await _chatService.connect(userId, apiClient);
     if (cobaConnect != 99) {

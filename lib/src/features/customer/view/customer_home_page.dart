@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/kategori_section.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_section.dart';
-import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:provider/provider.dart';
 
 class CustomerHomePage extends StatefulWidget {
@@ -44,6 +44,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Future<void> loadData() async {
     try {
+      // Pastikan userId sudah di-load
       await _loadCustomerId();
 
       if (!mounted) return;
@@ -51,18 +52,26 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       final kategoriProvider = context.read<KategoriProvider>();
       final portofolioProvider = context.read<PortofolioProvider>();
 
+      debugPrint("🔄 Memuat kategori & portofolio...");
+
+      // Jalankan keduanya paralel, tapi tetap aman
       await Future.wait([
         kategoriProvider.loadKategori(),
-        portofolioProvider.loadPortofolio(),
+        portofolioProvider.loadPortofolio(context),
       ]);
 
-      print("✅ Refresh sukses: kategori & portofolio diperbarui");
+      if (!mounted) return;
+
+      debugPrint("✅ Refresh sukses: kategori & portofolio diperbarui");
     } catch (e, st) {
-      print("❌ Error saat refresh: $e");
+      debugPrint("❌ Error saat refresh: $e");
       debugPrintStack(stackTrace: st);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gagal memuat ulang data")),
-      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal memuat ulang data")),
+        );
+      }
     }
   }
 
@@ -74,24 +83,17 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadCustomerId();
 
-      // Jangan lanjut kalau user belum login
+      if (!mounted) return;
+
       final userId = context.read<UserProvider>().userId;
       if (userId == null || userId.isEmpty) {
         debugPrint("⚠️ Belum login, skip loadData()");
         return;
       }
 
+      // 🔒 Pastikan hanya 1 pemanggilan data di awal
       await loadData();
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!firstBuild) {
-      loadData();
-    }
-    firstBuild = false;
   }
 
   @override

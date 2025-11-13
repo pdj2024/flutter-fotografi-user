@@ -3,9 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/menutama.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
@@ -52,15 +52,9 @@ void main() async {
         ),
 
         // Provider untuk portofolio yang mengambil userProvider dari atasnya
-        ChangeNotifierProxyProvider<UserProvider, PortofolioProvider>(
-          create: (context) => PortofolioProvider(
+        ChangeNotifierProvider(
+          create: (_) => PortofolioProvider(
             portofolioService: PortofolioService(),
-            userProvider: context.read<UserProvider>(),
-          ),
-          update: (context, userProvider, previous) => PortofolioProvider(
-            portofolioService:
-                previous?.portofolioService ?? PortofolioService(),
-            userProvider: userProvider,
           ),
         ),
 
@@ -157,8 +151,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       await nav.saveRole(Constants.customer);
       print("================= MAIN.DART: ROLE = $role");
 
-      _startPage = const Ecommerce_MenuUtama();
-
+      _startPage = const MainMenu();
     } catch (e, s) {
       print("❌ Error saat init: $e");
       print(s);

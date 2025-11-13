@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
+import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 import 'package:provider/provider.dart';
-import 'all_chat.dart';
-import 'all_order.dart';
 
-class Ecommerce_MenuUtama extends StatelessWidget {
-  const Ecommerce_MenuUtama({super.key});
+class MainMenu extends StatefulWidget {
+  const MainMenu({super.key});
 
+  @override
+  State<MainMenu> createState() => _MainMenuState();
+}
+
+class _MainMenuState extends State<MainMenu> {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -18,13 +23,13 @@ class Ecommerce_MenuUtama extends StatelessWidget {
         return await provider.onWillPop();
       },
       child: Scaffold(
-        key: const PageStorageKey('EcommerceMenuUtama'),
+        key: const PageStorageKey('MainMenu'),
         body: Consumer<NavigationProvider>(
           builder: (context, navigationProvider, child) {
             return Stack(
               children: [
                 _buildOffstageNavigator(0, CustomerHomePage()),
-                _buildOffstageNavigator(1, AllChat()),
+                _buildOffstageNavigator(1, ChatListPage()),
                 _buildOffstageNavigator(2, AllOrder()),
               ],
             );

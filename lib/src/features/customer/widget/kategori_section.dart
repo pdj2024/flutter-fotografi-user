@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/kategori_button.dart';
-import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:provider/provider.dart';
 
 class KategoriSection extends StatefulWidget {
@@ -63,7 +63,10 @@ class _KategoriSectionState extends State<KategoriSection> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
               maxPerRow,
-              (i) => ShimmerPlaceholder(width: 56, height: 56, radius: 28),
+              (i) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: ShimmerPlaceholder(width: 56, height: 56, radius: 28),
+              ),
             ),
           )
         else if (error != null)

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_card.dart';
-import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioSection extends StatefulWidget {
@@ -19,7 +19,8 @@ class _PortofolioSectionState extends State<PortofolioSection> {
   void initState() {
     super.initState();
     // ambil data kategori dari provider saat pertama kali build
-    Future.microtask(() => context.read<PortofolioProvider>().loadPortofolio());
+    Future.microtask(
+        () => context.read<PortofolioProvider>().loadPortofolio(context));
   }
 
   @override
@@ -85,8 +86,9 @@ class _PortofolioSectionState extends State<PortofolioSection> {
                     Text('Error: $error'),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: () =>
-                          context.read<PortofolioProvider>().loadPortofolio(),
+                      onPressed: () => context
+                          .read<PortofolioProvider>()
+                          .loadPortofolio(context),
                       child: const Text('Coba Lagi'),
                     ),
                   ],
@@ -110,8 +112,6 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               itemBuilder: (context, index) {
                 final p = portofolioList[index];
                 final String? mediaUrl = p.mediaUrls.first.url;
-
-                
 
                 // final String? mediaUrl =
                 //     context.read<NavigationProvider>().getMediaUrl(p) ?? '';

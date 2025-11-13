@@ -57,7 +57,6 @@ class PortofolioModel {
 
   factory PortofolioModel.fromJson(Map<String, dynamic> json) {
     final mediaRaw = json['MediaUrls'] as List<dynamic>?;
-    print("CEK MEDIA URL RAW ${mediaRaw?.first}");
 
     final mediaList = mediaRaw != null
         ? mediaRaw

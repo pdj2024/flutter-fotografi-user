@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
+import 'package:provider/provider.dart';
 
 class PortofolioProvider with ChangeNotifier {
   final PortofolioService portofolioService;
-  final UserProvider userProvider;
 
-  PortofolioProvider(
-      {required this.portofolioService, required this.userProvider});
+  bool _disposed = false;
+
+  PortofolioProvider({required this.portofolioService});
 
   // ===== Variables =====
   List<PortofolioModel> _portofolioList = [];
@@ -22,31 +23,40 @@ class PortofolioProvider with ChangeNotifier {
 
   // ===== Actions =====
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
   /// Ambil data portofolio dari API
-  Future<void> loadPortofolio({
+  Future<void> loadPortofolio(
+    BuildContext context, {
     String status = 'aktif',
     String untukKeperluan = 'home',
   }) async {
     _isLoadingPorto = true;
     _errorPorto = null;
     print("==== Memuat portofolio...");
-    notifyListeners();
+    safeNotify();
 
     try {
-      // Ambil userId jika role = customer
+      final userProvider = context.read<UserProvider>();
       final role = userProvider.role;
       final userId = role == 'customer' ? userProvider.userId : null;
 
       print("==== USER ID: $userId");
+      print("==== Memuat getAll portofolio...");
 
-      // Panggil service untuk ambil data
-      print("==== Memuat getall portofolio...");
       final result = await portofolioService.getAll(
         id_customer: userId,
         status: status,
         untuk_keperluan: untukKeperluan,
       );
-      print("CEK MEDIA URL ${result.first.mediaUrls.first.url}");
 
       _portofolioList = result;
     } catch (e) {
@@ -55,12 +65,12 @@ class PortofolioProvider with ChangeNotifier {
     } finally {
       _isLoadingPorto = false;
       print("==== Selesai memuat portofolio");
-      notifyListeners();
+      safeNotify();
     }
   }
 
   /// Refresh data portofolio (misal dari pull-to-refresh)
-  Future<void> refresh() async {
-    await loadPortofolio();
+  Future<void> refresh(BuildContext context) async {
+    await loadPortofolio(context);
   }
 }

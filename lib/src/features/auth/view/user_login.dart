@@ -3,15 +3,14 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
-import 'package:mpjnew/src/pages/fotografi_user/all_chat.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/services/customer_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
 import 'package:provider/provider.dart';
-
-
 
 class UserLogin extends StatefulWidget {
   const UserLogin({super.key});
@@ -22,48 +21,49 @@ class UserLogin extends StatefulWidget {
 
 class _UserLoginState extends State<UserLogin> {
   final _auth = AuthService();
-  
 
   final CustomerService _customerService = CustomerService();
 
- Future<void> handleLoginGoogle(
-  BuildContext context,
-  String targetPage,
-  int tabIndex,
-  String? noIdPortofolio,
-  String? noIdVendor,
-) async {
-  try {
-    final provider = context.read<UserProvider>();
-    await provider.checkLoginGoogle(role: Constants.customer);
+  Future<void> handleLoginGoogle(
+    BuildContext context,
+    String targetPage,
+    int tabIndex,
+    String? noIdPortofolio,
+    String? noIdVendor,
+  ) async {
+    try {
+      final provider = context.read<UserProvider>();
+      await provider.checkLoginGoogle(role: Constants.customer);
 
-    if (provider.customer != null) {
-      // ✅ Login sukses: tutup dialog dan navigasi
-      Navigator.of(context).pop();
+      // Mengambil seluruh data list chat customer
+      final userId = provider.userId;
+      await context.read<ChatProvider>().init(userId ?? '');
 
-      context.read<NavigationProvider>().navigateToPage(
-            context,
-            getPageFromString(
-              targetPage,
-              noIdPortofolio: noIdPortofolio,
-              noIdVendor: noIdVendor,
-            ),
-            targetTabIndex: tabIndex,
-          );
-    } else {
-      // ❌ Login gagal (silent atau dibatalkan)
+      if (provider.customer != null) {
+        // ✅ Login sukses: tutup dialog dan navigasi
+        Navigator.of(context).pop();
+
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              getPageFromString(
+                targetPage,
+                noIdPortofolio: noIdPortofolio,
+                noIdVendor: noIdVendor,
+              ),
+              targetTabIndex: tabIndex,
+            );
+      } else {
+        // ❌ Login gagal (silent atau dibatalkan)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Login gagal atau dibatalkan.")),
+        );
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Login gagal atau dibatalkan.")),
+        SnackBar(content: Text("Terjadi kesalahan saat login: $e")),
       );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Terjadi kesalahan saat login: $e")),
-    );
   }
-}
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +91,7 @@ class _UserLoginState extends State<UserLogin> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 30),
-                       Image.asset(
+                      Image.asset(
                         'assets/camera_icon_transparent.png',
                         height: availableHeight * 0.07,
                       ),
@@ -103,7 +103,6 @@ class _UserLoginState extends State<UserLogin> {
                           width: screenWidth,
                           fit: BoxFit.cover,
                         ),
-                        
                       ),
                       const SizedBox(height: 30),
                       Column(
@@ -134,12 +133,11 @@ class _UserLoginState extends State<UserLogin> {
                           onPressed: () async {
                             await handleLoginGoogle(context, targetPage,
                                 tabIndex, noIdPortofolio, noIdVendor);
-                                
                           },
-                           icon: Image.asset(
-                              'assets/google_icon.png',
-                              height: 24,
-                            ),
+                          icon: Image.asset(
+                            'assets/google_icon.png',
+                            height: 24,
+                          ),
                           label: const Text(
                             'Masuk dengan Gmail',
                             style: TextStyle(fontSize: 16, color: Colors.black),
@@ -173,8 +171,6 @@ class _UserLoginState extends State<UserLogin> {
         ),
       ),
     );
-
-  
   }
 
   Widget getPageFromString(String targetPage,
@@ -192,7 +188,7 @@ class _UserLoginState extends State<UserLogin> {
       // Tambahkan halaman lain sesuai dengan kasusnya
 
       case 'Tab1':
-        return AllChat();
+        return ChatListPage();
       case 'Tab2':
         return AllOrder();
       default:

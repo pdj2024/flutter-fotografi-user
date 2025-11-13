@@ -1,17 +1,13 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
-import 'package:mpjnew/src/features/customer/view/vendor_list_package_page.dart';
-import 'package:mpjnew/src/features/customer/widget/shimmer/shimmer_vendor_bio.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
+import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
-import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
@@ -112,12 +108,29 @@ class _VendorBioPageState extends State<VendorBioPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
-        leading: CustomBackButton(),
-        title: Text(
-          vendor.username,
-          style:
-              const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        leading: isLoadingVendor
+            ? Padding(
+                padding: const EdgeInsets.all(10),
+                child: ShimmerPlaceholder(
+                  height: 20,
+                  width: 20,
+                  radius: 30,
+                ),
+              )
+            : CustomBackButton(),
+        title: isLoadingVendor
+            ? ShimmerPlaceholder(
+                height: 30,
+                width: 200,
+                radius: 5,
+              )
+            : Text(
+                vendor.username,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
@@ -130,12 +143,14 @@ class _VendorBioPageState extends State<VendorBioPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 // Vendor Bio
                 if (isLoadingVendor)
-                  ShimmerVendorBio()
-                else 
-                  VendorBioCard(vendor: vendor, isListPackagePage: false,),
+                  VendorBioShimmer()
+                else
+                  VendorBioCard(
+                    vendor: vendor,
+                    isListPackagePage: false,
+                  ),
 
                 // Vendor Portofolio
                 if (isLoadingPorto)

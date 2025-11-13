@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 
 import '../providers/custom_back_button.dart';
 import '../../core/routing/navigation_provider.dart';
-import 'single_chat.dart';
 
 class SingleOrder extends StatelessWidget {
   const SingleOrder({super.key});

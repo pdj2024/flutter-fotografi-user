@@ -4,9 +4,9 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
+import 'package:mpjnew/src/features/customer/view/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_list_package_page.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
 import 'package:provider/provider.dart';
 
 class VendorBioCard extends StatelessWidget {
@@ -113,19 +113,19 @@ class VendorBioCard extends StatelessWidget {
                                         .read<NavigationProvider>()
                                         .navigateToPage(
                                           context,
-                                          SingleChat(
-                                            // roomId dikosongin karena kemungkinan besar ini chat baru
+                                          RoomChatPage(
                                             roomId: null,
-                                            // kirim userIds lawan (vendor.id)
-                                            id_lawan: vendor.noId.toString(),
-                                            username_lawan: vendor.username,
-                                            avatar_lawan: vendor.idMedia,
+                                            partnerId: vendor.noId,
+                                            partnerUsername: vendor.username,
+                                            partnerAvatarUrl: vendor.idMedia,
                                           ),
                                           targetTabIndex: 1,
                                         );
                                   },
-                                  child: const Icon(Icons.chat_outlined,
-                                      color: Constants.primaryColor),
+                                  child: const Icon(
+                                    Icons.chat_outlined,
+                                    color: Constants.primaryColor,
+                                  ),
                                 ),
                               ),
                             ),
@@ -199,13 +199,11 @@ class VendorBioCard extends StatelessWidget {
                       onPressed: () {
                         context.read<NavigationProvider>().navigateToPage(
                               context,
-                              SingleChat(
-                                // roomId dikosongin karena kemungkinan besar ini chat baru
+                              RoomChatPage(
                                 roomId: null,
-                                // kirim userIds lawan (vendor.id)
-                                id_lawan: vendor.noId.toString(),
-                                username_lawan: vendor.username,
-                                avatar_lawan: vendor.idMedia,
+                                partnerId: vendor.noId,
+                                partnerUsername: vendor.username,
+                                partnerAvatarUrl: vendor.idMedia,
                               ),
                               targetTabIndex: 1,
                             );
