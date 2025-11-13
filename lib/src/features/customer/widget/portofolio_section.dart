@@ -19,7 +19,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
   void initState() {
     super.initState();
     // ambil data kategori dari provider saat pertama kali build
-    Future.microtask(() => context.read<PortofolioProvider>().loadPortofolio());
+    Future.microtask(() => context.read<PortofolioProvider>().loadPortofolio(context));
   }
 
   @override
@@ -86,7 +86,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
                     const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: () =>
-                          context.read<PortofolioProvider>().loadPortofolio(),
+                          context.read<PortofolioProvider>().loadPortofolio(context),
                       child: const Text('Coba Lagi'),
                     ),
                   ],

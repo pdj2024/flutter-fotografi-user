@@ -52,15 +52,9 @@ void main() async {
         ),
 
         // Provider untuk portofolio yang mengambil userProvider dari atasnya
-        ChangeNotifierProxyProvider<UserProvider, PortofolioProvider>(
-          create: (context) => PortofolioProvider(
+        ChangeNotifierProvider(
+          create: (_) => PortofolioProvider(
             portofolioService: PortofolioService(),
-            userProvider: context.read<UserProvider>(),
-          ),
-          update: (context, userProvider, previous) => PortofolioProvider(
-            portofolioService:
-                previous?.portofolioService ?? PortofolioService(),
-            userProvider: userProvider,
           ),
         ),
 
@@ -158,7 +152,6 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       print("================= MAIN.DART: ROLE = $role");
 
       _startPage = const Ecommerce_MenuUtama();
-
     } catch (e, s) {
       print("❌ Error saat init: $e");
       print(s);

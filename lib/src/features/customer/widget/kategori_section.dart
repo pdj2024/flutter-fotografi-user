@@ -63,7 +63,10 @@ class _KategoriSectionState extends State<KategoriSection> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
               maxPerRow,
-              (i) => ShimmerPlaceholder(width: 56, height: 56, radius: 28),
+              (i) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: ShimmerPlaceholder(width: 56, height: 56, radius: 28),
+              ),
             ),
           )
         else if (error != null)

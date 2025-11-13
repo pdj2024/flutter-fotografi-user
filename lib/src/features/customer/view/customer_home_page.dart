@@ -44,6 +44,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Future<void> loadData() async {
     try {
+      // Pastikan userId sudah di-load
       await _loadCustomerId();
 
       if (!mounted) return;
@@ -51,18 +52,26 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       final kategoriProvider = context.read<KategoriProvider>();
       final portofolioProvider = context.read<PortofolioProvider>();
 
+      debugPrint("🔄 Memuat kategori & portofolio...");
+
+      // Jalankan keduanya paralel, tapi tetap aman
       await Future.wait([
         kategoriProvider.loadKategori(),
-        portofolioProvider.loadPortofolio(),
+        portofolioProvider.loadPortofolio(context),
       ]);
 
-      print("✅ Refresh sukses: kategori & portofolio diperbarui");
+      if (!mounted) return;
+
+      debugPrint("✅ Refresh sukses: kategori & portofolio diperbarui");
     } catch (e, st) {
-      print("❌ Error saat refresh: $e");
+      debugPrint("❌ Error saat refresh: $e");
       debugPrintStack(stackTrace: st);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gagal memuat ulang data")),
-      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal memuat ulang data")),
+        );
+      }
     }
   }
 
@@ -74,24 +83,17 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadCustomerId();
 
-      // Jangan lanjut kalau user belum login
+      if (!mounted) return;
+
       final userId = context.read<UserProvider>().userId;
       if (userId == null || userId.isEmpty) {
         debugPrint("⚠️ Belum login, skip loadData()");
         return;
       }
 
+      // 🔒 Pastikan hanya 1 pemanggilan data di awal
       await loadData();
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!firstBuild) {
-      loadData();
-    }
-    firstBuild = false;
   }
 
   @override
