@@ -19,7 +19,8 @@ class _PortofolioSectionState extends State<PortofolioSection> {
   void initState() {
     super.initState();
     // ambil data kategori dari provider saat pertama kali build
-    Future.microtask(() => context.read<PortofolioProvider>().loadPortofolio(context));
+    Future.microtask(
+        () => context.read<PortofolioProvider>().loadPortofolio(context));
   }
 
   @override
@@ -85,8 +86,9 @@ class _PortofolioSectionState extends State<PortofolioSection> {
                     Text('Error: $error'),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: () =>
-                          context.read<PortofolioProvider>().loadPortofolio(context),
+                      onPressed: () => context
+                          .read<PortofolioProvider>()
+                          .loadPortofolio(context),
                       child: const Text('Coba Lagi'),
                     ),
                   ],
@@ -110,8 +112,6 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               itemBuilder: (context, index) {
                 final p = portofolioList[index];
                 final String? mediaUrl = p.mediaUrls.first.url;
-
-                
 
                 // final String? mediaUrl =
                 //     context.read<NavigationProvider>().getMediaUrl(p) ?? '';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/searchpage.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
@@ -11,7 +12,6 @@ import '../../core/routing/navigation_provider.dart';
 import '../../features/auth/services/user_provider.dart';
 import '../../data/models/portofolio_model.dart';
 import '../../data/models/kategori_model.dart';
-import 'singlepage.dart';
 
 class EcommerceHome extends StatefulWidget {
   const EcommerceHome({super.key});
@@ -345,7 +345,8 @@ class _EcommerceHomeState extends State<EcommerceHome> {
           GestureDetector(
             onTap: () => nav.navigateToPage(
               context,
-              SinglePostPage(noId: noId),
+              // SinglePostPage(noId: noId),
+              Container(),
               targetTabIndex: 0,
               targetPage: 'SinglePostPage',
             ),

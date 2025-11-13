@@ -1,17 +1,13 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
-import 'package:mpjnew/src/features/customer/view/vendor_list_package_page.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/widget/shimmer/shimmer_vendor_bio.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
-import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
 

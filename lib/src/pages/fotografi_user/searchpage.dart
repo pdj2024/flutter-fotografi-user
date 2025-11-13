@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/__kategori_provider.dart';
 
@@ -10,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../data/models/portofolio_model.dart';
 import 'services/portofolio_service.dart';
-import 'singlepage.dart';
 import '../../features/auth/view/user_login.dart';
 import 'filter_overlay.dart';
 import '../../core/routing/navigation_provider.dart';

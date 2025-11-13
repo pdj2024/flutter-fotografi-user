@@ -3,12 +3,12 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_chat.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 
 import 'package:mpjnew/src/pages/fotografi_user/services/customer_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/singlepage.dart';
 import 'package:provider/provider.dart';
 
 
