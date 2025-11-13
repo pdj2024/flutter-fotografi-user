@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/features/customer/view/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 
@@ -83,15 +84,16 @@ class PostHeader extends StatelessWidget {
                 padding: EdgeInsets.zero,
               ),
               onPressed: () {
-                // context.read<NavigationProvider>().navigateToPage(
-                //       context,
-                //       SingleChat(
-                //         receiverUserName: data['Username_Vendor'] ?? '',
-                //         receiverEmail: "",
-                //         receiverID: data['Id_Vendor'],
-                //       ),
-                //       targetTabIndex: 1,
-                //     );
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      RoomChatPage(
+                        roomId: null,
+                        partnerId: portofolio.idVendor,
+                        partnerUsername: portofolio.usernameVendor,
+                        partnerAvatarUrl: portofolio.idMediaVendor,
+                      ),
+                      targetTabIndex: 1,
+                    );
               },
               child: const Icon(Icons.chat_outlined,
                   color: Constants.primaryColor),

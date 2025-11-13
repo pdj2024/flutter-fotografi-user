@@ -67,7 +67,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
       // portofolioData = portofolio.toJson();
 
       final List<String> idPaketList =
-          List<String>.from(portofolio.idPaket ?? []);
+          List<String>.from(portofolio.idPaket);
 
       if (idPaketList.isNotEmpty) {
         setState(() {
