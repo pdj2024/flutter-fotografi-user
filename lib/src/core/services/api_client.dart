@@ -5,7 +5,6 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 
 import '../../features/auth/services/auth_service.dart';
 
-
 class ApiClient {
   final AuthService _authService;
   static const String baseUrl = '${Constants.baseUrl}/api';
@@ -16,19 +15,19 @@ class ApiClient {
   void setRole(String role) => _role = role;
   void clearRole() => _role = null;
   String? getRole() => _role;
-   Future<String?> getIdToken() async {
+  Future<String?> getIdToken() async {
     return await _authService.getIdToken();
   }
 
   Future<Map<String, String>> getHeaders() => _headers();
 
-
   /// GET request
   Future<http.Response> get(
     String path, {
-    Map<String,  dynamic>? queryParameters,
+    Map<String, dynamic>? queryParameters,
   }) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
     final headers = await _headers();
 
     print("📥 [GET] $uri");
@@ -44,7 +43,8 @@ class ApiClient {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
     final mergedHeaders = await _mergedHeaders(headers);
 
     Object? finalBody = body;
@@ -67,7 +67,8 @@ class ApiClient {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
     final mergedHeaders = await _mergedHeaders(headers);
 
     print("📤 [PUT] $uri");
@@ -83,7 +84,8 @@ class ApiClient {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
   }) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
     final mergedHeaders = await _mergedHeaders(headers);
 
     print("❌ [DELETE] $uri");
@@ -96,7 +98,7 @@ class ApiClient {
   Future<Map<String, String>> _headers() async {
     final token = await _authService.getIdToken(); // nullable token
 
-    debugPrint('======= MY TOKEN: $token', wrapWidth: 1024);
+    // debugPrint('======= MY TOKEN: $token', wrapWidth: 1024);
 
     return {
       'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import '../../../data/models/customer_model.dart';
 import '../../../data/models/vendor_model.dart';
 import '../../../pages/fotografi_user/services/customer_service.dart';
@@ -19,7 +20,6 @@ class UserProvider with ChangeNotifier {
         _customerService = customerService,
         _vendorService = vendorService;
 
-
   String? _role;
   CustomerModel? _customer;
   VendorModel? _vendor;
@@ -35,7 +35,7 @@ class UserProvider with ChangeNotifier {
 
   bool get isLoggedIn => _role != null;
 
-    String? get userId {
+  String? get userId {
     if (_role == 'customer') return _customer?.no_id;
     if (_role == 'vendor') return _vendor?.noId;
     return null;
@@ -48,12 +48,13 @@ class UserProvider with ChangeNotifier {
   }
 
   void setRole(String role) {
-  _role = role;
-  apiClient.setRole(role); // tetap pastikan header ikut di-set
-  notifyListeners();
-}
+    _role = role;
+    apiClient.setRole(role); // tetap pastikan header ikut di-set
+    notifyListeners();
+  }
 
-  Future<void> checkLoginGoogle({required String role, bool silent = false}) async {
+  Future<void> checkLoginGoogle(
+      {required String role, bool silent = false}) async {
     _setLoading(true);
     _error = null;
 
@@ -66,9 +67,8 @@ class UserProvider with ChangeNotifier {
         return;
       }
 
-     setRole(role); // atur X-Jenis-User: customer/vendor
+      setRole(role); // atur X-Jenis-User: customer/vendor
 
-      
       if (role == 'customer') {
         _customer = await _customerService.checkGoogleLogin();
         _vendor = null;
@@ -84,7 +84,7 @@ class UserProvider with ChangeNotifier {
     _setLoading(false);
   }
 
-    Future<void> logout() async {
+  Future<void> logout() async {
     await _authService.logout();
     _customer = null;
     _vendor = null;
@@ -92,10 +92,8 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-    void _setLoading(bool value) {
+  void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
   }
-
-
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 
-class ShimmerVendorBio extends StatelessWidget {
-  const ShimmerVendorBio({super.key});
+class VendorBioShimmer extends StatelessWidget {
+  const VendorBioShimmer({super.key});
 
   @override
   Widget build(BuildContext context) {

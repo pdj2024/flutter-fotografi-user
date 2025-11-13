@@ -4,7 +4,7 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
-import 'package:mpjnew/src/features/customer/widget/shimmer/shimmer_vendor_bio.dart';
+import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
@@ -145,7 +145,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
               children: [
                 // Vendor Bio
                 if (isLoadingVendor)
-                  ShimmerVendorBio()
+                  VendorBioShimmer()
                 else
                   VendorBioCard(
                     vendor: vendor,

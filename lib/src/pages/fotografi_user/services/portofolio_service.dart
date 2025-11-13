@@ -108,6 +108,12 @@ class PortofolioService {
       "action_type": action_type,
     };
 
+    print('==============================');
+    print('customer: $no_id');
+    print('portofolio: $id_portofolio');
+    print('action: $action_type');
+    print('==============================');
+
     final response = await apiClient.post(
       '/$controller/action',
       body: jsonEncode(body),

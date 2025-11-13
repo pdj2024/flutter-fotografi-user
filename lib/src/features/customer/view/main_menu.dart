@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
-import 'package:mpjnew/src/pages/fotografi_user/all_chat.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 import 'package:provider/provider.dart';
 
@@ -29,7 +29,7 @@ class _MainMenuState extends State<MainMenu> {
             return Stack(
               children: [
                 _buildOffstageNavigator(0, CustomerHomePage()),
-                _buildOffstageNavigator(1, AllChat()),
+                _buildOffstageNavigator(1, ChatListPage()),
                 _buildOffstageNavigator(2, AllOrder()),
               ],
             );
