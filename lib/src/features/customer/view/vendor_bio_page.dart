@@ -108,12 +108,29 @@ class _VendorBioPageState extends State<VendorBioPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
-        leading: CustomBackButton(),
-        title: Text(
-          vendor.username,
-          style:
-              const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        leading: isLoadingVendor
+            ? Padding(
+                padding: const EdgeInsets.all(10),
+                child: ShimmerPlaceholder(
+                  height: 20,
+                  width: 20,
+                  radius: 30,
+                ),
+              )
+            : CustomBackButton(),
+        title: isLoadingVendor
+            ? ShimmerPlaceholder(
+                height: 30,
+                width: 200,
+                radius: 5,
+              )
+            : Text(
+                vendor.username,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
@@ -126,12 +143,14 @@ class _VendorBioPageState extends State<VendorBioPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 // Vendor Bio
                 if (isLoadingVendor)
                   ShimmerVendorBio()
-                else 
-                  VendorBioCard(vendor: vendor, isListPackagePage: false,),
+                else
+                  VendorBioCard(
+                    vendor: vendor,
+                    isListPackagePage: false,
+                  ),
 
                 // Vendor Portofolio
                 if (isLoadingPorto)

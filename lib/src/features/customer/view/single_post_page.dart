@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
-import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/post_header.dart';
@@ -13,7 +11,6 @@ import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
 import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 class SinglePostPage extends StatefulWidget {
   final String noId;
