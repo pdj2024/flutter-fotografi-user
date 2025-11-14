@@ -62,6 +62,48 @@ class PaketService {
     }
   }
 
+  Future<PaketModel?> getPaketById({
+    String? noId,
+    String? namaPaket,
+    String? idVendor,
+    int? hargaMin,
+    int? hargaMax,
+    String? status,
+    String? orderBy,
+    String? orderDir,
+    List<String>? idList,
+  }) async {
+    try {
+      final response = await apiClient.get(
+        '/$controller/getAll',
+        queryParameters: {
+          if (noId != null) 'no_id': noId,
+        },
+      );
+
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
+
+      if (response.statusCode == 200) {
+        final dataRaw = jsonDecode(response.body);
+        final List<PaketModel> data = (dataRaw['Data'] as List)
+            .map((e) => PaketModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        return data.first;
+      } else if (response.statusCode == 204) {
+        // Tidak ada data
+        print("Tidak ada data");
+        return null;
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
+    }
+  }
+
   /// CREATE
   Future<void> create(PaketModel model) async {
     final response = await apiClient.post(

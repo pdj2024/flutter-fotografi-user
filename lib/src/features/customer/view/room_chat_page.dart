@@ -1,17 +1,18 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
-import 'package:mpjnew/src/features/customer/widget/chat_payment_card.dart';
-import 'package:mpjnew/src/pages/fotografi_user/detil_bayar.dart';
 import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
 import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
@@ -20,33 +21,65 @@ class RoomChatPage extends StatefulWidget {
   final String? partnerId;
   final String? partnerUsername;
   final String? partnerAvatarUrl;
+  final PaketModel? paket;
 
   const RoomChatPage(
       {super.key,
       this.roomId,
       this.partnerId,
       this.partnerUsername,
-      this.partnerAvatarUrl});
+      this.partnerAvatarUrl,
+      this.paket});
 
   @override
   State<RoomChatPage> createState() => _RoomChatPageState();
 }
 
-class _RoomChatPageState extends State<RoomChatPage> {
+class _RoomChatPageState extends State<RoomChatPage>
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   String? _activeRoomId;
-  Map<String, dynamic>? _roomInfo;
+  RoomChatModel? _roomInfo;
   bool _isLoading = true;
+  List<PaketModel?> _paketList = [];
 
+  PaketModel? _paket;
+
+  @override
   @override
   void initState() {
     super.initState();
-    print("===== SINGLE CHAT (room id): " + widget.roomId.toString());
-    print("===== SINGLE CHAT (user ids): " + widget.partnerId.toString());
 
-    _initChat();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      print("===== SINGLE CHAT (room id): ${widget.roomId}");
+      print("===== SINGLE CHAT (user ids): ${widget.partnerId}");
+
+      _startInit();
+
+      setState(() {
+        _paket = widget.paket;
+      });
+
+      _messageController.addListener(() {
+        setState(() {});
+      });
+    });
+  }
+
+  Future<void> _startInit() async {
+    await _initChat(); // proses dapat room + messages
+
+    final chatProv = context.read<ChatProvider>();
+    final paketProv = context.read<PaketProvider>();
+
+    final list = await paketProv
+        .fetchPaketFromRoom(chatProv.getMessages(_activeRoomId ?? ''));
+
+    setState(() {
+      _paketList = list; // simpan
+    });
   }
 
   Future<void> _initChat() async {
@@ -69,17 +102,21 @@ class _RoomChatPageState extends State<RoomChatPage> {
 
       // Jika room id kosong, maka cari room dari Parnert ID
       if (widget.roomId == null) {
+        print(
+            "==== ROOM ID (null) -> Mencoba get room lewat partner id : ${widget.partnerId}");
         final rooms = await chatProv.fetchRooms(
-          id_lawan: widget.partnerId,
+          idLawan: widget.partnerId,
         );
 
         if (rooms.isNotEmpty) {
+          print(
+              "==== ROOM ID ditemukan (${rooms.first.roomId}) -> Mengambil data chat");
+
           // ✅ ketemu existing room
           setState(() {
-            _activeRoomId = rooms.first['Room_Id'];
+            _activeRoomId = rooms.first.roomId;
             _roomInfo = rooms.first;
           });
-          await chatProv.fetchMessages(_activeRoomId!);
         } else {
           // ✅ belum ada room, tunggu sampai kirim pesan pertama
           setState(() {
@@ -91,17 +128,25 @@ class _RoomChatPageState extends State<RoomChatPage> {
 
       // Jika partner id kosong, maka cari room lewat roomId
       if (widget.partnerId == null) {
+        _activeRoomId = widget.roomId;
+
+        print(
+            "==== PARTNER ID (null) -> Mencoba get room lewat room id : ${widget.roomId}");
         final rooms = await chatProv.fetchRooms(
-          room_id: widget.roomId,
+          roomId: _activeRoomId,
         );
 
         if (rooms.isNotEmpty) {
+          print(
+              "==== MENGAMBIL DATA CHAT DARI ROOM ID (${rooms.first.roomId})");
+
           setState(() => _roomInfo = rooms.first);
         }
       }
     } catch (e) {
       print("❌ Error saat init chat: $e");
     } finally {
+      await chatProv.fetchMessages(_activeRoomId!);
       setState(() => _isLoading = false);
     }
   }
@@ -113,6 +158,7 @@ class _RoomChatPageState extends State<RoomChatPage> {
 
     final chatProv = context.read<ChatProvider>();
     final currentUserId = context.read<UserProvider>().userId ?? '';
+    bool isAskPaket = _paket != null;
 
     List<String> userIds = [];
 
@@ -126,47 +172,55 @@ class _RoomChatPageState extends State<RoomChatPage> {
 
       userIds = [
         currentUserId,
-        widget.partnerId!, // ambil lawan dari widget
+        widget.partnerId!,
       ];
     } else {
       // ✅ kalau roomInfo ada, ambil dari room
-      final ids = _roomInfo!['User_Ids'];
-      if (ids is List) {
-        userIds = ids.map((e) => e.toString()).toList();
-      }
+      final ids = _roomInfo!.userIds;
+      userIds = ids.map((e) => e.toString()).toList();
     }
 
     await chatProv.sendMessage(
       _activeRoomId ?? "", // kosong kalau new chat
       _messageController.text,
-      null, // idPaket
+      isAskPaket ? widget.paket!.no_id : null,
       null, // noInvoice
       userIds,
     );
+
+    setState(() {
+      _paket = null;
+    });
 
     _messageController.clear();
 
     // setelah kirim pesan pertama, ambil room baru
     if (_activeRoomId == null) {
       final rooms = await chatProv.fetchRooms(
-        id_lawan:
+        idLawan:
             userIds.firstWhere((id) => id != currentUserId, orElse: () => ""),
       );
       if (rooms.isNotEmpty) {
         setState(() {
-          _activeRoomId = rooms.first['Room_Id'];
+          _activeRoomId = rooms.first.roomId;
           _roomInfo = rooms.first;
         });
         await chatProv.fetchMessages(_activeRoomId!);
       }
     }
+
+    // setelah mengirim pesan get data lagi
+    print("===== fetch data message lagi setelah mengirim pesan");
+    await chatProv.fetchMessages(_activeRoomId!);
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
-    final messages =
-        _activeRoomId != null ? chatProv.getMessages(_activeRoomId!) : [];
+    final messages = chatProv.getMessages(_activeRoomId ?? '');
+    final paketList = _paketList;
+
+    print("==== SINGLE CHAT: paketList: $paketList");
 
     // auto-scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -188,7 +242,7 @@ class _RoomChatPageState extends State<RoomChatPage> {
     }
 
     final String imgUrl =
-        _roomInfo?['Id_Media_Lawan'] ?? widget.partnerAvatarUrl ?? '';
+        _roomInfo?.idMediaLawan ?? widget.partnerAvatarUrl ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -200,7 +254,9 @@ class _RoomChatPageState extends State<RoomChatPage> {
             context.read<NavigationProvider>().navigateToPage(
                   context,
                   VendorBioPage(
-                      idVendor: _roomInfo?['Id_Lawan'] ?? widget.partnerId),
+                    idVendor:
+                        _roomInfo?.idLawan ?? widget.partnerId ?? 'unknown',
+                  ),
                   targetTabIndex: 0,
                 );
           },
@@ -228,7 +284,9 @@ class _RoomChatPageState extends State<RoomChatPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _roomInfo?['Username_Lawan'] ?? widget.partnerUsername,
+                  _roomInfo?.usernameLawan ??
+                      widget.partnerUsername ??
+                      'unknown',
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
@@ -246,30 +304,19 @@ class _RoomChatPageState extends State<RoomChatPage> {
       body: Column(
         children: [
           // Daftar pesan
+          if (messages.isEmpty)
+            const Expanded(child: Center(child: Text('Belum ada pesan'))),
+
           Expanded(
             child: Builder(
               builder: (context) {
                 // urutkan pesan descending
                 final sorted = [...messages]
-                  ..sort((a, b) => b['SentAt'].compareTo(a['SentAt']));
-
-                // mapping ke ChatMessage
-                final chatMessages = sorted
-                    .map((msg) => ChatMessage(
-                          text: msg['Text'] ?? '',
-                          time: msg['SentAt'] ?? DateTime.now(),
-                          isMe: (msg['Sender']?.toString() ?? '') ==
-                              (chatProv.currentUserId ?? ''),
-                          category: msg['Category'] ?? 'chat',
-                          hargaPaket: msg['Harga_Paket'],
-                          tglRealisasi: msg['Tgl_Realisasi'],
-                          lokasiPaket: msg['Lokasi'],
-                          namaPaket: msg['Nama_Paket'],
-                        ))
-                    .toList();
+                  ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
 
                 // group per tanggal
-                final grouped = groupMessagesByDate(chatMessages);
+                final grouped = Helper.groupMessagesByDate(sorted);
+                // print("Hasil grouped: $grouped");
 
                 return ListView(
                   controller: _scrollController,
@@ -282,33 +329,60 @@ class _RoomChatPageState extends State<RoomChatPage> {
                     return [
                       ...groupMsgs.map(
                         (message) {
-                          if (message.category == "package") {
+                          bool isMe = (message.senderId) ==
+                              (chatProv.currentUserId ?? '');
+
+                          PaketModel? paket;
+
+                          if (message.idPaket != null) {
+                            final index = paketList
+                                .indexWhere((p) => p!.no_id == message.idPaket);
+                            if (index != -1) {
+                              paket = paketList[index];
+                            } else {
+                              paket = null;
+                            }
+                          }
+                          if (message.idPaket != null) {
                             return Column(
-                              crossAxisAlignment: message.isMe
+                              crossAxisAlignment: isMe
                                   ? CrossAxisAlignment.end
                                   : CrossAxisAlignment.start,
                               children: [
-                                ChatPackageCard(
-                                  namaPaket: message.namaPaket ?? '',
-                                  hargaPaket: message.hargaPaket ?? 0,
-                                  isMe: message.isMe,
-                                ),
-                                if (message.text.isNotEmpty)
-                                  ChatBubble(message: message)
+                                if (paket == null)
+                                  ShimmerPlaceholder(
+                                    width: 300,
+                                    height: 100,
+                                    radius: 10,
+                                  ),
+                                if (paket != null)
+                                  ChatPackageCard(
+                                    namaPaket: paket.nama_paket,
+                                    hargaPaket: paket.harga,
+                                    isMe: isMe,
+                                  ),
+                                if (message.message.isNotEmpty)
+                                  ChatBubble(
+                                    message: message,
+                                    isMe: isMe,
+                                  ),
                               ],
                             );
-                          } else if (message.category == "payment") {
-                            return Align(
-                              alignment: Alignment.centerLeft,
-                              child: ChatPaymentCard(
-                                harga: message.hargaPaket ?? 0,
-                                lokasi: message.lokasiPaket ?? '',
-                                tglRealisasi: message.tglRealisasi,
-                              ),
-                            );
-                          } else {
-                            return ChatBubble(message: message);
                           }
+
+                          if (message.jenisPesan == "payment" ||
+                              message.noInvoice != null) {
+                            // return ChatPaymentCard(
+                            //   harga: message.hargaPaket ?? 0,
+                            //   lokasi: message.lokasiPaket ?? '',
+                            //   tglRealisasi: message.tglRealisasi,
+                            // );
+                          }
+
+                          return ChatBubble(
+                            message: message,
+                            isMe: isMe,
+                          );
                         },
                       ),
                       // label tanggal
@@ -335,21 +409,31 @@ class _RoomChatPageState extends State<RoomChatPage> {
             ),
           ),
 
-          // Input box
+          if (widget.paket != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 15, top: 10),
+              child: ChatPackageCard(
+                namaPaket: widget.paket!.nama_paket,
+                hargaPaket: widget.paket!.harga,
+                isMe: true,
+              ),
+            ),
+
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white.withOpacity(0),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                /// TEXTFIELD YANG BISA MELEBAR SAAT SEND BUTTON HILANG
                 Expanded(
                   child: TextField(
-                    cursorColor: Constants.primaryColor,
                     controller: _messageController,
+                    cursorColor: Constants.primaryColor,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(
                           vertical: 10, horizontal: 16),
                       hintText: "Ketik pesan...",
-                      hintStyle: const TextStyle(color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFFE8E8E8),
                       border: OutlineInputBorder(
@@ -357,16 +441,34 @@ class _RoomChatPageState extends State<RoomChatPage> {
                         borderSide: BorderSide.none,
                       ),
                     ),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
+
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Constants.primaryColor),
-                  onPressed: () => _sendMessage(context),
+
+                /// ANIMASI 100% BERHASIL
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: _messageController.text.trim().isEmpty
+                      ? const SizedBox(
+                          width: 0,
+                          height: 0,
+                        )
+                      : AnimatedOpacity(
+                          opacity: 1,
+                          duration: const Duration(milliseconds: 200),
+                          child: IconButton(
+                            icon: const Icon(Icons.send,
+                                color: Constants.primaryColor),
+                            onPressed: () => _sendMessage(context),
+                          ),
+                        ),
                 ),
               ],
             ),
-          ),
+          )
         ],
       ),
     );

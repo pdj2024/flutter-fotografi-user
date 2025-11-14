@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
@@ -66,8 +65,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
 
       // portofolioData = portofolio.toJson();
 
-      final List<String> idPaketList =
-          List<String>.from(portofolio.idPaket);
+      final List<String> idPaketList = List<String>.from(portofolio.idPaket);
 
       if (idPaketList.isNotEmpty) {
         setState(() {
@@ -152,11 +150,12 @@ class _SinglePostPageState extends State<SinglePostPage> {
                             child: Text(""),
                           )
                         else
-                          ...paketList.map((paket) => OfferCard(
-                                title: paket.nama_paket,
-                                price: Helper.formatCurrency(paket.harga),
-                                rincian: paket.rincian,
-                              )),
+                          ...paketList.map(
+                            (paket) => OfferCard(
+                              paket: paket,
+                              portofolio: portofolio,
+                            ),
+                          ),
                         const SizedBox(height: 20),
                       ],
                     ),

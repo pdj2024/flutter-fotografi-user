@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
 import '../../../data/models/paket_model.dart';
 import '../services/paket_service.dart';
 
@@ -44,6 +46,49 @@ class PaketProvider with ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<List<PaketModel>> fetchPaketFromRoom(List<ChatModel> messages) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final paketServ = PaketService();
+
+      print(messages);
+
+      // 2. Kumpulkan idPaket yang tidak null
+      print("=== KUMPULKAN ID PAKET");
+      final Set<String> paketIds = {};
+
+      for (final msg in messages) {
+        if (msg.idPaket != null && msg.idPaket!.isNotEmpty) {
+          paketIds.add(msg.idPaket!);
+        }
+      }
+      print("ID Paket dalam room ini: $paketIds");
+
+      // Jika tidak ada paket, kembalikan list kosong
+      if (paketIds.isEmpty) {
+        print("Tidak ada paket dalam room ini");
+        return [];
+      }
+
+      print("ID Paket ditemukan dalam chat: $paketIds");
+
+      // 3. Fetch semua paket berdasarkan ID
+      final paketList = await paketServ.getAll(idList: paketIds.toList());
+
+      return paketList;
+    } catch (e) {
+      _error = e.toString();
+      print("Error: $e");
+      return [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> create(PaketModel model) async {

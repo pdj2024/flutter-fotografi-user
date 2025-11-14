@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/features/customer/view/room_chat_page.dart';
+import 'package:provider/provider.dart';
 
 class OfferCard extends StatelessWidget {
-  final String title;
-  final String price;
-  final String rincian;
+  final PaketModel paket;
+  final PortofolioModel portofolio;
   // final List<String> includes;
 
-  const OfferCard(
-      {super.key,
-      required this.title,
-      required this.price,
-      required this.rincian
-      // required this.includes,
-      });
+  const OfferCard({
+    super.key,
+    required this.portofolio,
+    required this.paket,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +32,7 @@ class OfferCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            paket.nama_paket,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -37,7 +40,7 @@ class OfferCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            price,
+            Helper.formatCurrency(paket.harga),
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 12),
@@ -53,7 +56,7 @@ class OfferCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: Text(
-              rincian,
+              paket.rincian,
               style: const TextStyle(fontSize: 13),
               softWrap: true,
             ),
@@ -70,15 +73,17 @@ class OfferCard extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                // context.read<NavigationProvider>().navigateToPage(
-                //       context,
-                //       SingleChat(
-                //         receiverUserName: 'helooo',
-                //         receiverEmail: "hello@gmail.com",
-                //         receiverID: '123',
-                //       ),
-                //       targetTabIndex: 1,
-                //     );
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      RoomChatPage(
+                        roomId: null,
+                        partnerId: portofolio.idVendor,
+                        partnerUsername: portofolio.usernameVendor,
+                        partnerAvatarUrl: portofolio.idMediaVendor,
+                        paket: paket,
+                      ),
+                      targetTabIndex: 1,
+                    );
               },
               child: const Text(
                 "Atur Jadwal",
