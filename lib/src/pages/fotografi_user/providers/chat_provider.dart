@@ -149,9 +149,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       final msgs = await _chatService.fetchMessagesForRoom(roomId);
-      _messages[roomId] = msgs; // <-- cast aman
-      // _messages[roomId] =
-      //     List<Map<String, dynamic>>.from(msgs); // <-- cast aman
+      _messages[roomId] = msgs; 
       await _chatService.joinRoom(roomId);
     } finally {
       _isLoading = false;

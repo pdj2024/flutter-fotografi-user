@@ -44,7 +44,6 @@ class _RoomChatPageState extends State<RoomChatPage>
   RoomChatModel? _roomInfo;
   bool _isLoading = true;
   List<PaketModel?> _paketList = [];
-  List<ChatModel> _messages = [];
 
   PaketModel? _paket;
 
@@ -75,9 +74,8 @@ class _RoomChatPageState extends State<RoomChatPage>
     final chatProv = context.read<ChatProvider>();
     final paketProv = context.read<PaketProvider>();
 
-    _messages = chatProv.getMessages(_activeRoomId ?? '');
-
-    final list = await paketProv.fetchPaketFromRoom(_messages);
+    final list = await paketProv
+        .fetchPaketFromRoom(chatProv.getMessages(_activeRoomId ?? ''));
 
     setState(() {
       _paketList = list; // simpan
@@ -119,7 +117,6 @@ class _RoomChatPageState extends State<RoomChatPage>
             _activeRoomId = rooms.first.roomId;
             _roomInfo = rooms.first;
           });
-          await chatProv.fetchMessages(_activeRoomId!);
         } else {
           // ✅ belum ada room, tunggu sampai kirim pesan pertama
           setState(() {
@@ -143,14 +140,13 @@ class _RoomChatPageState extends State<RoomChatPage>
           print(
               "==== MENGAMBIL DATA CHAT DARI ROOM ID (${rooms.first.roomId})");
 
-          await chatProv.fetchMessages(_activeRoomId!);
-
           setState(() => _roomInfo = rooms.first);
         }
       }
     } catch (e) {
       print("❌ Error saat init chat: $e");
     } finally {
+      await chatProv.fetchMessages(_activeRoomId!);
       setState(() => _isLoading = false);
     }
   }
@@ -176,7 +172,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
       userIds = [
         currentUserId,
-        widget.partnerId!, // ambil lawan dari widget
+        widget.partnerId!,
       ];
     } else {
       // ✅ kalau roomInfo ada, ambil dari room
@@ -214,21 +210,21 @@ class _RoomChatPageState extends State<RoomChatPage>
     }
 
     // setelah mengirim pesan get data lagi
+    print("===== fetch data message lagi setelah mengirim pesan");
     await chatProv.fetchMessages(_activeRoomId!);
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
-    final paketProv = context.watch<PaketProvider>();
-
+    final messages = chatProv.getMessages(_activeRoomId ?? '');
     final paketList = _paketList;
 
     print("==== SINGLE CHAT: paketList: $paketList");
 
     // auto-scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients && _messages.isNotEmpty) {
+      if (_scrollController.hasClients && messages.isNotEmpty) {
         _scrollController.animateTo(
           0.0,
           duration: const Duration(milliseconds: 300),
@@ -308,14 +304,14 @@ class _RoomChatPageState extends State<RoomChatPage>
       body: Column(
         children: [
           // Daftar pesan
-          if (_messages.isEmpty)
+          if (messages.isEmpty)
             const Expanded(child: Center(child: Text('Belum ada pesan'))),
 
           Expanded(
             child: Builder(
               builder: (context) {
                 // urutkan pesan descending
-                final sorted = [..._messages]
+                final sorted = [...messages]
                   ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
 
                 // group per tanggal
@@ -344,7 +340,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                             if (index != -1) {
                               paket = paketList[index];
                             } else {
-                              paket = null; // belum ditemukan
+                              paket = null;
                             }
                           }
                           if (message.idPaket != null) {
