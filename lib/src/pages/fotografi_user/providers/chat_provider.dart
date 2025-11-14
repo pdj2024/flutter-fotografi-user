@@ -1,13 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
 import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
 
-  List<Map<String, dynamic>> _rooms = [];
-  Map<String, List<Map<String, dynamic>>> _messages = {};
+  List<RoomChatModel> _rooms = [];
+  Map<String, List<ChatModel>> _messages = {};
 
   String? _currentUserId;
   bool _initialized = false;
@@ -16,11 +18,10 @@ class ChatProvider extends ChangeNotifier {
   // =======================
   // GETTER
   // =======================
-  List<Map<String, dynamic>> get rooms => _rooms;
+  List<RoomChatModel> get rooms => _rooms;
   String? get currentUserId => _currentUserId;
 
-  List<Map<String, dynamic>> getMessages(String roomId) =>
-      _messages[roomId] ?? [];
+  List<ChatModel> getMessages(String roomId) => _messages[roomId] ?? [];
 
   bool get isReady => _initialized;
   bool get isLoading => _isLoading;
@@ -42,31 +43,42 @@ class ChatProvider extends ChangeNotifier {
     }
 
     // handle pesan masuk
-    _chatService.onRoomMessageReceived =
-    (String roomId, String sender, String message, DateTime sentAt) {
-  final idx = _rooms.indexWhere((r) => r['Room_Id'] == roomId);
-  if (idx >= 0) {
-    _rooms[idx]['Last_Message'] = message;
-    _rooms[idx]['Last_Message_At'] = sentAt; // <-- simpan langsung DateTime
-  }
+    _chatService.onRoomMessageReceived = (
+      String roomId,
+      String sender,
+      String message,
+      DateTime sentAt,
+    ) {
+      final idx = _rooms.indexWhere((r) => r.roomId == roomId);
 
-  final msgs = _messages[roomId] ?? [];
-  msgs.add({
-    'Sender': sender,
-    'Text': message,
-    'SentAt': sentAt, // <-- DateTime
-  });
-  _messages[roomId] = List<Map<String, dynamic>>.from(msgs);
-  notifyListeners();
-};
+      if (idx >= 0) {
+        final old = _rooms[idx];
 
+        // GANTI OBJECT DENGAN COPY BARU
+        _rooms[idx] = old.copyWith(
+          lastMessage: message,
+          lastMessageAt: sentAt,
+        );
+      }
+
+      // // simpan pesan ke memory
+      // final msgs = _messages[roomId] ?? [];
+      // msgs.add({
+      //   'Sender': sender,
+      //   'Text': message,
+      //   'SentAt': sentAt,
+      // });
+      // _messages[roomId] = List<ChatModel>.from(msgs);
+
+      notifyListeners();
+    };
 
     // handle room baru
     _chatService.onRoomCreated =
         (String roomId, String roomName, DateTime createdAt) async {
-      final room = await _chatService.fetchRoomsForUser(userId, room_id: roomId);
-      if (room.isNotEmpty && room.first['Room_Id'] != null) {
-        _rooms.add(Map<String, dynamic>.from(room.first)); // <-- cast aman
+      final room = await _chatService.fetchRoomsForUser(userId, roomId: roomId);
+      if (room.isNotEmpty) {
+        _rooms.add(room.first); // <-- cast aman
         notifyListeners();
       }
     };
@@ -87,49 +99,49 @@ class ChatProvider extends ChangeNotifier {
   // =======================
   // ROOM & MESSAGE HANDLER
   // =======================
-Future<List<Map<String, dynamic>>> fetchRooms({String? room_id, String? id_lawan}) async {
-  if (_currentUserId == null) return [];
+  Future<List<RoomChatModel>> fetchRooms(
+      {String? roomId, String? idLawan}) async {
+    if (_currentUserId == null) return [];
 
-  print("=== MASUK FETCH ROOMS");
+    print("=== MASUK FETCH ROOMS");
 
-  _isLoading = true;
-  notifyListeners();
-
-  try {
-    final rooms = await _chatService.fetchRoomsForUser(
-      _currentUserId!,
-      room_id: room_id,
-      id_lawan: id_lawan,
-    );
-
-    // kalau tidak filter (ambil semua room)
-    if (room_id == null && id_lawan == null) {
-      _rooms = List<Map<String, dynamic>>.from(rooms); // simpan ke state global
-    }
-
-    if (_rooms.isNotEmpty) {
-      try {
-        await _chatService.joinMultipleRooms(
-          _rooms
-              .map((r) => r['Room_Id']?.toString() ?? '')
-              .where((id) => id.isNotEmpty)
-              .toList(),
-        );
-        print("=== JOIN MULTIPLE ROOM BERHASIL");
-      } catch (e) {
-        print("=== JOIN MULTIPLE GAGAL: $e");
-      }
-    } else {
-      print("=== ROOM EMPTY");
-    }
-
-    return rooms; // <- bisa dipakai di SingleChat
-  } finally {
-    _isLoading = false;
+    _isLoading = true;
     notifyListeners();
-  }
-}
 
+    try {
+      final rooms = await _chatService.fetchRoomsForUser(
+        _currentUserId!,
+        roomId: roomId,
+        idLawan: idLawan,
+      );
+
+      // kalau tidak filter (ambil semua room)
+      if (roomId == null && idLawan == null) {
+        _rooms = List<RoomChatModel>.from(rooms); // simpan ke state global
+      }
+
+      if (_rooms.isNotEmpty) {
+        try {
+          await _chatService.joinMultipleRooms(
+            _rooms
+                .map((r) => r.roomId.toString())
+                .where((id) => id.isNotEmpty)
+                .toList(),
+          );
+          print("=== JOIN MULTIPLE ROOM BERHASIL");
+        } catch (e) {
+          print("=== JOIN MULTIPLE GAGAL: $e");
+        }
+      } else {
+        print("=== ROOM EMPTY");
+      }
+
+      return rooms; // <- bisa dipakai di SingleChat
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> fetchMessages(String roomId) async {
     _isLoading = true;
@@ -137,7 +149,9 @@ Future<List<Map<String, dynamic>>> fetchRooms({String? room_id, String? id_lawan
 
     try {
       final msgs = await _chatService.fetchMessagesForRoom(roomId);
-      _messages[roomId] = List<Map<String, dynamic>>.from(msgs); // <-- cast aman
+      _messages[roomId] = msgs; // <-- cast aman
+      // _messages[roomId] =
+      //     List<Map<String, dynamic>>.from(msgs); // <-- cast aman
       await _chatService.joinRoom(roomId);
     } finally {
       _isLoading = false;
@@ -145,14 +159,15 @@ Future<List<Map<String, dynamic>>> fetchRooms({String? room_id, String? id_lawan
     }
   }
 
-  Future<void> sendMessage(String roomId, String text, String? idPaket, String? noInvoice, List<String> userIds) async {
-
-     print("====== CHAT PROVIDER 1: " + _currentUserId.toString());
+  Future<void> sendMessage(String roomId, String text, String? idPaket,
+      String? noInvoice, List<String> userIds) async {
+    print("====== CHAT PROVIDER 1: " + _currentUserId.toString());
     if (_currentUserId != null) {
       final role = apiClient.getRole() ?? 'customer';
 
       print("====== MASUK CHAT PROVIDER");
-      await _chatService.sendMessage(roomId, _currentUserId!, role, text, idPaket, noInvoice, userIds);
+      await _chatService.sendMessage(
+          roomId, _currentUserId!, role, text, idPaket, noInvoice, userIds);
     }
   }
 

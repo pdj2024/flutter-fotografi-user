@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_list_tile.dart';
 import 'package:mpjnew/src/features/customer/widget/search_chat_field.dart';
 import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
@@ -45,24 +45,17 @@ class _ChatListPageState extends State<ChatListPage> {
     final _chats = context.watch<ChatProvider>().rooms;
     print("=== CHATS: " + _chats.length.toString());
 
-    final List<Map<String, dynamic>> sortedChats = [..._chats];
+    final List<RoomChatModel> sortedChats = [..._chats];
     // sortedChats.sort((a, b) => b['time'].compareTo(a['time']));
     sortedChats.sort((a, b) {
-      final timeA = a['Last_Message_At'] is DateTime
-          ? a['Last_Message_At'] as DateTime
-          : parseIsoDate(a['Last_Message_At'] as String?) ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-
-      final timeB = b['Last_Message_At'] is DateTime
-          ? b['Last_Message_At'] as DateTime
-          : parseIsoDate(b['Last_Message_At'] as String?) ??
-              DateTime.fromMillisecondsSinceEpoch(0);
+      final timeA = a.lastMessageAt;
+      final timeB = b.lastMessageAt;
 
       return timeB.compareTo(timeA);
     });
 
-    final List<Map<String, dynamic>> filteredChats = sortedChats.where((chat) {
-      final name = chat['Username_Lawan'].toString().toLowerCase();
+    final List<RoomChatModel> filteredChats = sortedChats.where((chat) {
+      final name = chat.usernameLawan.toString().toLowerCase();
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -84,7 +77,7 @@ class _ChatListPageState extends State<ChatListPage> {
           SearchChatField(
             // unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
             unreadCount:
-                sortedChats.where((c) => (c['unread'] ?? 0) > 0).length,
+                sortedChats.where((c) => (c.unread ?? 0) > 0).length,
             searchController: _searchController,
             onChanged: (value) {
               setState(() {
@@ -105,14 +98,12 @@ class _ChatListPageState extends State<ChatListPage> {
                     itemBuilder: (context, index) {
                       final chat = filteredChats[index];
                       return ChatListTile(
-                        username: chat['Username_Lawan'] ?? '',
-                        avatar: chat['Id_Media_Lawan'] as String?,
-                        message: chat['Last_Message'] as String?,
-                        time: chat['Last_Message_At'] is DateTime
-                            ? chat['Last_Message_At'] as DateTime
-                            : parseIsoDate(chat['Last_Message_At'] as String?),
-                        unreadCount: chat['unread'] ?? 0,
-                        roomId: chat['Room_Id'] ?? '',
+                        username: chat.usernameLawan,
+                        avatar: chat.idMediaLawan as String?,
+                        message: chat.lastMessage as String?,
+                        time: chat.lastMessageAt,
+                        unreadCount: chat.unread ?? 0,
+                        roomId: chat.roomId,
                       );
                     },
                   ),

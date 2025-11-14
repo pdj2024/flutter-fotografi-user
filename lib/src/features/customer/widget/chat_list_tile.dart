@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_chat.dart';
+import 'package:mpjnew/src/features/customer/view/room_chat_page.dart';
 import 'package:provider/provider.dart';
 
 class ChatListTile extends StatelessWidget {
@@ -95,7 +95,7 @@ class ChatListTile extends StatelessWidget {
       onTap: () {
         context.read<NavigationProvider>().navigateToPage(
               context,
-              SingleChat(
+              RoomChatPage(
                 roomId: roomId,
               ),
               targetTabIndex: 1,
