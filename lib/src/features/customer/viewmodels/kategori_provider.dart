@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/kategori_model.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
+import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 
 class KategoriProvider with ChangeNotifier {
   final KategoriService _kategoriService;

@@ -6,9 +6,9 @@ import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
-import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
+import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
 class VendorBioPage extends StatefulWidget {

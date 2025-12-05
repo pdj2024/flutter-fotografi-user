@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import '../../../data/models/paket_model.dart';
 import '../services/paket_service.dart';
 

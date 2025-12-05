@@ -5,7 +5,7 @@ import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../providers/custom_back_button.dart';
+import '../../features/customer/widget/custom_back_button.dart';
 import '../../core/routing/navigation_provider.dart';
 
 class SingleOrder extends StatelessWidget {

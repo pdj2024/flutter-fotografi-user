@@ -7,9 +7,9 @@ import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/services/customer_service.dart';
 import 'package:provider/provider.dart';
 
 class UserLogin extends StatefulWidget {

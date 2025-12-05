@@ -136,6 +136,8 @@ class ChatProvider extends ChangeNotifier {
         print("=== ROOM EMPTY");
       }
 
+      print("=== ROOMS: ${rooms}");
+
       return rooms; // <- bisa dipakai di SingleChat
     } finally {
       _isLoading = false;
@@ -149,7 +151,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       final msgs = await _chatService.fetchMessagesForRoom(roomId);
-      _messages[roomId] = msgs; 
+      _messages[roomId] = msgs;
       await _chatService.joinRoom(roomId);
     } finally {
       _isLoading = false;

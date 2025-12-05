@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
+import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioProvider with ChangeNotifier {

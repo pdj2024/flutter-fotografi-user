@@ -6,8 +6,8 @@ import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/widget/package_card.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
-import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 
 class VendorListPackagePage extends StatefulWidget {
   final VendorModel vendor;

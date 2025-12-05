@@ -6,21 +6,21 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
+import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:provider/provider.dart';
 
 import 'src/features/auth/services/user_provider.dart';
-import 'src/pages/fotografi_user/services/customer_service.dart';
+import 'src/features/customer/services/customer_service.dart';
 import 'src/features/auth/services/auth_service.dart';
 import 'src/core/routing/navigation_provider.dart';
-import 'src/pages/fotografi_user/services/portofolio_service.dart';
+import 'src/features/customer/services/portofolio_service.dart';
 
 import 'src/core/services/api_singleton.dart'; // ← pakai ini
 

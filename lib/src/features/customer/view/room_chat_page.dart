@@ -4,16 +4,16 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
-import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
 class RoomChatPage extends StatefulWidget {
@@ -333,6 +333,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                               (chatProv.currentUserId ?? '');
 
                           PaketModel? paket;
+                          PenawaranModel? offer;
 
                           if (message.idPaket != null) {
                             final index = paketList
@@ -343,6 +344,19 @@ class _RoomChatPageState extends State<RoomChatPage>
                               paket = null;
                             }
                           }
+
+                          // if (message.noInvoice != null &&
+                          //     roomChatProvider.penawaranList.isNotEmpty) {
+                          //   final index = roomChatProvider.penawaranList
+                          //       .indexWhere((p) => p.noId == message.noInvoice);
+                          //   if (index != -1) {
+                          //     offer = roomChatProvider.penawaranList[index];
+                          //   } else {
+                          //     offer = null;
+                          //   }
+                          // }`
+
+
                           if (message.idPaket != null) {
                             return Column(
                               crossAxisAlignment: isMe
