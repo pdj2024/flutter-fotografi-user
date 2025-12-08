@@ -6,13 +6,13 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
-import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/chat_payment_card.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
@@ -37,194 +37,54 @@ class RoomChatPage extends StatefulWidget {
 
 class _RoomChatPageState extends State<RoomChatPage>
     with TickerProviderStateMixin {
-  final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  String? _activeRoomId;
-  RoomChatModel? _roomInfo;
-  bool _isLoading = true;
-  List<PaketModel?> _paketList = [];
+  // String? _activeRoomId;
+  // RoomChatModel? _roomInfo;
+  // bool _isLoading = true;
+  // List<PaketModel?> paketList = [];
+  // List<PenawaranModel?> penawaranlist = [];
+  // List<ChatModel> messages = [];
 
-  PaketModel? _paket;
-
-  @override
   @override
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      print("===== SINGLE CHAT (room id): ${widget.roomId}");
-      print("===== SINGLE CHAT (user ids): ${widget.partnerId}");
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // cegah async setelah dispose
 
-      _startInit();
+      final roomProv = context.read<RoomChatProvider>();
+      print("===== INIT SINGLE CHAT (room id): ${widget.roomId}");
 
-      setState(() {
-        _paket = widget.paket;
-      });
-
-      _messageController.addListener(() {
-        setState(() {});
-      });
+      _initializeChat(roomProv);
     });
   }
 
-  Future<void> _startInit() async {
-    await _initChat(); // proses dapat room + messages
-
-    final chatProv = context.read<ChatProvider>();
-    final paketProv = context.read<PaketProvider>();
-
-    final list = await paketProv
-        .fetchPaketFromRoom(chatProv.getMessages(_activeRoomId ?? ''));
-
-    setState(() {
-      _paketList = list; // simpan
-    });
-  }
-
-  Future<void> _initChat() async {
-    // final userId = context.read<UserProvider>().userId ?? '';
-    _isLoading = true;
-    final chatProv = context.read<ChatProvider>();
-
+  Future<void> _initializeChat(RoomChatProvider roomProv) async {
     try {
-      /**
-       * Jadi ada 2 kemungkinan, masuk ke halaman ini
-       * 1. room id ada, langsung pakai room id tersebut
-       * 2. room id tidak ada, coba cari room existing dengan lawan menggunakan partnerId
-       * 
-       */
-
-      // jika room id dan partner id kosong, kembali ke halaman sebelumnya
-      if (widget.roomId == null && widget.partnerId == null) {
-        return Navigator.of(context).pop();
-      }
-
-      // Jika room id kosong, maka cari room dari Parnert ID
-      if (widget.roomId == null) {
-        print(
-            "==== ROOM ID (null) -> Mencoba get room lewat partner id : ${widget.partnerId}");
-        final rooms = await chatProv.fetchRooms(
-          idLawan: widget.partnerId,
-        );
-
-        if (rooms.isNotEmpty) {
-          print(
-              "==== ROOM ID ditemukan (${rooms.first.roomId}) -> Mengambil data chat");
-
-          // ✅ ketemu existing room
-          setState(() {
-            _activeRoomId = rooms.first.roomId;
-            _roomInfo = rooms.first;
-          });
-        } else {
-          // ✅ belum ada room, tunggu sampai kirim pesan pertama
-          setState(() {
-            _activeRoomId = null;
-            _roomInfo = null;
-          });
-        }
-      }
-
-      // Jika partner id kosong, maka cari room lewat roomId
-      if (widget.partnerId == null) {
-        _activeRoomId = widget.roomId;
-
-        print(
-            "==== PARTNER ID (null) -> Mencoba get room lewat room id : ${widget.roomId}");
-        final rooms = await chatProv.fetchRooms(
-          roomId: _activeRoomId,
-        );
-
-        if (rooms.isNotEmpty) {
-          print(
-              "==== MENGAMBIL DATA CHAT DARI ROOM ID (${rooms.first.roomId})");
-
-          setState(() => _roomInfo = rooms.first);
-        }
-      }
-    } catch (e) {
-      print("❌ Error saat init chat: $e");
-    } finally {
-      await chatProv.fetchMessages(_activeRoomId!);
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _sendMessage(BuildContext context) async {
-    print("==== SINGLE CHAT: INI SATU");
-    if (_messageController.text.isEmpty) return;
-    print("==== SINGLE CHAT: INI DUA");
-
-    final chatProv = context.read<ChatProvider>();
-    final currentUserId = context.read<UserProvider>().userId ?? '';
-    bool isAskPaket = _paket != null;
-
-    List<String> userIds = [];
-
-    if (_roomInfo == null) {
-      // ✅ new chat harus ada id lawan
-      if (widget.partnerId == null) {
-        print(
-            '============= Single Chat: id_lawan kosong, tidak bisa kirim pesan');
-        return;
-      }
-
-      userIds = [
-        currentUserId,
-        widget.partnerId!,
-      ];
-    } else {
-      // ✅ kalau roomInfo ada, ambil dari room
-      final ids = _roomInfo!.userIds;
-      userIds = ids.map((e) => e.toString()).toList();
-    }
-
-    await chatProv.sendMessage(
-      _activeRoomId ?? "", // kosong kalau new chat
-      _messageController.text,
-      isAskPaket ? widget.paket!.no_id : null,
-      null, // noInvoice
-      userIds,
-    );
-
-    setState(() {
-      _paket = null;
-    });
-
-    _messageController.clear();
-
-    // setelah kirim pesan pertama, ambil room baru
-    if (_activeRoomId == null) {
-      final rooms = await chatProv.fetchRooms(
-        idLawan:
-            userIds.firstWhere((id) => id != currentUserId, orElse: () => ""),
+      await roomProv.initChat(
+        roomId: widget.roomId,
+        partnerId: widget.partnerId,
       );
-      if (rooms.isNotEmpty) {
-        setState(() {
-          _activeRoomId = rooms.first.roomId;
-          _roomInfo = rooms.first;
-        });
-        await chatProv.fetchMessages(_activeRoomId!);
-      }
-    }
 
-    // setelah mengirim pesan get data lagi
-    print("===== fetch data message lagi setelah mengirim pesan");
-    await chatProv.fetchMessages(_activeRoomId!);
+      await roomProv.loadOfferData();
+    } catch (e) {
+      print("❌ Error init chat: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final userProv = context.watch<UserProvider>();
     final chatProv = context.watch<ChatProvider>();
-    final messages = chatProv.getMessages(_activeRoomId ?? '');
-    final paketList = _paketList;
+    final roomChatProvider = context.watch<RoomChatProvider>();
 
-    print("==== SINGLE CHAT: paketList: $paketList");
+    print("==== SINGLE CHAT: paketList: ${roomChatProvider.paketList}");
 
     // auto-scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients && messages.isNotEmpty) {
+      if (_scrollController.hasClients &&
+          roomChatProvider.messages.isNotEmpty) {
         _scrollController.animateTo(
           0.0,
           duration: const Duration(milliseconds: 300),
@@ -233,16 +93,17 @@ class _RoomChatPageState extends State<RoomChatPage>
       }
     });
 
-    if (_isLoading) {
+    if (roomChatProvider.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_activeRoomId == null && (widget.partnerId == null)) {
+    if (roomChatProvider.activeRoomId == null && (widget.partnerId == null)) {
       return const Center(child: Text("Tidak ada chat"));
     }
 
-    final String imgUrl =
-        _roomInfo?.idMediaLawan ?? widget.partnerAvatarUrl ?? '';
+    final String imgUrl = roomChatProvider.roomInfo?.idMediaLawan ??
+        widget.partnerAvatarUrl ??
+        '';
 
     return Scaffold(
       appBar: AppBar(
@@ -254,8 +115,9 @@ class _RoomChatPageState extends State<RoomChatPage>
             context.read<NavigationProvider>().navigateToPage(
                   context,
                   VendorBioPage(
-                    idVendor:
-                        _roomInfo?.idLawan ?? widget.partnerId ?? 'unknown',
+                    idVendor: roomChatProvider.roomInfo?.idLawan ??
+                        widget.partnerId ??
+                        'unknown',
                   ),
                   targetTabIndex: 0,
                 );
@@ -284,7 +146,7 @@ class _RoomChatPageState extends State<RoomChatPage>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _roomInfo?.usernameLawan ??
+                  roomChatProvider.roomInfo?.usernameLawan ??
                       widget.partnerUsername ??
                       'unknown',
                   style: const TextStyle(
@@ -304,14 +166,14 @@ class _RoomChatPageState extends State<RoomChatPage>
       body: Column(
         children: [
           // Daftar pesan
-          if (messages.isEmpty)
+          if (roomChatProvider.messages.isEmpty)
             const Expanded(child: Center(child: Text('Belum ada pesan'))),
 
           Expanded(
             child: Builder(
               builder: (context) {
                 // urutkan pesan descending
-                final sorted = [...messages]
+                final sorted = [...roomChatProvider.messages]
                   ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
 
                 // group per tanggal
@@ -336,26 +198,25 @@ class _RoomChatPageState extends State<RoomChatPage>
                           PenawaranModel? offer;
 
                           if (message.idPaket != null) {
-                            final index = paketList
-                                .indexWhere((p) => p!.no_id == message.idPaket);
+                            final index = roomChatProvider.paketList
+                                .indexWhere((p) => p.no_id == message.idPaket);
                             if (index != -1) {
-                              paket = paketList[index];
+                              paket = roomChatProvider.paketList[index];
                             } else {
                               paket = null;
                             }
                           }
 
-                          // if (message.noInvoice != null &&
-                          //     roomChatProvider.penawaranList.isNotEmpty) {
-                          //   final index = roomChatProvider.penawaranList
-                          //       .indexWhere((p) => p.noId == message.noInvoice);
-                          //   if (index != -1) {
-                          //     offer = roomChatProvider.penawaranList[index];
-                          //   } else {
-                          //     offer = null;
-                          //   }
-                          // }`
-
+                          if (message.noInvoice != null &&
+                              roomChatProvider.penawaranList.isNotEmpty) {
+                            final index = roomChatProvider.penawaranList
+                                .indexWhere((p) => p.noId == message.noInvoice);
+                            if (index != -1) {
+                              offer = roomChatProvider.penawaranList[index];
+                            } else {
+                              offer = null;
+                            }
+                          }
 
                           if (message.idPaket != null) {
                             return Column(
@@ -386,11 +247,37 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                           if (message.jenisPesan == "payment" ||
                               message.noInvoice != null) {
-                            // return ChatPaymentCard(
-                            //   harga: message.hargaPaket ?? 0,
-                            //   lokasi: message.lokasiPaket ?? '',
-                            //   tglRealisasi: message.tglRealisasi,
-                            // );
+                            if (offer == null) {
+                              return Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.symmetric(
+                                    vertical: 4, horizontal: 40),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 2,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    "Penawaran tidak ditemukan",
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ChatPaymentCard(
+                              penawaran: offer,
+                              roomId: widget.roomId!,
+                              customerId: userProv.customer!.no_id,
+                            );
                           }
 
                           return ChatBubble(
@@ -442,7 +329,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                 /// TEXTFIELD YANG BISA MELEBAR SAAT SEND BUTTON HILANG
                 Expanded(
                   child: TextField(
-                    controller: _messageController,
+                    controller: roomChatProvider.messageController,
                     cursorColor: Constants.primaryColor,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(
@@ -465,7 +352,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                 AnimatedSize(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
-                  child: _messageController.text.trim().isEmpty
+                  child: roomChatProvider.messageController.text.trim().isEmpty
                       ? const SizedBox(
                           width: 0,
                           height: 0,
@@ -476,7 +363,19 @@ class _RoomChatPageState extends State<RoomChatPage>
                           child: IconButton(
                             icon: const Icon(Icons.send,
                                 color: Constants.primaryColor),
-                            onPressed: () => _sendMessage(context),
+                            onPressed: () async {
+                              final userId =
+                                  context.read<UserProvider>().userId!;
+                              roomChatProvider.sendMessage(
+                                currentUserId: userId,
+                              );
+
+                              // await roomChatProvider.refreshRoomChat(
+                              //     chatProv: chatProv,
+                              //     paketProv: context.read<PaketProvider>(),
+                              //     penawaranProv:
+                              //         context.read<PenawaranProvider>());
+                            },
                           ),
                         ),
                 ),

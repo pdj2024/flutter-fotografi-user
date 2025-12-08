@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 
 class KategoriButton extends StatelessWidget {
@@ -33,11 +34,6 @@ class KategoriButton extends StatelessWidget {
                 height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  // border: Border.all(
-                  //   color:
-                  //       Constants.primaryColor, // Ganti warna sesuai kebutuhan
-                  //   width: 1, // Atur ketebalan border
-                  // ),
                 ),
                 child: ClipOval(
                   child: Stack(
@@ -66,7 +62,7 @@ class KategoriButton extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               label,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              style: AppTextStyle.subtitle2,
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
               textAlign: TextAlign.center,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/custom_button.dart';
+import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/features/customer/view/search_page.dart';
@@ -45,16 +47,12 @@ class _KategoriSectionState extends State<KategoriSection> {
           children: [
             const Text(
               "Kategori Populer",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: AppTextStyle.subtitle1,
             ),
             if (kategoriList.length > maxPerRow)
-              GestureDetector(
-                onTap: () => kategoriProvider.toggleShowAllKategori(),
-                child: Text(
-                  showAllKategori ? "Lebih Sedikit" : "Lihat Semua",
-                  style: TextStyle(color: Constants.primaryColor),
-                ),
-              ),
+              CustomButton.textButton(
+                  onTap: () => kategoriProvider.toggleShowAllKategori(),
+                  text: showAllKategori ? "Lebih Sedikit" : "Lihat Semua"),
           ],
         ),
         const SizedBox(height: 12),
