@@ -3,26 +3,27 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/providers/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/providers/vendor_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/kategori_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/vendor_service.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
+import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:provider/provider.dart';
 
 import 'src/features/auth/services/user_provider.dart';
-import 'src/pages/fotografi_user/services/customer_service.dart';
+import 'src/features/customer/services/customer_service.dart';
 import 'src/features/auth/services/auth_service.dart';
 import 'src/core/routing/navigation_provider.dart';
-import 'src/pages/fotografi_user/services/portofolio_service.dart';
-
-import 'src/core/services/api_singleton.dart'; // ← pakai ini
+import 'src/features/customer/services/portofolio_service.dart';
 
 var companyNameGlobal = 'PT. ABC';
 
@@ -72,9 +73,31 @@ void main() async {
           ),
         ),
 
+        ChangeNotifierProvider(
+          create: (_) =>
+              PenawaranProvider(penawaranService: PenawaranService()),
+        ),
+
         /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat
         ChangeNotifierProvider(
           create: (_) => ChatProvider(),
+        ),
+
+        ChangeNotifierProxyProvider3<PaketProvider, PenawaranProvider,
+            ChatProvider, RoomChatProvider>(
+          create: (_) => RoomChatProvider(
+            paketProv: _.read<PaketProvider>(),
+            penawaranProv: _.read<PenawaranProvider>(),
+            chatProv: _.read<ChatProvider>(),
+          ),
+          update: (_, pkt, pen, chat, prev) {
+            prev?.updateDependencies(
+              paketProv: pkt,
+              penawaranProv: pen,
+              chatProv: chat,
+            );
+            return prev!;
+          },
         ),
       ],
       child: const MyApp(),

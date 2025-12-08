@@ -89,6 +89,4 @@ class ChatModel {
       "User_Ids": userIds,
     };
   }
-
-
 }

@@ -6,9 +6,9 @@ import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/post_header.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/paket_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
-import 'package:mpjnew/src/pages/providers/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
 class SinglePostPage extends StatefulWidget {

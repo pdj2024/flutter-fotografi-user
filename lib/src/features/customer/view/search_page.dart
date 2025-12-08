@@ -6,7 +6,7 @@ import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/filter_overlay.dart';
-import 'package:mpjnew/src/pages/fotografi_user/services/portofolio_service.dart';
+import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';

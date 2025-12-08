@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import '../../../data/models/customer_model.dart';
 import '../../../data/models/vendor_model.dart';
-import '../../../pages/fotografi_user/services/customer_service.dart';
-import '../../../pages/fotografi_user/services/vendor_service.dart'; // Untuk setRole()
+import '../../customer/services/customer_service.dart';
+import '../../customer/services/vendor_service.dart'; // Untuk setRole()
 
 class UserProvider with ChangeNotifier {
   final AuthService _authService;

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/custom_button.dart';
+import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/features/customer/view/search_page.dart';
@@ -47,27 +49,23 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               children: [
                 const Text(
                   "Jelajah",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: AppTextStyle.subtitle1,
                 ),
-                GestureDetector(
-                  onTap: () {
-                    context.read<NavigationProvider>().navigateToPage(
-                          context,
-                          SearchPage(
-                            id_category: '',
-                            nama_category: '',
-                            search: "",
-                          ),
-                          targetTabIndex: 0,
-                          targetPage: "SearchPage",
-                          hrsLogin: false,
-                        );
-                  },
-                  child: Text(
-                    "Lihat Semua",
-                    style: TextStyle(color: Constants.primaryColor),
-                  ),
-                ),
+                CustomButton.textButton(
+                    onTap: () {
+                      context.read<NavigationProvider>().navigateToPage(
+                            context,
+                            SearchPage(
+                              id_category: '',
+                              nama_category: '',
+                              search: "",
+                            ),
+                            targetTabIndex: 0,
+                            targetPage: "SearchPage",
+                            hrsLogin: false,
+                          );
+                    },
+                    text: "Lihat Semua"),
               ],
             ),
           ),
@@ -100,7 +98,12 @@ class _PortofolioSectionState extends State<PortofolioSection> {
           if (!isLoadingPorto && error == null && portofolioList.isEmpty)
             const Padding(
               padding: EdgeInsets.all(20),
-              child: Center(child: Text('Belum ada portofolio')),
+              child: Center(
+                child: Text(
+                  'Belum ada portofolio',
+                  style: AppTextStyle.body1,
+                ),
+              ),
             ),
 
           // ===== Daftar Portofolio =====

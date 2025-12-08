@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/custom_button.dart';
+import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
-import 'package:mpjnew/src/pages/fotografi_user/providers/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
-import 'package:mpjnew/src/pages/fotografi_user/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/services/customer_service.dart';
 import 'package:provider/provider.dart';
 
 class UserLogin extends StatefulWidget {
@@ -86,84 +89,56 @@ class _UserLoginState extends State<UserLogin> {
             final availableHeight = constraints.maxHeight;
             return Stack(
               children: [
-                SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 30),
-                      Image.asset(
-                        'assets/camera_icon_transparent.png',
-                        height: availableHeight * 0.07,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 50),
+                    Image.asset(
+                      'assets/camera_icon_transparent.png',
+                      height: availableHeight * 0.07,
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 0),
+                      child: Image.asset(
+                        'assets/user_login_image.png',
+                        width: screenWidth,
+                        fit: BoxFit.cover,
                       ),
-                      const SizedBox(height: 20),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 0),
-                        child: Image.asset(
-                          'assets/user_login_image.png',
-                          width: screenWidth,
-                          fit: BoxFit.cover,
+                    ),
+                    const SizedBox(height: 30),
+                    Column(
+                      children: [
+                        Text(
+                          "Selamat Datang di",
+                          style: AppTextStyle.headline1,
                         ),
-                      ),
-                      const SizedBox(height: 30),
-                      Column(
-                        children: const [
-                          Text(
-                            'Selamat Datang di',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Fotografi (CUSTOMER)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: Constants.primaryColor,
-                              fontSize: 28,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 30),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 25),
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            await handleLoginGoogle(context, targetPage,
-                                tabIndex, noIdPortofolio, noIdVendor);
-                          },
-                          icon: Image.asset(
-                            'assets/google_icon.png',
-                            height: 24,
-                          ),
-                          label: const Text(
-                            'Masuk dengan Gmail',
-                            style: TextStyle(fontSize: 16, color: Colors.black),
-                          ),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(50),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: BorderSide(color: Colors.grey),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                          ),
+                        Text(
+                          "Fotografi",
+                          style: AppTextStyle.primary(AppTextStyle.headline1),
                         ),
+                        // CustomText.textBanner(
+                        //     text: 'Fotografi',
+                        //     color: Constants.primaryColorVendor),
+                      ],
+                    ),
+                    Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 25),
+                      child: CustomButton.loginButton(
+                        onTap: () async {
+                          await handleLoginGoogle(context, targetPage, tabIndex,
+                              noIdPortofolio, noIdVendor);
+                        },
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 80),
+                  ],
                 ),
                 Positioned(
                   top: 16,
                   left: 16,
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back,
-                        size: 24, color: Colors.black),
-                  ),
+                  child: CustomButton.backButton(context: context),
                 ),
               ],
             );
