@@ -1,49 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/login_status.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/core/services/google_login_result.dart';
+import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import '../../../data/models/customer_model.dart';
-import '../../../data/models/vendor_model.dart';
-import '../../customer/services/customer_service.dart';
-import '../../customer/services/vendor_service.dart'; // Untuk setRole()
+import 'package:mpjnew/src/features/customer/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 
 class UserProvider with ChangeNotifier {
   final AuthService _authService;
   final CustomerService _customerService;
-  final VendorService _vendorService;
 
   UserProvider({
     required AuthService authService,
     required CustomerService customerService,
     required VendorService vendorService,
   })  : _authService = authService,
-        _customerService = customerService,
-        _vendorService = vendorService;
+        _customerService = customerService;
 
   String? _role;
+  String? _photoUrl;
   CustomerModel? _customer;
-  VendorModel? _vendor;
 
   bool _isLoading = false;
   String? _error;
 
   String? get role => _role;
+  String? get photoUrl => _photoUrl;
   CustomerModel? get customer => _customer;
-  VendorModel? get vendor => _vendor;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
   bool get isLoggedIn => _role != null;
 
   String? get userId {
-    if (_role == 'customer') return _customer?.no_id;
-    if (_role == 'vendor') return _vendor?.noId;
+    if (_role == 'customer') return _customer?.noId;
     return null;
   }
 
   String get displayName {
-    if (_role == 'customer') return _customer?.nama_display ?? '';
-    if (_role == 'vendor') return _vendor?.namaDisplay ?? '';
+    if (_role == 'customer') return _customer?.namaDisplay ?? '';
     return '';
   }
 
@@ -53,42 +49,64 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> checkLoginGoogle(
-      {required String role, bool silent = false}) async {
+  void setPhotoUrl(String photoUrl) {
+    _photoUrl = photoUrl;
+    notifyListeners();
+  }
+
+  Future<GoogleLoginResult> checkLoginGoogle({
+    required String role,
+    bool silent = false,
+  }) async {
     _setLoading(true);
     _error = null;
 
     try {
       final idToken = await _authService.login(silent: silent);
+
       if (idToken == null) {
+        await _authService.logout(); // fix terpenting
         _customer = null;
-        _vendor = null;
         _role = null;
-        return;
+        notifyListeners();
+        return GoogleLoginResult(GoogleLoginStatus.tokenInvalid,
+            customer: null);
       }
 
-      setRole(role); // atur X-Jenis-User: customer/vendor
+      final result = await _customerService.checkGoogleLogin();
 
-      if (role == 'customer') {
-        _customer = await _customerService.checkGoogleLogin();
-        _vendor = null;
-      } else if (role == 'vendor') {
-        _vendor = await _vendorService.checkGoogleLogin();
-        _customer = null;
+      if (result.status == GoogleLoginStatus.created) {
+        setRole(role);
+        setPhotoUrl(authService.photoUrl ?? '');
+        notifyListeners();
+        return result;
       }
+
+      if (result.status == GoogleLoginStatus.aktif && result.customer != null) {
+        _customer = result.customer!;
+        if (_customer!.namaDisplay == '') {
+          _customer = _customer!.copyWith(namaDisplay: authService.displayName);
+        }
+        setPhotoUrl(authService.photoUrl ?? '');
+        setRole(role);
+        notifyListeners();
+        return result;
+      }
+
+      return result;
     } catch (e) {
       _error = "Login gagal: $e";
-      print(_error);
-    }
+      notifyListeners();
 
-    _setLoading(false);
+      return GoogleLoginResult(GoogleLoginStatus.error, customer: null);
+    } finally {
+      _setLoading(false);
+    }
   }
 
   Future<void> logout() async {
     await _authService.logout();
     _customer = null;
-    _vendor = null;
-    _role = null;
     notifyListeners();
   }
 

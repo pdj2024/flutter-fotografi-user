@@ -14,9 +14,10 @@ class AuthService {
   /// 🔹 Cek apakah user sudah login (Google Account tersimpan)
   bool get isLoggedIn => _currentUser != null;
 
-  /// 🔹 Ambil email & nama user
+  /// 🔹 Ambil email, nama user, image
   String? get email => _currentUser?.email;
   String? get displayName => _currentUser?.displayName;
+  String? get photoUrl => _currentUser?.photoUrl;
 
   /// 🔹 Login ke Google → return Google ID Token
 
@@ -33,7 +34,6 @@ Future<String?> login({bool silent = false}) async {
     }
 
     final auth = await _currentUser!.authentication;
-
     _cachedIdToken = auth.idToken;
     _tokenExpiry = DateTime.now().add(_tokenLifespan);
 

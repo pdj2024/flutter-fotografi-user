@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/data/repositories/kota_provider.dart';
+import 'package:mpjnew/src/features/customer/services/kota_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
@@ -62,6 +64,11 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => KategoriProvider(KategoriService()),
         ),
+
+        ChangeNotifierProvider(
+          create: (_) => KotaProvider(KotaService()),
+        ),
+
         ChangeNotifierProvider(
           create: (_) => PaketProvider(
             service: PaketService(),

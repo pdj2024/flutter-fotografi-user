@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
@@ -60,23 +61,23 @@ class PortofolioCard extends StatelessWidget {
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(15)),
               child: AspectRatio(
-                aspectRatio: aspectRatio,
-                child: isImageValid
-                    ? Image.network(
-                        imageUrl!,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return ShimmerPlaceholder(radius: 15);
-                        },
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: Colors.grey.shade200,
-                          alignment: Alignment.center,
-                          child:
-                              const Icon(Icons.broken_image_outlined, size: 40),
-                        ),
-                      )
-                    : ShimmerPlaceholder(radius: 15),
+                aspectRatio: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                  ),
+                  child: ClipRRect(
+                    child: CachedNetworkImage(
+                      imageUrl: isImageValid ? imageUrl! : '',
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => ShimmerPlaceholder(),
+                      errorWidget: (_, __, ___) => Container(
+                        color: Colors.grey.shade300,
+                        child: Icon(Icons.broken_image),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

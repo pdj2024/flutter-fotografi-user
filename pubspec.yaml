@@ -43,7 +43,11 @@ dependencies:
   dropdown_search: ^5.0.3
   photo_manager: ^3.0.0
   video_player: ^2.8.1
-
+  syncfusion_flutter_datepicker: ^31.2.10
+  flutter_expandable_fab: ^2.5.2
+  cropperx: ^1.1.1
+  flutter_time_picker_spinner: ^2.0.0
+  location_picker_flutter_map: ^1.1.0
 
 
   cached_network_image:

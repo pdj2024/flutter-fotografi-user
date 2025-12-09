@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -238,8 +236,8 @@ class _FilterOverlayState extends State<FilterOverlay> {
 
       final lokasi = locationRes
           .map((e) => {
-                'id': e.no_id,
-                'label': e.nama_kota,
+                'id': e.noId,
+                'label': e.namaKota,
               })
           .toList();
 

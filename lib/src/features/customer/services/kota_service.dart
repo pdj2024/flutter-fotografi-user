@@ -1,18 +1,13 @@
 import 'dart:convert';
 
-import '../../../core/services/api_client.dart';
-
+import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-
-import '../../../data/models/kota_model.dart';
+import 'package:mpjnew/src/data/models/kota_model.dart';
 
 class KotaService {
-
-
   final String entity = 'Kota';
   final String controller = 'kota';
- final ApiClient _client = apiClient; // ← pakai nama beda
- 
+  final ApiClient _client = apiClient; // ← pakai nama beda
 
   /// GET ALL
   Future<List<KotaModel>> getAll({
@@ -25,28 +20,19 @@ class KotaService {
   }) async {
     try {
       final response = await apiClient.get(
-        
         '/$controller/getAll',
         queryParameters: {
           if (noId != null) 'no_id': noId,
           if (namaKota != null) 'nama_kota': namaKota,
-       
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,
         },
       );
-print('==============================');
-  print('Response Body: ${response.body}');
-  print('Status Code: ${response.statusCode}');
-  print('==============================');
-
-      
-  // print('==============================');
-  // print('Response Body: ${response.body}');
-  // print('Status Code: ${response.statusCode}');
-  // print('==============================');
-
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
@@ -55,8 +41,7 @@ print('==============================');
       } else if (response.statusCode == 204) {
         // Tidak ada data
         return [];
-      }
-      else {
+      } else {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e) {
@@ -81,7 +66,7 @@ print('==============================');
   Future<void> update(KotaModel model) async {
     final response = await apiClient.put(
       '/$controller/update',
-      queryParameters: {'no_id': model.no_id},
+      queryParameters: {'no_id': model.noId},
       body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
       headers: {'Content-Type': 'application/json'},
     );
