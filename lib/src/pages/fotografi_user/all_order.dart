@@ -20,35 +20,40 @@ class _AllOrderState extends State<AllOrder>
     with SingleTickerProviderStateMixin {
   final List<Map<String, dynamic>> orders = [
     {
-      "image": "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
+      "image":
+          "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
       "title": "Wedding",
       "date": "2024-05-21",
       "name": "Jordan Williams",
       "price": "IDR 150,000"
     },
     {
-      "image": "2116a1aa-414b-49c7-ad92-5d59b3030e85-image_cropper_1748682546612.jpg",
+      "image":
+          "2116a1aa-414b-49c7-ad92-5d59b3030e85-image_cropper_1748682546612.jpg",
       "title": "Prewedding Session",
       "date": "2024-04-30",
       "name": "michaelwilliams_",
       "price": "IDR 600,000"
     },
     {
-      "image": "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
+      "image":
+          "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
       "title": "Portrait",
       "date": "2024-03-18",
       "name": "Amanda Reed",
       "price": "IDR 300,000"
     },
     {
-      "image": "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
+      "image":
+          "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
       "title": "Engagement",
       "date": "2024-02-14",
       "name": "Laura Wilson",
       "price": "IDR 8,000,000"
     },
     {
-      "image": "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
+      "image":
+          "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
       "title": "Event",
       "date": "2024-02-14",
       "name": "Gerald Smith",
@@ -58,28 +63,32 @@ class _AllOrderState extends State<AllOrder>
 
   final List<Map<String, dynamic>> order_Selesai = [
     {
-      "image": "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
+      "image":
+          "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
       "title": "Prewedding Session",
       "date": "2024-04-30",
       "name": "michaelwilliams_",
       "price": "IDR 600,000"
     },
     {
-      "image": "2116a1aa-414b-49c7-ad92-5d59b3030e85-image_cropper_1748682546612.jpg",
+      "image":
+          "2116a1aa-414b-49c7-ad92-5d59b3030e85-image_cropper_1748682546612.jpg",
       "title": "Portrait",
       "date": "2024-03-18",
       "name": "Amanda Reed",
       "price": "IDR 300,000"
     },
     {
-      "image": "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
+      "image":
+          "aea19edb-3c95-4421-83a0-214912a92d17-image_cropper_1748682553654.jpg",
       "title": "Engagement",
       "date": "2024-02-14",
       "name": "Laura Wilson",
       "price": "IDR 8,000,000"
     },
     {
-      "image": "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
+      "image":
+          "49baa83d-c292-4cc8-a45e-3d618abca608-image_cropper_1748682537107.jpg",
       "title": "Event",
       "date": "2024-02-14",
       "name": "Gerald Smith",
@@ -185,8 +194,8 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String imgUrl =
-        context.read<NavigationProvider>().ambilGambar(order["image"]);
+    // final String imgUrl = "";
+    // context.read<NavigationProvider>().ambilGambar(order["image"]);
 
     return GestureDetector(
       onTap: () => context
@@ -202,23 +211,23 @@ class OrderCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(
-                imageUrl: imgUrl,
-                width: 60,
-                height: 60,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => _shimmerBox(60),
-                errorWidget: (context, url, error) => Container(
-                  width: 60,
-                  height: 60,
-                  color: Colors.grey[200],
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.broken_image_outlined, size: 30),
-                ),
-              ),
-            ),
+            // ClipRRect(
+            //   borderRadius: BorderRadius.circular(8),
+            //   child: CachedNetworkImage(
+            //     imageUrl: order["image"],
+            //     width: 60,
+            //     height: 60,
+            //     fit: BoxFit.cover,
+            //     placeholder: (context, url) => _shimmerBox(60),
+            //     errorWidget: (context, url, error) => Container(
+            //       width: 60,
+            //       height: 60,
+            //       color: Colors.grey[200],
+            //       alignment: Alignment.center,
+            //       child: const Icon(Icons.broken_image_outlined, size: 30),
+            //     ),
+            //   ),
+            // ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

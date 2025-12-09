@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
+import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +15,13 @@ class MainMenu extends StatefulWidget {
 }
 
 class _MainMenuState extends State<MainMenu> {
+  String getValidImage(String? url) {
+    if (url == null || url.isEmpty || !url.startsWith('http')) {
+      return "https://cdn-icons-png.flaticon.com/512/3276/3276535.png";
+    }
+    return url;
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -31,19 +39,22 @@ class _MainMenuState extends State<MainMenu> {
                 _buildOffstageNavigator(0, CustomerHomePage()),
                 _buildOffstageNavigator(1, ChatListPage()),
                 _buildOffstageNavigator(2, AllOrder()),
+                _buildOffstageNavigator(3, CustomerAccountPage()),
               ],
             );
           },
         ),
         bottomNavigationBar: Consumer<NavigationProvider>(
           builder: (context, navigationProvider, child) {
+            int selectedIndex = navigationProvider.selectedIndex;
+
             return BottomNavigationBar(
               currentIndex: navigationProvider.selectedIndex,
               selectedItemColor: Constants.primaryColor,
               unselectedItemColor: Colors.grey,
               type: BottomNavigationBarType.fixed,
               onTap: (index) => navigationProvider.onItemTapped(index, context),
-              items: const [
+              items: [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.explore),
                   label: 'Jelajah',
@@ -56,6 +67,22 @@ class _MainMenuState extends State<MainMenu> {
                   icon: Icon(Icons.assignment_outlined),
                   label: 'Order',
                 ),
+                BottomNavigationBarItem(
+                  icon: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selectedIndex == 3
+                            ? Constants.primaryColor
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(Icons.person),
+                  ),
+                  label: 'Profile',
+                ),
               ],
             );
           },
@@ -67,6 +94,7 @@ class _MainMenuState extends State<MainMenu> {
   Widget _buildOffstageNavigator(int index, Widget page) {
     return Consumer<NavigationProvider>(
       builder: (context, provider, _) {
+        print("testing");
         return Offstage(
           offstage: provider.selectedIndex != index,
           child: Navigator(

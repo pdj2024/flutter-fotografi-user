@@ -4,6 +4,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -94,10 +95,12 @@ class NavigationProvider with ChangeNotifier {
       apiClient.clearRole();
 
       // 3️⃣ Logout dari Google
-      await AuthService().logout();
+      await context.read<UserProvider>().logout();
+      // await AuthService().logout();
       print("===== [handleLogout] Logout Google selesai");
 
       // 4️⃣ Reset navigation index atau state lain
+      resetNavigationHistory();
       clearSelectedIndex();
 
       print("===== [handleLogout] Selesai ====");
@@ -161,10 +164,15 @@ class NavigationProvider with ChangeNotifier {
   }
 
   final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
-    3,
+    4,
     (_) => GlobalKey<NavigatorState>(),
   );
   final List<int> _navigationHistory = [0]; // Track history of selected indexes
+
+  void resetNavigationHistory() {
+    _navigationHistory.clear();
+    _navigationHistory.add(0);
+  }
 
   void pushFullPage(BuildContext context, Widget widget) {
     Navigator.of(context, rootNavigator: true).push(
@@ -179,7 +187,8 @@ class NavigationProvider with ChangeNotifier {
   }
 
   void onItemTapped(int index, BuildContext context) {
-    if (context.read<UserProvider>().userId != null || index == 0) {
+    final customer = context.read<UserProvider>().customer;
+    if (customer != null || index == 0) {
       // Asumsi tab pertama tidak perlu login (misalnya Home)
       if (_selectedIndex != index) {
         _selectedIndex = index;
@@ -187,22 +196,20 @@ class NavigationProvider with ChangeNotifier {
         notifyListeners();
 
         // Tambahkan: Refresh portofolio jika pindah ke tab Home (index 0)
-        // if (index == 0) {
-        //   // Panggil provider fetchPortofolio tanpa filter
-        //   Future.microtask(() {
-        //     // Pastikan context masih valid, gunakan Provider.of dengan listen: false
-        //     // Reset portofolio dan fetch ulang
-        //     Provider.of<PortofolioProvider>(context, listen: false).getAll();
-        //     Provider.of<PortofolioProvider>(context, listen: false)
-        //         .getAll();
-        //   });
-        // }
+        if (index == 0) {
+          // Panggil provider fetchPortofolio tanpa filter
+          Future.microtask(() {
+            // Reset portofolio dan fetch ulang
+            context.read<PortofolioProvider>().loadPortofolio(context);
+          });
+        }
       } else {
         // Reset halaman di tab yang sama
         // navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
       }
     } else {
       // Jika belum login, navigasi ke halaman login
+      popAllToRoot();
       Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (context) => UserLogin(),
@@ -362,7 +369,6 @@ class NavigationProvider with ChangeNotifier {
     _navigationHistory.add(targetIndex);
     notifyListeners();
   }
-
 
   String? getMediaUrl(dynamic p) {
     final mediaList = p.mediaUrls ?? [];
