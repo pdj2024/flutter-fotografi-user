@@ -29,7 +29,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
   late PortofolioModel portofolio;
   List<PaketModel> paketList = [];
 
-  bool isLoading = true;
+  bool isLoading = false;
   bool isLoadingPaket = false;
   String? error;
   String? errorPaket;

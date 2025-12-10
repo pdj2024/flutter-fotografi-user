@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
-import 'package:mpjnew/src/features/customer/widget/package_card.dart';
+import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
@@ -82,6 +81,10 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                 vendor: widget.vendor,
                 isListPackagePage: true,
               ),
+              Divider(),
+              SizedBox(
+                height: 10,
+              ),
               if (isLoading)
                 Column(
                   children: List.generate(
@@ -108,10 +111,11 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                 Column(
                   children: paketList.map(
                     (paket) {
-                      return PackageCard(
-                        title: paket.nama_paket,
-                        price: Helper.formatCurrency(paket.harga),
-                        rincian: paket.rincian,
+                      return OfferCard(
+                        paket: paket,
+                        vendorId: widget.vendor.noId,
+                        userNameVendor: widget.vendor.username,
+                        idMediaVendor: widget.vendor.idMedia,
                       );
                     },
                   ).toList(),

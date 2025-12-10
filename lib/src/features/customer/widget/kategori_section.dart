@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/custom_button.dart';
 import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';

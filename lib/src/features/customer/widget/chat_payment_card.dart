@@ -14,7 +14,8 @@ class ChatPaymentCard extends StatelessWidget {
       {super.key,
       required this.penawaran,
       required this.roomId,
-      required this.customerId, this.paket});
+      required this.customerId,
+      this.paket});
 
   @override
   Widget build(BuildContext context) {
@@ -56,9 +57,8 @@ class ChatPaymentCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: () {
-              },
-              child: const Text("Edit",
+              onPressed: () {},
+              child: const Text("Terima Tawaran",
                   style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
             ),

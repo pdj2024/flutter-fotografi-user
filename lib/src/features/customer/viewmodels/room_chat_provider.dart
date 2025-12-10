@@ -36,6 +36,11 @@ class RoomChatProvider with ChangeNotifier {
     return chatProv.getMessages(activeRoomId!);
   }
 
+  void setTawaranPaket(PaketModel? paket) {
+    tawaranPaket = paket;
+    notifyListeners();
+  }
+
   void updateDependencies({
     required PaketProvider paketProv,
     required PenawaranProvider penawaranProv,
@@ -62,7 +67,6 @@ class RoomChatProvider with ChangeNotifier {
       print("partnerId: $partnerId");
 
       customerId = partnerId;
-      tawaranPaket = null;
 
       if (roomId == null) {
         print("➡ Mencari room berdasarkan partnerId...");

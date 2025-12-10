@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 import 'package:provider/provider.dart';
 
@@ -53,7 +55,17 @@ class _MainMenuState extends State<MainMenu> {
               selectedItemColor: Constants.primaryColor,
               unselectedItemColor: Colors.grey,
               type: BottomNavigationBarType.fixed,
-              onTap: (index) => navigationProvider.onItemTapped(index, context),
+              onTap: (index) async {
+                navigationProvider.onItemTapped(index, context);
+                if (index == 3) {
+                  await context
+                      .read<UserProvider>()
+                      .checkLoginGoogle(role: 'customer');
+                  await context
+                      .read<PortofolioProvider>()
+                      .loadPortofolio(context);
+                }
+              },
               items: [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.explore),

@@ -21,15 +21,14 @@ class RoomChatPage extends StatefulWidget {
   final String? partnerId;
   final String? partnerUsername;
   final String? partnerAvatarUrl;
-  final PaketModel? paket;
 
-  const RoomChatPage(
-      {super.key,
-      this.roomId,
-      this.partnerId,
-      this.partnerUsername,
-      this.partnerAvatarUrl,
-      this.paket});
+  const RoomChatPage({
+    super.key,
+    this.roomId,
+    this.partnerId,
+    this.partnerUsername,
+    this.partnerAvatarUrl,
+  });
 
   @override
   State<RoomChatPage> createState() => _RoomChatPageState();
@@ -275,7 +274,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                             return ChatPaymentCard(
                               penawaran: offer,
-                              roomId: widget.roomId!,
+                              roomId: widget.roomId ?? "",
                               customerId: userProv.customer!.noId,
                             );
                           }
@@ -310,12 +309,12 @@ class _RoomChatPageState extends State<RoomChatPage>
             ),
           ),
 
-          if (widget.paket != null)
+          if (roomChatProvider.tawaranPaket != null)
             Padding(
               padding: const EdgeInsets.only(right: 15, top: 10),
               child: ChatPackageCard(
-                namaPaket: widget.paket!.nama_paket,
-                hargaPaket: widget.paket!.harga,
+                namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
+                hargaPaket: roomChatProvider.tawaranPaket!.harga,
                 isMe: true,
               ),
             ),
@@ -369,12 +368,6 @@ class _RoomChatPageState extends State<RoomChatPage>
                               roomChatProvider.sendMessage(
                                 currentUserId: userId,
                               );
-
-                              // await roomChatProvider.refreshRoomChat(
-                              //     chatProv: chatProv,
-                              //     paketProv: context.read<PaketProvider>(),
-                              //     penawaranProv:
-                              //         context.read<PenawaranProvider>());
                             },
                           ),
                         ),

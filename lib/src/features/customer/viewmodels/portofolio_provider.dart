@@ -13,11 +13,16 @@ class PortofolioProvider with ChangeNotifier {
 
   // ===== Variables =====
   List<PortofolioModel> _portofolioList = [];
+  List<PortofolioModel> _portofolioSaveList = [];
+  List<PortofolioModel> _portofolioLikelist = [];
   bool _isLoadingPorto = true;
   String? _errorPorto;
 
   // ===== Getters =====
   List<PortofolioModel> get portofolioList => _portofolioList;
+  List<PortofolioModel> get portofolioSaveList => _portofolioSaveList;
+  List<PortofolioModel> get portofolioLikelist => _portofolioLikelist;
+
   bool get isLoadingPorto => _isLoadingPorto;
   String? get errorPorto => _errorPorto;
 
@@ -57,8 +62,21 @@ class PortofolioProvider with ChangeNotifier {
         status: status,
         untuk_keperluan: untukKeperluan,
       );
-
       _portofolioList = result;
+
+      if (userProvider.customer != null) {
+        final userLiked = result
+            .where((porto) => userProvider.customer!.likes.contains(porto.noId))
+            .toList();
+
+        _portofolioLikelist = userLiked;
+
+        final userSaved = result
+            .where((porto) => userProvider.customer!.saves.contains(porto.noId))
+            .toList();
+
+        _portofolioSaveList = userSaved;
+      }
     } catch (e) {
       debugPrint("⚠️ Error memuat portofolio: $e");
       _errorPorto = "Error memuat portofolio";
@@ -72,5 +90,73 @@ class PortofolioProvider with ChangeNotifier {
   /// Refresh data portofolio (misal dari pull-to-refresh)
   Future<void> refresh(BuildContext context) async {
     await loadPortofolio(context);
+  }
+
+  Future<void> loadLikePortofolio(BuildContext context) async {
+    _isLoadingPorto = true;
+    _errorPorto = null;
+    print("==== Memuat portofolio...");
+    safeNotify();
+
+    try {
+      final userProvider = context.read<UserProvider>();
+      final role = userProvider.role;
+      final userId = role == 'customer' ? userProvider.userId : null;
+
+      print("==== USER ID: $userId");
+      print("==== Memuat getAll portofolio...");
+
+      final result = await portofolioService.getAll(
+        id_customer: userId,
+        status: "aktif",
+      );
+
+      final userLiked = result
+          .where((porto) => userProvider.customer!.likes.contains(porto.noId))
+          .toList();
+
+      _portofolioLikelist = userLiked;
+    } catch (e) {
+      debugPrint("⚠️ Error memuat portofolio: $e");
+      _errorPorto = "Error memuat portofolio";
+    } finally {
+      _isLoadingPorto = false;
+      print("==== Selesai memuat portofolio");
+      safeNotify();
+    }
+  }
+
+  Future<void> loadSavePortofolio(BuildContext context) async {
+    _isLoadingPorto = true;
+    _errorPorto = null;
+    print("==== Memuat portofolio...");
+    safeNotify();
+
+    try {
+      final userProvider = context.read<UserProvider>();
+      final role = userProvider.role;
+      final userId = role == 'customer' ? userProvider.userId : null;
+
+      print("==== USER ID: $userId");
+      print("==== Memuat getAll portofolio...");
+
+      final result = await portofolioService.getAll(
+        id_customer: userId,
+        status: "aktif",
+      );
+
+      final userSaved = result
+          .where((porto) => userProvider.customer!.saves.contains(porto.noId))
+          .toList();
+
+      _portofolioSaveList = userSaved;
+    } catch (e) {
+      debugPrint("⚠️ Error memuat portofolio: $e");
+      _errorPorto = "Error memuat portofolio";
+    } finally {
+      _isLoadingPorto = false;
+      print("==== Selesai memuat portofolio");
+      safeNotify();
+    }
   }
 }

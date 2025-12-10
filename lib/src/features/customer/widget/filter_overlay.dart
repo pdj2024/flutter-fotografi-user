@@ -386,7 +386,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery.of(context).size.width - 40.0;
 
     return WillPopScope(
       onWillPop: () async {
