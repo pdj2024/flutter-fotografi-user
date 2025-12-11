@@ -38,8 +38,8 @@ class ChatService {
 
   /// Callback events (public)
   Function(String sender, String message, DateTime sentAt)? onMessageReceived;
-  Function(String roomId, String sender, String message, DateTime sentAt)?
-      onRoomMessageReceived;
+  Function(String roomId, String sender, String message, String? idPaket,
+      String? noInvoice, DateTime sentAt)? onRoomMessageReceived;
   Function(String roomId)? onNewRoomDetected;
   Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
 
@@ -244,6 +244,8 @@ class ChatService {
       final roomId = msg["roomId"]?.toString() ?? "";
       final sender = msg["sender"]?.toString() ?? "";
       final text = msg["message"]?.toString() ?? "";
+      final idPaket = msg["idPaket"]?.toString() ?? "";
+      final noInvoice = msg["noInvoice"]?.toString() ?? "";
       final sentAt = msg["sentAt"] != null
           ? DateTime.tryParse(msg["sentAt"].toString())?.toLocal() ??
               DateTime.now()
@@ -261,7 +263,8 @@ class ChatService {
       // Emit callbacks
       try {
         onMessageReceived?.call(sender, text, sentAt);
-        onRoomMessageReceived?.call(roomId, sender, text, sentAt);
+        onRoomMessageReceived?.call(
+            roomId, sender, text, idPaket, noInvoice, sentAt);
       } catch (cbErr) {
         print("[ChatService] Callback error onMessage/onRoomMessage: $cbErr");
       }
@@ -385,8 +388,13 @@ class ChatService {
         throw Exception('Gagal mengirim pesan ke room $roomId');
       }
       if (_connection?.state == HubConnectionState.Connected) {
-        await _connection!
-            .invoke("SendMessageToRoom", args: [roomId, senderUserId, message]);
+        await _connection!.invoke("SendMessageToRoom", args: [
+          roomId,
+          senderUserId,
+          message,
+          // idPaket ?? "",
+          // noInvoice ?? ""
+        ]);
         print("================ [SignalR] Sent message to $roomId: $message");
 
         print("[API] ✅ Pesan terkirim ke $roomId: $message");

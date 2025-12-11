@@ -67,6 +67,8 @@ class ChatProvider extends ChangeNotifier {
       String roomId,
       String senderId,
       String message,
+      String? idPaket,
+      String? noInvoice,
       DateTime sentAt,
     ) {
       print(
@@ -97,11 +99,11 @@ class ChatProvider extends ChangeNotifier {
         tipeUser: apiClient.getRole() ?? "unknown",
         message: message,
         jenisPesan: "text", // atau dari server jika dikirim
-        idPaket: null,
-        noInvoice: null,
+        idPaket: idPaket,
+        noInvoice: noInvoice,
         sentAt: sentAt,
         editedAt: null,
-        userIds: [],
+        userIds: [_currentUserId!, senderId],
       );
 
       final oldList = _messages[roomId] ?? [];
