@@ -69,7 +69,15 @@ class ChatProvider extends ChangeNotifier {
       String message,
       DateTime sentAt,
     ) {
-      print("CHAT_PROVIDER :: Pesan baru [$roomId] dari $senderId");
+      print(
+          "CHAT_PROVIDER :: Pesan baru [$roomId] dari $senderId => curren user $_currentUserId");
+
+      if (_currentUserId != null &&
+          senderId.trim().toLowerCase() ==
+              _currentUserId!.trim().toLowerCase()) {
+        print("CHAT_PROVIDER :: pesan dari diri sendiri → abaikan");
+        return;
+      }
 
       // Update preview room
       final i = _rooms.indexWhere((r) => r.roomId == roomId);

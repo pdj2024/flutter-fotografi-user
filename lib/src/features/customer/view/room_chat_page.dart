@@ -265,8 +265,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                                     ),
                                   if (paket != null)
                                     ChatPackageCard(
-                                      namaPaket: paket.nama_paket,
-                                      hargaPaket: paket.harga,
+                                      paket: paket,
                                       isMe: isMe,
                                     ),
                                   if (message.message.isNotEmpty)
@@ -344,15 +343,15 @@ class _RoomChatPageState extends State<RoomChatPage>
             ),
           ),
 
-          if (roomChatProvider.tawaranPaket != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 15, top: 10),
-              child: ChatPackageCard(
-                namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
-                hargaPaket: roomChatProvider.tawaranPaket!.harga,
-                isMe: true,
-              ),
-            ),
+          // if (roomChatProvider.tawaranPaket != null)
+          //   Padding(
+          //     padding: const EdgeInsets.only(right: 15, top: 10),
+          //     child: ChatPackageCard(
+          //       namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
+          //       hargaPaket: roomChatProvider.tawaranPaket!.harga,
+          //       isMe: true,
+          //     ),
+          //   ),
 
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

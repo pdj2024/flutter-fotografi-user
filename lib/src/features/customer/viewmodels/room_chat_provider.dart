@@ -20,7 +20,7 @@ class RoomChatProvider with ChangeNotifier {
 
   final messageController = TextEditingController();
 
-  String? customerId;
+  String? vendorId;
   String? activeRoomId;
   RoomChatModel? roomInfo;
 
@@ -66,11 +66,11 @@ class RoomChatProvider with ChangeNotifier {
       print("roomId: $roomId");
       print("partnerId: $partnerId");
 
-      customerId = partnerId;
+      vendorId = partnerId;
 
       if (roomId == null) {
         print("➡ Mencari room berdasarkan partnerId...");
-        final rooms = await chatProv.fetchRooms(idLawan: customerId);
+        final rooms = await chatProv.fetchRooms(idLawan: vendorId);
 
         if (rooms.isNotEmpty) {
           activeRoomId = rooms.first.roomId;
@@ -134,9 +134,9 @@ class RoomChatProvider with ChangeNotifier {
     List<String> userIds = [];
 
     if (roomInfo == null) {
-      if (customerId == null) return;
+      if (vendorId == null) return;
       print("Room baru → set userIds manual");
-      userIds = [currentUserId, customerId!];
+      userIds = [currentUserId, vendorId!];
     } else {
       userIds = roomInfo!.userIds.map((e) => e.toString()).toList();
     }
@@ -145,6 +145,14 @@ class RoomChatProvider with ChangeNotifier {
     print("roomId: $activeRoomId");
     print("userIds: $userIds");
     print("idPaket: ${tawaranPaket?.no_id}");
+
+    print("➡ Mencari room berdasarkan partnerId...");
+    final rooms = await chatProv.fetchRooms(idLawan: vendorId);
+
+    if (rooms.isNotEmpty) {
+      activeRoomId = rooms.first.roomId;
+      roomInfo = rooms.first;
+    }
 
     await chatProv.sendMessage(
       activeRoomId ?? "",
@@ -159,16 +167,16 @@ class RoomChatProvider with ChangeNotifier {
 
     /// Jika room baru → ambil lagi roomId
     if (activeRoomId == null) {
-      final rooms = await chatProv.fetchRooms(idLawan: customerId);
+      final rooms = await chatProv.fetchRooms(idLawan: vendorId);
       if (rooms.isNotEmpty) {
         activeRoomId = rooms.first.roomId;
         roomInfo = rooms.first;
       }
     }
 
-    print("➡ Fetch ulang pesan setelah kirim");
-    await chatProv.fetchMessages(activeRoomId!);
-    await chatProv.refreshRooms(customerId!, activeRoomId!, currentUserId);
+    // print("➡ Fetch ulang pesan setelah kirim");
+    // await chatProv.fetchMessages(activeRoomId!);
+    // await chatProv.refreshRooms(vendorId!, activeRoomId!, currentUserId);
 
     notifyListeners();
 

@@ -391,8 +391,6 @@ class ChatService {
 
         print("[API] ✅ Pesan terkirim ke $roomId: $message");
       }
-
-      print("[ChatService] ✅ Pesan terkirim ke $roomId: $message");
     } catch (e, st) {
       print("[ChatService] sendMessage error: $e\n$st");
       rethrow;
