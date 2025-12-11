@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 
 class ChatItemShimmer extends StatelessWidget {
   const ChatItemShimmer({super.key});
@@ -7,32 +7,43 @@ class ChatItemShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
-        child: const CircleAvatar(
-          radius: 24,
-          backgroundColor: Colors.white,
-        ),
+      leading: ShimmerPlaceholder(
+        width: 48,
+        height: 48,
+        radius: 30,
       ),
-      title: Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
-        child: Container(
-          width: double.infinity,
-          height: 14,
-          color: Colors.white,
-          margin: const EdgeInsets.only(bottom: 6),
-        ),
+      title: Row(
+        children: [
+          Expanded(
+            child: ShimmerPlaceholder(
+              height: 20,
+              radius: 5,
+            ),
+          ),
+          SizedBox(
+            width: 10,
+          ),
+          SizedBox(
+            width: 50,
+            child: ShimmerPlaceholder(
+              height: 20,
+              radius: 5,
+            ),
+          ),
+        ],
       ),
-      subtitle: Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.4,
-          height: 12,
-          color: Colors.white,
-        ),
+      subtitle: Row(
+        children: [
+          Expanded(
+            child: ShimmerPlaceholder(
+              height: 15,
+              radius: 5,
+            ),
+          ),
+          SizedBox(
+            width: 100,
+          ),
+        ],
       ),
     );
   }

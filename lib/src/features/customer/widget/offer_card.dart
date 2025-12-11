@@ -5,23 +5,31 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:provider/provider.dart';
 
 class OfferCard extends StatelessWidget {
   final PaketModel paket;
-  final PortofolioModel portofolio;
+  final PortofolioModel? portofolio;
+  final String? vendorId;
+  final String? userNameVendor;
+  final String? idMediaVendor;
   // final List<String> includes;
 
   const OfferCard({
     super.key,
-    required this.portofolio,
+    this.portofolio,
     required this.paket,
+    this.vendorId,
+    this.userNameVendor,
+    this.idMediaVendor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(right: 16, left: 16, top: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
@@ -73,17 +81,12 @@ class OfferCard extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                context.read<NavigationProvider>().navigateToPage(
-                      context,
-                      RoomChatPage(
-                        roomId: null,
-                        partnerId: portofolio.idVendor,
-                        partnerUsername: portofolio.usernameVendor,
-                        partnerAvatarUrl: portofolio.idMediaVendor,
-                        paket: paket,
-                      ),
-                      targetTabIndex: 1,
-                    );
+                context.read<RoomChatProvider>().setTawaranPaket(paket);
+                CustomDialog.showDetailPaketDialog(
+                  context: context,
+                  paket: paket,
+                  isAsk: true,
+                );
               },
               child: const Text(
                 "Atur Jadwal",

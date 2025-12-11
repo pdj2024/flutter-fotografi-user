@@ -8,10 +8,9 @@ class ImagePost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    
     return AspectRatio(
       aspectRatio: 5 / 4,
-      child: mediaUrl != null
+      child: mediaUrl.isNotEmpty
           ? Image.network(
               mediaUrl.first.url!,
               fit: BoxFit.cover,
@@ -35,6 +34,5 @@ class ImagePost extends StatelessWidget {
               child: const Icon(Icons.image, size: 40),
             ),
     );
-    ;
   }
 }

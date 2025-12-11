@@ -28,6 +28,11 @@ class ChatProvider extends ChangeNotifier {
   //=============================
   // SETTER
   //=============================
+  set isReady(bool isReady) {
+    _initialized = isReady;
+    notifyListeners();
+  }
+
   set rooms(List<RoomChatModel> rooms) => _rooms = rooms;
 
   //=============================
@@ -62,9 +67,19 @@ class ChatProvider extends ChangeNotifier {
       String roomId,
       String senderId,
       String message,
+      String? idPaket,
+      String? noInvoice,
       DateTime sentAt,
     ) {
-      print("CHAT_PROVIDER :: Pesan baru [$roomId] dari $senderId");
+      print(
+          "CHAT_PROVIDER :: Pesan baru [$roomId] dari $senderId => curren user $_currentUserId");
+
+      if (_currentUserId != null &&
+          senderId.trim().toLowerCase() ==
+              _currentUserId!.trim().toLowerCase()) {
+        print("CHAT_PROVIDER :: pesan dari diri sendiri → abaikan");
+        return;
+      }
 
       // Update preview room
       final i = _rooms.indexWhere((r) => r.roomId == roomId);
@@ -84,11 +99,11 @@ class ChatProvider extends ChangeNotifier {
         tipeUser: apiClient.getRole() ?? "unknown",
         message: message,
         jenisPesan: "text", // atau dari server jika dikirim
-        idPaket: null,
-        noInvoice: null,
+        idPaket: idPaket,
+        noInvoice: noInvoice,
         sentAt: sentAt,
         editedAt: null,
-        userIds: [],
+        userIds: [_currentUserId!, senderId],
       );
 
       final oldList = _messages[roomId] ?? [];

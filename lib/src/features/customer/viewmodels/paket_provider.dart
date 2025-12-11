@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import '../../../data/models/paket_model.dart';
-import '../services/paket_service.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 
 class PaketProvider with ChangeNotifier {
   final PaketService service;

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
 import 'package:provider/provider.dart';
 
@@ -24,6 +28,8 @@ class _MainMenuState extends State<MainMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final user = userProvider.customer;
     return WillPopScope(
       onWillPop: () async {
         final provider =
@@ -53,7 +59,34 @@ class _MainMenuState extends State<MainMenu> {
               selectedItemColor: Constants.primaryColor,
               unselectedItemColor: Colors.grey,
               type: BottomNavigationBarType.fixed,
-              onTap: (index) => navigationProvider.onItemTapped(index, context),
+              onTap: (index) async {
+                navigationProvider.onItemTapped(index, context);
+                if (index == 3) {
+                  await context
+                      .read<UserProvider>()
+                      .checkLoginGoogle(role: 'customer');
+                  await context
+                      .read<PortofolioProvider>()
+                      .loadPortofolio(context);
+                }
+
+                if (index == 1 && user != null) {
+                  final roomProvider = context.read<RoomChatProvider>();
+                  final chatProvider = context.read<ChatProvider>();
+
+                  if (roomProvider.activeRoomId != null &&
+                      roomProvider.roomInfo != null) {
+                    await roomProvider.initChat(
+                      roomId: roomProvider.activeRoomId,
+                      partnerId: roomProvider.roomInfo!.idLawan,
+                    );
+                    await roomProvider.loadOfferData();
+                  } else {
+                    chatProvider.isReady = false;
+                    await chatProvider.init(user.noId);
+                  }
+                }
+              },
               items: [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.explore),

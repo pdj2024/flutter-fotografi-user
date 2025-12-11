@@ -14,22 +14,23 @@ import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_payment_card.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/widget/shimmer/room_chat_shimmer.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 class RoomChatPage extends StatefulWidget {
   final String? roomId;
   final String? partnerId;
   final String? partnerUsername;
   final String? partnerAvatarUrl;
-  final PaketModel? paket;
 
-  const RoomChatPage(
-      {super.key,
-      this.roomId,
-      this.partnerId,
-      this.partnerUsername,
-      this.partnerAvatarUrl,
-      this.paket});
+  const RoomChatPage({
+    super.key,
+    this.roomId,
+    this.partnerId,
+    this.partnerUsername,
+    this.partnerAvatarUrl,
+  });
 
   @override
   State<RoomChatPage> createState() => _RoomChatPageState();
@@ -38,6 +39,8 @@ class RoomChatPage extends StatefulWidget {
 class _RoomChatPageState extends State<RoomChatPage>
     with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
+  RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
 
   // String? _activeRoomId;
   // RoomChatModel? _roomInfo;
@@ -94,7 +97,7 @@ class _RoomChatPageState extends State<RoomChatPage>
     });
 
     if (roomChatProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return RoomChatShimmer();
     }
 
     if (roomChatProvider.activeRoomId == null && (widget.partnerId == null)) {
@@ -108,7 +111,8 @@ class _RoomChatPageState extends State<RoomChatPage>
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
+        elevation: 2,
+        shadowColor: Colors.black12,
         leading: CustomBackButton(),
         title: GestureDetector(
           onTap: () {
@@ -167,7 +171,28 @@ class _RoomChatPageState extends State<RoomChatPage>
         children: [
           // Daftar pesan
           if (roomChatProvider.messages.isEmpty)
-            const Expanded(child: Center(child: Text('Belum ada pesan'))),
+            Expanded(
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEDEDED),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "Hari ini",
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           Expanded(
             child: Builder(
@@ -180,145 +205,153 @@ class _RoomChatPageState extends State<RoomChatPage>
                 final grouped = Helper.groupMessagesByDate(sorted);
                 // print("Hasil grouped: $grouped");
 
-                return ListView(
-                  controller: _scrollController,
-                  reverse: true,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                  children: grouped.entries.expand((entry) {
-                    final dateLabel = entry.key;
-                    final groupMsgs = entry.value;
+                return SmartRefresher(
+                  enablePullUp: true,
+                  controller: _refreshController,
+                  onRefresh: () {
+                    _initializeChat(roomChatProvider);
+                  },
+                  child: ListView(
+                    controller: _scrollController,
+                    reverse: true,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                    children: grouped.entries.expand((entry) {
+                      final dateLabel = entry.key;
+                      final groupMsgs = entry.value;
 
-                    return [
-                      ...groupMsgs.map(
-                        (message) {
-                          bool isMe = (message.senderId) ==
-                              (chatProv.currentUserId ?? '');
+                      return [
+                        ...groupMsgs.map(
+                          (message) {
+                            bool isMe = (message.senderId) ==
+                                (chatProv.currentUserId ?? '');
 
-                          PaketModel? paket;
-                          PenawaranModel? offer;
+                            PaketModel? paket;
+                            PenawaranModel? offer;
 
-                          if (message.idPaket != null) {
-                            final index = roomChatProvider.paketList
-                                .indexWhere((p) => p.no_id == message.idPaket);
-                            if (index != -1) {
-                              paket = roomChatProvider.paketList[index];
-                            } else {
-                              paket = null;
+                            if (message.idPaket != null) {
+                              final index = roomChatProvider.paketList
+                                  .indexWhere(
+                                      (p) => p.no_id == message.idPaket);
+                              if (index != -1) {
+                                paket = roomChatProvider.paketList[index];
+                              } else {
+                                paket = null;
+                              }
                             }
-                          }
 
-                          if (message.noInvoice != null &&
-                              roomChatProvider.penawaranList.isNotEmpty) {
-                            final index = roomChatProvider.penawaranList
-                                .indexWhere((p) => p.noId == message.noInvoice);
-                            if (index != -1) {
-                              offer = roomChatProvider.penawaranList[index];
-                            } else {
-                              offer = null;
+                            if (message.noInvoice != null &&
+                                roomChatProvider.penawaranList.isNotEmpty) {
+                              final index = roomChatProvider.penawaranList
+                                  .indexWhere(
+                                      (p) => p.noId == message.noInvoice);
+                              if (index != -1) {
+                                offer = roomChatProvider.penawaranList[index];
+                              } else {
+                                offer = null;
+                              }
                             }
-                          }
 
-                          if (message.idPaket != null) {
-                            return Column(
-                              crossAxisAlignment: isMe
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
-                              children: [
-                                if (paket == null)
-                                  ShimmerPlaceholder(
-                                    width: 300,
-                                    height: 100,
-                                    radius: 10,
-                                  ),
-                                if (paket != null)
-                                  ChatPackageCard(
-                                    namaPaket: paket.nama_paket,
-                                    hargaPaket: paket.harga,
-                                    isMe: isMe,
-                                  ),
-                                if (message.message.isNotEmpty)
-                                  ChatBubble(
-                                    message: message,
-                                    isMe: isMe,
-                                  ),
-                              ],
-                            );
-                          }
-
-                          if (message.jenisPesan == "payment" ||
-                              message.noInvoice != null) {
-                            if (offer == null) {
-                              return Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.symmetric(
-                                    vertical: 4, horizontal: 40),
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 2,
-                                      offset: Offset(0, 1),
+                            if (message.idPaket != null) {
+                              return Column(
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  if (paket == null)
+                                    ShimmerPlaceholder(
+                                      width: 300,
+                                      height: 100,
+                                      radius: 10,
                                     ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    "Penawaran tidak ditemukan",
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
+                                  if (paket != null)
+                                    ChatPackageCard(
+                                      paket: paket,
+                                      isMe: isMe,
+                                    ),
+                                  if (message.message.isNotEmpty)
+                                    ChatBubble(
+                                      message: message,
+                                      isMe: isMe,
+                                    ),
+                                ],
                               );
                             }
 
-                            return ChatPaymentCard(
-                              penawaran: offer,
-                              roomId: widget.roomId!,
-                              customerId: userProv.customer!.noId,
-                            );
-                          }
+                            if (message.jenisPesan == "payment" ||
+                                message.noInvoice != null) {
+                              if (offer == null) {
+                                return Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.symmetric(
+                                      vertical: 4, horizontal: 40),
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 2,
+                                        offset: Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      "Penawaran tidak ditemukan",
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                                );
+                              }
 
-                          return ChatBubble(
-                            message: message,
-                            isMe: isMe,
-                          );
-                        },
-                      ),
-                      // label tanggal
-                      Center(
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 12),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEDEDED),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            dateLabel,
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w500),
+                              return ChatPaymentCard(
+                                penawaran: offer,
+                                roomId: widget.roomId ?? "",
+                                customerId: userProv.customer!.noId,
+                              );
+                            }
+
+                            return ChatBubble(
+                              message: message,
+                              isMe: isMe,
+                            );
+                          },
+                        ),
+                        // label tanggal
+                        Center(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEDEDED),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              dateLabel,
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
                           ),
                         ),
-                      ),
-                    ];
-                  }).toList(),
+                      ];
+                    }).toList(),
+                  ),
                 );
               },
             ),
           ),
 
-          if (widget.paket != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 15, top: 10),
-              child: ChatPackageCard(
-                namaPaket: widget.paket!.nama_paket,
-                hargaPaket: widget.paket!.harga,
-                isMe: true,
-              ),
-            ),
+          // if (roomChatProvider.tawaranPaket != null)
+          //   Padding(
+          //     padding: const EdgeInsets.only(right: 15, top: 10),
+          //     child: ChatPackageCard(
+          //       namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
+          //       hargaPaket: roomChatProvider.tawaranPaket!.harga,
+          //       isMe: true,
+          //     ),
+          //   ),
 
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -369,12 +402,6 @@ class _RoomChatPageState extends State<RoomChatPage>
                               roomChatProvider.sendMessage(
                                 currentUserId: userId,
                               );
-
-                              // await roomChatProvider.refreshRoomChat(
-                              //     chatProv: chatProv,
-                              //     paketProv: context.read<PaketProvider>(),
-                              //     penawaranProv:
-                              //         context.read<PenawaranProvider>());
                             },
                           ),
                         ),

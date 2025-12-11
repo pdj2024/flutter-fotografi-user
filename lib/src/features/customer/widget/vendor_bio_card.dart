@@ -97,8 +97,8 @@ class VendorBioCard extends StatelessWidget {
                             Padding(
                               padding: const EdgeInsets.only(right: 10),
                               child: SizedBox(
-                                height: 30,
-                                width: 30,
+                                height: 40,
+                                width: 40,
                                 child: OutlinedButton(
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(

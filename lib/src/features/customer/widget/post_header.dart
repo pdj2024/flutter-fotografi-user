@@ -47,13 +47,12 @@ class PostHeader extends StatelessWidget {
                     child: Row(
                       children: [
                         Text(
-                          portofolio.usernameVendor ?? '',
+                          portofolio.usernameVendor,
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                         const SizedBox(width: 6),
-                        if (portofolio.ratingVendor != null &&
-                            portofolio.ratingVendor != 0) ...[
+                        if (portofolio.ratingVendor != 0) ...[
                           const Icon(Icons.star, color: Colors.amber, size: 16),
                           const SizedBox(width: 2),
                           Text(

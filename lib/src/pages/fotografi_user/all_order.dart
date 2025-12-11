@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:mpjnew/src/pages/fotografi_user/single_order.dart';
 import 'package:provider/provider.dart';
 
@@ -178,18 +176,6 @@ class OrderCard extends StatelessWidget {
     final dateTime = DateTime.parse(tanggal);
     final formatter = DateFormat("dd MMM yyyy", "id_ID");
     return formatter.format(dateTime);
-  }
-
-  Widget _shimmerBox(double size) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
-      child: Container(
-        width: size,
-        height: size,
-        color: Colors.white,
-      ),
-    );
   }
 
   @override

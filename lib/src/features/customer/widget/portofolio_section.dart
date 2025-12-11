@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/custom_button.dart';
 import 'package:mpjnew/src/core/constants/text_style.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
@@ -31,8 +30,6 @@ class _PortofolioSectionState extends State<PortofolioSection> {
     final portofolioList = portofolioProvider.portofolioList;
     final isLoadingPorto = portofolioProvider.isLoadingPorto;
     final error = portofolioProvider.errorPorto;
-
-    final screenWidth = MediaQuery.of(context).size.width;
 
     print("======= All Portofolio: ${portofolioList.length}");
     print("Error: $error");

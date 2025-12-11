@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_list_tile.dart';
 import 'package:mpjnew/src/features/customer/widget/search_chat_field.dart';
-import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
+import 'package:mpjnew/src/features/customer/widget/shimmer/chat_item_shimmer.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
@@ -76,8 +76,7 @@ class _ChatListPageState extends State<ChatListPage> {
         children: [
           SearchChatField(
             // unreadCount: sortedChats.where((c) => c['unread'] > 0).length,
-            unreadCount:
-                sortedChats.where((c) => (c.unread ?? 0) > 0).length,
+            unreadCount: sortedChats.where((c) => (c.unread ?? 0) > 0).length,
             searchController: _searchController,
             onChanged: (value) {
               setState(() {
@@ -88,9 +87,9 @@ class _ChatListPageState extends State<ChatListPage> {
           Expanded(
             child: context.watch<ChatProvider>().isLoading
                 ? ListView.builder(
-                    itemCount: 6, // jumlah skeleton dummy
+                    itemCount: 8, // jumlah skeleton dummy
                     itemBuilder: (context, index) {
-                      return const VendorBioShimmer();
+                      return ChatItemShimmer();
                     },
                   )
                 : ListView.builder(
