@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ShimmerPlaceholder extends StatelessWidget {
-  const ShimmerPlaceholder({super.key,  this.width, this.height, this.radius = 0});
+  const ShimmerPlaceholder({
+    super.key,
+    this.width,
+    this.height,
+    this.radius = 0,
+    this.isCircle = false,
+  });
 
-  // Set width, height, and radius
   final double? width;
   final double? height;
   final double radius;
+  final bool isCircle;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +25,8 @@ class ShimmerPlaceholder extends StatelessWidget {
         height: height,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(radius),
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: isCircle ? null : BorderRadius.circular(radius),
         ),
       ),
     );

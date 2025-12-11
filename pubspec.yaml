@@ -89,6 +89,7 @@ dependencies:
   video_editor: ^3.0.0
   fraction:
   http_parser:
+  pull_to_refresh: ^2.0.0
 
 dev_dependencies:
   flutter_test:

@@ -28,6 +28,11 @@ class ChatProvider extends ChangeNotifier {
   //=============================
   // SETTER
   //=============================
+  set isReady(bool isReady) {
+    _initialized = isReady;
+    notifyListeners();
+  }
+
   set rooms(List<RoomChatModel> rooms) => _rooms = rooms;
 
   //=============================

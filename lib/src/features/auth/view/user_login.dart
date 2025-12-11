@@ -118,7 +118,6 @@ class _UserLoginState extends State<UserLogin>
         default:
           CustomSnackbar.showErrorSnackbar(context,
               "Login gagal atau akun tidak terdaftar sebagai customer.");
-
           // Tambahkan ini agar bisa memilih akun ulang
           await provider.logout();
           break;
