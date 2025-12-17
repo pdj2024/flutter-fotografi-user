@@ -13,8 +13,9 @@ import 'package:provider/provider.dart';
 
 class SinglePostPage extends StatefulWidget {
   final String noId;
+  final String? idVendor;
 
-  const SinglePostPage({super.key, required this.noId});
+  const SinglePostPage({super.key, required this.noId, this.idVendor});
 
   @override
   State<SinglePostPage> createState() => _SinglePostPageState();
@@ -43,12 +44,12 @@ class _SinglePostPageState extends State<SinglePostPage> {
     });
 
     try {
-      final userId = context.read<UserProvider>().role == 'customer'
-          ? context.read<UserProvider>().userId
-          : null;
-
-      final portofolioDataList = await PortofolioService()
-          .getAll(noId: widget.noId, status: "aktif", id_customer: userId);
+      print("IDVENDOR => ${widget.idVendor}");
+      final portofolioDataList = await PortofolioService().getAll(
+        noId: widget.noId,
+        idVendor: widget.idVendor,
+        status: "aktif",
+      );
 
       if (portofolioDataList.isEmpty) {
         error = "Portofolio tidak ditemukan.";

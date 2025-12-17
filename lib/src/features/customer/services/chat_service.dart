@@ -25,7 +25,7 @@ class ChatService {
   bool _isConnecting = false;
 
   // gunakan endpoint chathub yang sesuai
-  final String hubUrl = "${Constants.baseUrl}/api/chathub";
+  final String hubUrl = "${Constants.baseUrlHub}/api/chathub";
 
   // -------------------------
   // SignalR internals
@@ -387,18 +387,21 @@ class ChatService {
             "[ChatService] sendMessage -> API responded ${response.statusCode}: ${response.body}");
         throw Exception('Gagal mengirim pesan ke room $roomId');
       }
-      if (_connection?.state == HubConnectionState.Connected) {
-        await _connection!.invoke("SendMessageToRoom", args: [
-          roomId,
-          senderUserId,
-          message,
-          // idPaket ?? "",
-          // noInvoice ?? ""
-        ]);
-        print("================ [SignalR] Sent message to $roomId: $message");
 
-        print("[API] ✅ Pesan terkirim ke $roomId: $message");
-      }
+      // print(
+      //     "[SignalR] status connection ${_connection?.state == HubConnectionState.Connected}");
+      // if (_connection?.state == HubConnectionState.Connected) {
+      //   await _connection!.invoke("SendMessageToRoom", args: [
+      //     roomId,
+      //     senderUserId,
+      //     message,
+      //     // idPaket ?? "",
+      //     // noInvoice ?? ""
+      //   ]);
+      //   print("================ [SignalR] Sent message to $roomId: $message");
+
+      //   print("[API] ✅ Pesan terkirim ke $roomId: $message");
+      // }
     } catch (e, st) {
       print("[ChatService] sendMessage error: $e\n$st");
       rethrow;

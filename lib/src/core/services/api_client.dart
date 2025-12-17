@@ -102,7 +102,7 @@ class ApiClient {
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
-      if (_role != null) 'X-Jenis-User': _role!,
+      'X-Jenis-User': Constants.customer,
     };
   }
 

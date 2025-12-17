@@ -266,10 +266,16 @@ class _EditAccountPageState extends State<EditAccountPage> {
     // VALIDASI USERNAME
     // =============================
     if (username.isEmpty) {
-      usernameError = "Username lengkap tidak boleh kosong";
+      usernameError = "Username tidak boleh kosong";
       result = false;
     } else if (username.length < 3) {
-      usernameError = "Username terlalu pendek";
+      usernameError = "Username minimal 3 karakter";
+      result = false;
+    } else if (username.contains(' ')) {
+      usernameError = "Username tidak boleh mengandung spasi";
+      result = false;
+    } else if (username != username.toLowerCase()) {
+      usernameError = "Username harus menggunakan huruf kecil";
       result = false;
     } else {
       usernameError = null;
