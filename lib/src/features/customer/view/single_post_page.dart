@@ -59,8 +59,10 @@ class _SinglePostPageState extends State<SinglePostPage> {
       portofolio = portofolioDataList.first;
 
       setState(() {
-        isLiked = portofolio.isLiked;
-        isSaved = portofolio.isSaved;
+        isLiked =
+            context.read<UserProvider>().customer!.likes.contains(widget.noId);
+        isSaved =
+            context.read<UserProvider>().customer!.saves.contains(widget.noId);
         likeCount = portofolio.likes;
       });
 
@@ -154,7 +156,6 @@ class _SinglePostPageState extends State<SinglePostPage> {
                           ...paketList.map(
                             (paket) => OfferCard(
                               paket: paket,
-                              portofolio: portofolio,
                             ),
                           ),
                         const SizedBox(height: 20),
@@ -162,7 +163,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                     ),
                   ),
                 ),
-      floatingActionButton: (!isLoading && paketList.length > 1)
+      floatingActionButton: (!isLoading)
           ? FloatingActionButton(
               onPressed: _fetchData,
               backgroundColor: Constants.primaryColor,

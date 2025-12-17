@@ -134,7 +134,7 @@ class PortofolioService {
   Future<void> create(PortofolioModel model) async {
     final response = await apiClient.post(
       '/$controller/create',
-      body: jsonEncode(model.toJson()),
+      body: jsonEncode(model.toJsonCreate()),
       headers: {'Content-Type': 'application/json'},
     );
 
@@ -148,7 +148,7 @@ class PortofolioService {
     final response = await apiClient.put(
       '/$controller/update',
       queryParameters: {'no_id': model.noId},
-      body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
+      body: jsonEncode(apiClient.toJsonSafe(model.toJsonUpdate())),
       headers: {'Content-Type': 'application/json'},
     );
 

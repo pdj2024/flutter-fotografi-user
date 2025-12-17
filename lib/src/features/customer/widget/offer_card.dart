@@ -2,102 +2,120 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
-import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:provider/provider.dart';
 
 class OfferCard extends StatelessWidget {
   final PaketModel paket;
-  final PortofolioModel? portofolio;
-  final String? vendorId;
-  final String? userNameVendor;
-  final String? idMediaVendor;
-  // final List<String> includes;
-
-  const OfferCard({
-    super.key,
-    this.portofolio,
-    required this.paket,
-    this.vendorId,
-    this.userNameVendor,
-    this.idMediaVendor,
-  });
+  final bool isPreview;
+  const OfferCard({super.key, required this.paket, this.isPreview = true});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 16, left: 16, top: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            paket.nama_paket,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        context.read<RoomChatProvider>().setTawaranPaket(paket);
+        CustomDialog.showDetailPaketDialog(
+          context: context,
+          paket: paket,
+          isAsk: true,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 8,
+              spreadRadius: 1,
+              offset: const Offset(1, 3),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            Helper.formatCurrency(paket.harga),
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            "Rincian",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          // ...includes.map((item) => Padding(
-          //       padding: const EdgeInsets.only(bottom: 2),
-          //       child: Text("• $item", style: const TextStyle(fontSize: 13)),
-          //     )),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              paket.rincian,
-              style: const TextStyle(fontSize: 13),
-              softWrap: true,
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: Constants.primaryColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            /// --- TITLE + PRICE + EDIT ICON ---
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    paket.nama_paket,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
-              ),
-              onPressed: () {
-                context.read<RoomChatProvider>().setTawaranPaket(paket);
-                CustomDialog.showDetailPaketDialog(
-                  context: context,
-                  paket: paket,
-                  isAsk: true,
-                );
-              },
-              child: const Text(
-                "Atur Jadwal",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                SizedBox(
+                  width: 10,
                 ),
+                Text(
+                  Helper.formatCurrency(paket.harga),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Constants.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+            Divider(color: Colors.grey.shade300),
+            const SizedBox(height: 10),
+
+            /// --- BENEFIT TITLE ---
+            Text(
+              "Benefit Paket:",
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+
+            /// --- BENEFIT LIST ---
+            ..._buildRincianList(paket.rincian),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Convert rincian menjadi bullet list otomatis
+  List<Widget> _buildRincianList(String rincian) {
+    final list = rincian.split('\n');
+
+    return list.map((item) {
+      if (item.trim().isEmpty) return const SizedBox();
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("• ", style: TextStyle(fontSize: 14, height: 1.4)),
+            Expanded(
+              child: Text(
+                item.trim(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 }

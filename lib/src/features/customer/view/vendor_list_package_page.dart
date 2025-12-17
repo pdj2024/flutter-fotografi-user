@@ -113,9 +113,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                     (paket) {
                       return OfferCard(
                         paket: paket,
-                        vendorId: widget.vendor.noId,
-                        userNameVendor: widget.vendor.username,
-                        idMediaVendor: widget.vendor.idMedia,
                       );
                     },
                   ).toList(),

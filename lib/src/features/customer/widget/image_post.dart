@@ -3,7 +3,7 @@ import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ImagePost extends StatelessWidget {
-  final List<MediaItem> mediaUrl;
+  final List<MediaUrlModel> mediaUrl;
   const ImagePost({super.key, required this.mediaUrl});
 
   @override

@@ -62,20 +62,26 @@ class PortofolioProvider with ChangeNotifier {
         status: status,
         untuk_keperluan: untukKeperluan,
       );
+
       _portofolioList = result;
 
       if (userProvider.customer != null) {
-        final userLiked = result
-            .where((porto) => userProvider.customer!.likes.contains(porto.noId))
+        final portoMap = {
+          for (final porto in result) porto.noId: porto,
+        };
+
+        final likes = userProvider.customer!.likes;
+        final saves = userProvider.customer!.saves;
+
+        _portofolioLikelist = likes.reversed // 🔥 ini kuncinya
+            .where((id) => portoMap.containsKey(id))
+            .map((id) => portoMap[id]!)
             .toList();
 
-        _portofolioLikelist = userLiked;
-
-        final userSaved = result
-            .where((porto) => userProvider.customer!.saves.contains(porto.noId))
+        _portofolioSaveList = saves.reversed
+            .where((id) => portoMap.containsKey(id))
+            .map((id) => portoMap[id]!)
             .toList();
-
-        _portofolioSaveList = userSaved;
       }
     } catch (e) {
       debugPrint("⚠️ Error memuat portofolio: $e");

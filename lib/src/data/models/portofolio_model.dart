@@ -2,185 +2,256 @@ class PortofolioModel {
   final String noId;
   final String idVendor;
   final List<String> idMedia;
-  final String idMediaVendor;
-  final String idKategori;
-  final String usernameVendor;
-  final String namaVendor;
-  final String kota;
+  final String? idMediaVendor;
+  final String? idKategori;
+  final String? namaKategori;
+  final String? jenisMedia;
+  final String? usernameVendor;
+  final String? namaVendor;
+  final String? kota;
+  final String? namaKota;
   final List<String> idPaket;
+  final dynamic paket;
   final DateTime tglCreated;
-  final int jumlahPaket;
+  final int? jumlahPaket;
   final String status;
-  final double ratingVendor;
-  final int hargaMinPaket;
-  final int hargaMaxPaket;
-  final int jumlahPortofolio;
+  final double? ratingVendor;
+  final int? hargaMinPaket;
+  final int? hargaMaxPaket;
+  final int? jumlahPortofolio;
   final int likes;
   final int saves;
-  final int matchKota;
-  final int fromSavedVendor;
-  final bool isSaved;
-  final bool isLiked;
-  final double skorTotal;
-  final String contentType;
-  final String thumbUrl;
-  final List<MediaItem> mediaUrls;
+  final int? matchKota;
+  final int? fromSavedVendor;
+  final bool? isSaved;
+  final bool? isLiked;
+  final double? skorTotal;
+  final List<MediaUrlModel> mediaUrls;
 
   PortofolioModel({
     required this.noId,
     required this.idVendor,
     required this.idMedia,
-    required this.idMediaVendor,
-    required this.idKategori,
-    required this.usernameVendor,
-    required this.namaVendor,
-    required this.kota,
+    this.idMediaVendor,
+    this.idKategori,
+    this.namaKategori,
+    this.jenisMedia,
+    this.usernameVendor,
+    this.namaVendor,
+    this.kota,
+    this.namaKota,
     required this.idPaket,
+    this.paket,
     required this.tglCreated,
-    required this.jumlahPaket,
+    this.jumlahPaket,
     required this.status,
-    required this.ratingVendor,
-    required this.hargaMinPaket,
-    required this.hargaMaxPaket,
-    required this.jumlahPortofolio,
+    this.ratingVendor,
+    this.hargaMinPaket,
+    this.hargaMaxPaket,
+    this.jumlahPortofolio,
     required this.likes,
     required this.saves,
-    required this.matchKota,
-    required this.fromSavedVendor,
-    required this.isSaved,
-    required this.isLiked,
-    required this.skorTotal,
-    required this.contentType,
-    required this.thumbUrl,
+    this.matchKota,
+    this.fromSavedVendor,
+    this.isSaved,
+    this.isLiked,
+    this.skorTotal,
     required this.mediaUrls,
   });
 
+  // ---------------------------
+  // FROM JSON
+  // ---------------------------
   factory PortofolioModel.fromJson(Map<String, dynamic> json) {
-    final mediaRaw = json['MediaUrls'] as List<dynamic>?;
-
-    final mediaList = mediaRaw != null
-        ? mediaRaw
-            .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-            .toList()
-        : <MediaItem>[];
-
-    final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-
     return PortofolioModel(
-      noId: json['No_Id']?.toString() ?? "",
-      idVendor: json['Id_Vendor']?.toString() ?? "",
-      idMedia: (json['Id_Media'] is List)
-          ? (json['Id_Media'] as List).map((e) => e.toString()).toList()
+      noId: json['No_Id'],
+      idVendor: json['Id_Vendor'],
+      idMedia:
+          json['Id_Media'] != null ? List<String>.from(json['Id_Media']) : [],
+      idMediaVendor: json['Id_Media_Vendor'],
+      idKategori: json['Id_Kategori'],
+      namaKategori: json['Nama_Kategori'],
+      jenisMedia: json['Jenis_Media'],
+      usernameVendor: json['Username_Vendor'],
+      namaVendor: json['Nama_Vendor'],
+      kota: json['Kota'],
+      namaKota: json['Nama_Kota'],
+      idPaket:
+          json['Id_Paket'] != null ? List<String>.from(json['Id_Paket']) : [],
+      paket: json['Paket'],
+      tglCreated: DateTime.parse(json['Tgl_Created']),
+      jumlahPaket: json['Jumlah_Paket'],
+      status: json['Status'],
+      ratingVendor: json['Rating_Vendor'].toDouble(),
+      hargaMinPaket: json['Harga_Min_Paket'],
+      hargaMaxPaket: json['Harga_Max_Paket'],
+      jumlahPortofolio: json['Jumlah_Portofolio'],
+      likes: json['Likes'],
+      saves: json['Saves'],
+      matchKota: json['Match_Kota'],
+      fromSavedVendor: json['From_Saved_Vendor'],
+      isSaved: json['Is_Saved'],
+      isLiked: json['Is_Liked'],
+      skorTotal: (json['Skor_Total'] is int)
+          ? (json['Skor_Total'] as int).toDouble()
+          : json['Skor_Total'],
+      mediaUrls: json['MediaUrls'] != null
+          ? (json['MediaUrls'] as List)
+              .map((e) => MediaUrlModel.fromJson(e))
+              .toList()
           : [],
-      idMediaVendor: json['Id_Media_Vendor']?.toString() ?? "",
-      idKategori: json['Id_Kategori']?.toString() ?? "",
-      usernameVendor: json['Username_Vendor']?.toString() ?? "",
-      namaVendor: json['Nama_Vendor']?.toString() ?? "",
-      kota: json['Kota']?.toString() ?? "",
-      idPaket: (json['Id_Paket'] is List)
-          ? (json['Id_Paket'] as List).map((e) => e.toString()).toList()
-          : [],
-      tglCreated: DateTime.tryParse(json['Tgl_Created']?.toString() ?? "") ??
-          DateTime(2000),
-      jumlahPaket: json['Jumlah_Paket'] is int ? json['Jumlah_Paket'] : 0,
-      status: json['Status']?.toString() ?? "",
-      ratingVendor: (json['Rating_Vendor'] is num)
-          ? (json['Rating_Vendor'] as num).toDouble()
-          : 0.0,
-      hargaMinPaket:
-          (json['Harga_Min_Paket'] is num) ? json['Harga_Min_Paket'] : 0,
-      hargaMaxPaket:
-          (json['Harga_Max_Paket'] is num) ? json['Harga_Max_Paket'] : 0,
-      jumlahPortofolio:
-          json['Jumlah_Portofolio'] is int ? json['Jumlah_Portofolio'] : 0,
-      likes: json['Likes'] is int ? json['Likes'] : 0,
-      saves: json['Saves'] is int ? json['Saves'] : 0,
-      matchKota: json['Match_Kota'] is int ? json['Match_Kota'] : 0,
-      fromSavedVendor:
-          json['From_Saved_Vendor'] is int ? json['From_Saved_Vendor'] : 0,
-      isSaved: json['Is_Saved'] == true,
-      isLiked: json['Is_Liked'] == true,
-      skorTotal: (json['Skor_Total'] is num)
-          ? (json['Skor_Total'] as num).toDouble()
-          : 0.0,
-      contentType: firstMedia?.contentType ?? "",
-      thumbUrl: firstMedia?.thumbUrl ?? firstMedia?.url ?? "",
-      mediaUrls: mediaList,
     );
   }
 
-  Map<String, dynamic> toJson() {
+  // ---------------------------
+  // COPY WITH
+  // ---------------------------
+  PortofolioModel copyWith({
+    String? noId,
+    String? idVendor,
+    List<String>? idMedia,
+    String? idMediaVendor,
+    String? idKategori,
+    String? namaKategori,
+    String? jenisMedia,
+    String? usernameVendor,
+    String? namaVendor,
+    String? kota,
+    String? namaKota,
+    List<String>? idPaket,
+    dynamic paket,
+    DateTime? tglCreated,
+    int? jumlahPaket,
+    String? status,
+    double? ratingVendor,
+    int? hargaMinPaket,
+    int? hargaMaxPaket,
+    int? jumlahPortofolio,
+    int? likes,
+    int? saves,
+    int? matchKota,
+    int? fromSavedVendor,
+    bool? isSaved,
+    bool? isLiked,
+    double? skorTotal,
+    List<MediaUrlModel>? mediaUrls,
+  }) {
+    return PortofolioModel(
+      noId: noId ?? this.noId,
+      idVendor: idVendor ?? this.idVendor,
+      idMedia: idMedia ?? this.idMedia,
+      idMediaVendor: idMediaVendor ?? this.idMediaVendor,
+      idKategori: idKategori ?? this.idKategori,
+      namaKategori: namaKategori ?? this.namaKategori,
+      jenisMedia: jenisMedia ?? this.jenisMedia,
+      usernameVendor: usernameVendor ?? this.usernameVendor,
+      namaVendor: namaVendor ?? this.namaVendor,
+      kota: kota ?? this.kota,
+      namaKota: namaKota ?? this.namaKota,
+      idPaket: idPaket ?? this.idPaket,
+      paket: paket ?? this.paket,
+      tglCreated: tglCreated ?? this.tglCreated,
+      jumlahPaket: jumlahPaket ?? this.jumlahPaket,
+      status: status ?? this.status,
+      ratingVendor: ratingVendor ?? this.ratingVendor,
+      hargaMinPaket: hargaMinPaket ?? this.hargaMinPaket,
+      hargaMaxPaket: hargaMaxPaket ?? this.hargaMaxPaket,
+      jumlahPortofolio: jumlahPortofolio ?? this.jumlahPortofolio,
+      likes: likes ?? this.likes,
+      saves: saves ?? this.saves,
+      matchKota: matchKota ?? this.matchKota,
+      fromSavedVendor: fromSavedVendor ?? this.fromSavedVendor,
+      isSaved: isSaved ?? this.isSaved,
+      isLiked: isLiked ?? this.isLiked,
+      skorTotal: skorTotal ?? this.skorTotal,
+      mediaUrls: mediaUrls ?? this.mediaUrls,
+    );
+  }
+
+  // ---------------------------
+  // TO JSON (CREATE)
+  // ---------------------------
+  Map<String, dynamic> toJsonCreate() {
     return {
-      'No_Id': noId,
-      'Id_Vendor': idVendor,
-      'Id_Media': idMedia,
-      'Id_Media_Vendor': idMediaVendor,
-      'Id_Kategori': idKategori,
-      'Username_Vendor': usernameVendor,
-      'Nama_Vendor': namaVendor,
-      'Kota': kota,
-      'Id_Paket': idPaket,
-      'Tgl_Created': tglCreated.toIso8601String(),
-      'Jumlah_Paket': jumlahPaket,
-      'Status': status,
-      'Rating_Vendor': ratingVendor,
-      'Harga_Min_Paket': hargaMinPaket,
-      'Harga_Max_Paket': hargaMaxPaket,
-      'Jumlah_Portofolio': jumlahPortofolio,
-      'Likes': likes,
-      'Saves': saves,
-      'Match_Kota': matchKota,
-      'From_Saved_Vendor': fromSavedVendor,
-      'Is_Saved': isSaved,
-      'Is_Liked': isLiked,
-      'Skor_Total': skorTotal,
-      'Content_Type': contentType,
-      'Thumb_Url': thumbUrl,
-      'MediaUrls': mediaUrls.map((e) => e.toJson()).toList(),
+      "id_vendor": idVendor,
+      "id_kategori": idKategori,
+      "id_paket": idPaket,
+      "jenis_media": jenisMedia,
+      "status": status,
+      "id_media": idMedia,
+    };
+  }
+
+  // ---------------------------
+  // TO JSON (UPDATE)
+  // ---------------------------
+  Map<String, dynamic> toJsonUpdate() {
+    return {
+      "id_vendor": idVendor,
+      "id_kategori": idKategori,
+      "id_paket": idPaket,
+      "jenis_media": jenisMedia,
+      "status": status,
+      "id_media": idMedia,
     };
   }
 }
 
-class MediaItem {
+class MediaUrlModel {
   final String? url;
+  final DateTime? expiredAt;
+  final bool? isCompressed;
   final String? contentType;
   final String? thumbUrl;
-  final String? noIdMedia;
-  final bool? isCompressed;
   final int? size;
-  final DateTime? expiredAt;
+  final String? idMedia;
+  final String? noIdMedia;
 
-  MediaItem({
+  MediaUrlModel({
     this.url,
+    this.expiredAt,
+    this.isCompressed,
     this.contentType,
     this.thumbUrl,
-    this.noIdMedia,
-    this.isCompressed,
     this.size,
-    this.expiredAt,
+    this.idMedia,
+    this.noIdMedia,
   });
 
-  factory MediaItem.fromJson(Map<String, dynamic> json) {
-    return MediaItem(
-      url: json['Id_Media']?.toString(),
-      contentType: json['ContentType']?.toString(),
-      thumbUrl: json['ThumbUrl']?.toString(),
-      noIdMedia: json['No_Id_Media']?.toString(),
-      isCompressed: json['IsCompressed'] == true,
-      size: json['Size'] is int ? json['Size'] : null,
-      expiredAt: DateTime.tryParse(json['Expired_At']?.toString() ?? ""),
+  factory MediaUrlModel.fromJson(Map<String, dynamic> json) {
+    return MediaUrlModel(
+      url: json['Id_Media'],
+      expiredAt: json['Expired_At'] != null
+          ? DateTime.parse(json['Expired_At'])
+          : null,
+      isCompressed: json['IsCompressed'],
+      contentType: json['ContentType'],
+      thumbUrl: json['ThumbUrl'],
+      size: json['Size'],
+      idMedia: json['Id_Media'],
+      noIdMedia: json['No_Id_Media'],
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'Id_Media': url,
-      'ContentType': contentType,
-      'ThumbUrl': thumbUrl,
-      'No_Id_Media': noIdMedia,
-      'IsCompressed': isCompressed,
-      'Size': size,
-      'Expired_At': expiredAt?.toIso8601String(),
-    };
+  MediaUrlModel copyWith({
+    String? url,
+    DateTime? expiredAt,
+    bool? isCompressed,
+    String? contentType,
+    String? thumbUrl,
+    int? size,
+    String? idMedia,
+    String? noIdMedia,
+  }) {
+    return MediaUrlModel(
+      url: url ?? this.url,
+      expiredAt: expiredAt ?? this.expiredAt,
+      isCompressed: isCompressed ?? this.isCompressed,
+      contentType: contentType ?? this.contentType,
+      thumbUrl: thumbUrl ?? this.thumbUrl,
+      size: size ?? this.size,
+      idMedia: idMedia ?? this.idMedia,
+      noIdMedia: noIdMedia ?? this.noIdMedia,
+    );
   }
 }

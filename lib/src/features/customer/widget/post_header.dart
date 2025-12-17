@@ -4,6 +4,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
 import 'package:provider/provider.dart';
 
 class PostHeader extends StatelessWidget {
@@ -27,29 +28,25 @@ class PostHeader extends StatelessWidget {
               child: Row(
                 children: [
                   // Avatar
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.grey[200],
-                    child: ClipOval(
-                      child: Image.network(
-                        portofolio.idMediaVendor,
-                        width: 36,
-                        height: 36,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.person, size: 20),
-                      ),
-                    ),
-                  ),
+                  AvatarCircle(size: 36, imgUrl: portofolio.idMediaVendor),
                   const SizedBox(width: 12),
                   // Nama + rating
                   Expanded(
                     child: Row(
                       children: [
-                        Text(
-                          portofolio.usernameVendor,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              portofolio.usernameVendor ?? '',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              portofolio.namaKategori ?? '',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
                         ),
                         const SizedBox(width: 6),
                         if (portofolio.ratingVendor != 0) ...[

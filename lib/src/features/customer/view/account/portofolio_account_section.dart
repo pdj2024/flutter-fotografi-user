@@ -8,8 +8,8 @@ import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart
 import 'package:provider/provider.dart';
 
 class PortofolioAccountSection extends StatefulWidget {
-  String data; // like / save
-  PortofolioAccountSection({super.key, required this.data});
+  final String data; // like / save
+  const PortofolioAccountSection({super.key, required this.data});
 
   @override
   State<PortofolioAccountSection> createState() =>

@@ -4,6 +4,7 @@ class VendorModel {
   final String namaDisplay;
   final String email;
   final String kota;
+  final String namaKota;
   final double rating;
   final List<String>
       portofolio; // ID portofolio, bisa digunakan untuk fetch detail
@@ -21,6 +22,7 @@ class VendorModel {
     required this.namaDisplay,
     required this.email,
     required this.kota,
+    required this.namaKota,
     required this.rating,
     required this.portofolio,
     required this.paket,
@@ -37,6 +39,7 @@ class VendorModel {
         namaDisplay: json['Nama_Display'] ?? '',
         email: json['Email'] ?? '',
         kota: json['Kota'] ?? '',
+        namaKota: json['Nama_Kota'] ?? '',
         rating: (json['Rating'] ?? 0).toDouble(),
         portofolio: (json['Portofolio'] as List? ?? [])
             .map((e) => e.toString())
@@ -57,6 +60,7 @@ class VendorModel {
       'Nama_Display': namaDisplay,
       'Email': email,
       'Kota': kota,
+      "Nama_Kota": namaKota,
       'Rating': rating,
       'Portofolio': portofolio,
       'Paket': paket,
