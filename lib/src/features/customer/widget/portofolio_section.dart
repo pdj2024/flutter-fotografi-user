@@ -111,15 +111,16 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               itemCount: portofolioList.length,
               itemBuilder: (context, index) {
                 final p = portofolioList[index];
-                final String? mediaUrl = p.mediaUrls.first.url;
+                final String? mediaUrl = p.mediaUrls[0].url;
+                print("Media URL: $mediaUrl");
 
                 // final String? mediaUrl =
                 //     context.read<NavigationProvider>().getMediaUrl(p) ?? '';
 
                 return PortofolioCard(
-                  photographerIcon: p.idMediaVendor,
+                  photographerIcon: p.idMediaVendor ?? '',
                   imageUrl: mediaUrl,
-                  name: p.usernameVendor,
+                  name: p.usernameVendor ?? "",
                   rating: p.ratingVendor,
                   noId: p.noId,
                   idVendor: p.idVendor,

@@ -590,8 +590,8 @@ class _SearchPageState extends State<SearchPage> {
                                                               .getMediaUrl(
                                                                   firstPorto) ??
                                                           '',
-                                                      firstPorto.usernameVendor,
-                                                      firstPorto.idMediaVendor,
+                                                      firstPorto.usernameVendor ?? "",
+                                                      firstPorto.idMediaVendor ?? "",
                                                       firstPorto.noId,
                                                       firstPorto.idVendor,
                                                     ),
@@ -611,9 +611,9 @@ class _SearchPageState extends State<SearchPage> {
                                                                     secondPorto) ??
                                                             '',
                                                         secondPorto
-                                                            .usernameVendor,
+                                                            .usernameVendor ?? "",
                                                         secondPorto
-                                                            .idMediaVendor,
+                                                            .idMediaVendor ?? "",
                                                         secondPorto.noId,
                                                         secondPorto.idVendor,
                                                       ),

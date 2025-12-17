@@ -89,7 +89,7 @@ class VendorBioCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            vendor.kota,
+                            vendor.namaKota,
                             style: const TextStyle(
                                 fontSize: 13, color: Colors.grey),
                           ),

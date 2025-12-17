@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:path/path.dart' as p;
@@ -138,5 +139,50 @@ class Helper {
     String jam = DateFormat("HH:mm").format(local);
 
     return "$jam $zona";
+  }
+}
+
+class CurrencyFormatter extends TextInputFormatter {
+  final NumberFormat formatter = NumberFormat("#,##0", "id_ID");
+  final String prefix;
+
+  CurrencyFormatter({this.prefix = "IDR "});
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Jika user menghapus semua, jangan error
+    if (newValue.text.isEmpty || newValue.text == prefix.trim()) {
+      return TextEditingValue(
+        text: "",
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Buang prefix sebelum memproses
+    String rawText = newValue.text.replaceAll(prefix, "");
+
+    // Hilangkan karakter non-digit
+    String digitsOnly = rawText.replaceAll(RegExp(r'[^0-9]'), "");
+
+    if (digitsOnly.isEmpty) {
+      return TextEditingValue(
+        text: "",
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Ubah ke angka
+    final number = int.parse(digitsOnly);
+
+    // Format ulang
+    final formatted = "$prefix${formatter.format(number)}";
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 }

@@ -12,7 +12,7 @@ class PortofolioCard extends StatelessWidget {
     required this.photographerIcon,
     this.imageUrl,
     required this.name,
-    required this.rating,
+    this.rating,
     this.aspectRatio = 5 / 4,
     required this.noId,
     required this.idVendor,
@@ -21,7 +21,7 @@ class PortofolioCard extends StatelessWidget {
   final String photographerIcon;
   final String? imageUrl;
   final String name;
-  final double rating;
+  final double? rating;
   final double aspectRatio;
   final String noId;
   final String idVendor;
@@ -126,7 +126,7 @@ class PortofolioCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
-                  if (rating > 0) ...[
+                  if (rating != null && rating! > 0) ...[
                     const Icon(Icons.star, color: Colors.amber, size: 18),
                     const SizedBox(width: 4),
                     Text(

@@ -57,6 +57,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
               tglCreated: DateTime(2000),
               idMedia: '',
               deskripsiBio: '',
+              namaKota: '',
             );
     } catch (_) {
       vendor = VendorModel(
@@ -73,6 +74,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
         tglCreated: DateTime(2000),
         idMedia: '',
         deskripsiBio: '',
+        namaKota: '',
       );
     }
 
@@ -211,7 +213,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
                     ),
                     itemBuilder: (context, index) {
                       final p = portofolioList[index];
-                      final List<MediaItem> mediaList = p.mediaUrls;
+                      final List<MediaUrlModel> mediaList = p.mediaUrls;
                       final firstMedia =
                           mediaList.isNotEmpty ? mediaList.first : null;
                       final isVideo =
