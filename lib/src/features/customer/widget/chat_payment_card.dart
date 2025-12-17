@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
+import 'package:provider/provider.dart';
 
 class ChatPaymentCard extends StatelessWidget {
   final PenawaranModel penawaran;
@@ -57,10 +60,18 @@ class ChatPaymentCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: () {},
-              child: const Text("Terima Tawaran",
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                context.read<NavigationProvider>().navigateToPage(
+                    context,
+                    DetailPembayaranPage(
+                      penawaranId: penawaran.noId,
+                    ));
+              },
+              child: const Text(
+                "Lihat Penawaran",
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],

@@ -6,8 +6,14 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:path/path.dart' as p;
 
 class Helper {
-static formatCurrency(num value, {String prefix = "IDR "}) {
+  static formatCurrency(num value, {String prefix = "IDR "}) {
     return "$prefix${NumberFormat("#,##0", "id_ID").format(value)}";
+  }
+
+  static String formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$minutes:$seconds";
   }
 
   static Map<String, List<ChatModel>> groupMessagesByDate(

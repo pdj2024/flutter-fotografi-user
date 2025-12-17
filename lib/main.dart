@@ -32,6 +32,7 @@ var companyNameGlobal = 'PT. ABC';
 final localizationsDelegates = <LocalizationsDelegate>[
   GlobalMaterialLocalizations.delegate,
   GlobalWidgetsLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
 ];
 
 void main() async {
@@ -42,6 +43,7 @@ void main() async {
 
   runApp(
     MultiProvider(
+      
       providers: [
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
 

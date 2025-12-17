@@ -308,7 +308,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                               return ChatPaymentCard(
                                 penawaran: offer,
                                 roomId: widget.roomId ?? "",
-                                customerId: userProv.customer!.noId,
+                                customerId: userProv.customer?.noId ?? "",
                               );
                             }
 
