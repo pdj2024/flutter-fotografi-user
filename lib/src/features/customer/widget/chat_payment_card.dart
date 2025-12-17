@@ -63,6 +63,7 @@ class ChatPaymentCard extends StatelessWidget {
               onPressed: () {
                 context.read<NavigationProvider>().navigateToPage(
                     context,
+                    targetTabIndex: 2,
                     DetailPembayaranPage(
                       penawaranId: penawaran.noId,
                     ));

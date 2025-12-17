@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
@@ -393,7 +394,7 @@ class CustomDialog {
 
   static void showPaymentMethodDialog({
     required BuildContext context,
-    required List<dynamic> metodePembayaran,
+    required List<MetodePembayaranModel> metodePembayaran,
     required String? currentKodeMetode,
     required Function(String kode, String text, int fee) onSelected,
   }) {
@@ -490,15 +491,15 @@ class CustomDialog {
                             currentKodeMetode == metode.caraBayar;
 
                         return PaymentOption(
-                          title: metode.caraBayar,
-                          subtitle: metode.display,
+                          title: metode.display,
+                          subtitle: metode.deskripsi,
                           fee: metode.fee,
                           method: metode.caraBayar,
                           isSelected: isSelected,
                           onTap: () {
                             onSelected(
                               metode.caraBayar,
-                              metode.caraBayar,
+                              metode.display,
                               metode.fee,
                             );
                             Navigator.pop(context);

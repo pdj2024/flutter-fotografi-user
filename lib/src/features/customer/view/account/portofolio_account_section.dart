@@ -109,7 +109,7 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection> {
                 onTap: () {
                   context.read<NavigationProvider>().navigateToPage(
                         context,
-                        SinglePostPage(noId: p.noId),
+                        SinglePostPage(noId: p.noId, idVendor: p.idVendor),
                         hrsLogin: true,
                         targetTabIndex: 3,
                       );

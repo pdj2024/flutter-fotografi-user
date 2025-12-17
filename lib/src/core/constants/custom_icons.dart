@@ -23,7 +23,7 @@ class CustomIcons {
       case "VA":
         return Colors.blue;
       case "COUNTER":
-        return Colors.orange;
+        return Colors.deepOrange;
       case "CARD":
         return Colors.green;
       default:

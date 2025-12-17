@@ -5,13 +5,19 @@ import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/custom_icons.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
+import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:provider/provider.dart';
 
 class DetailPembayaranPage extends StatefulWidget {
   final String penawaranId;
@@ -22,12 +28,11 @@ class DetailPembayaranPage extends StatefulWidget {
 }
 
 class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
-  Duration remainingTime = const Duration(minutes: 5, seconds: 0);
   PenawaranService penawaranService = PenawaranService();
+  PesananService pesananService = PesananService();
   MetodePembayaranService metodePembayaranService = MetodePembayaranService();
   PenawaranModel? penawaran;
   List<MetodePembayaranModel> metodePembayaran = [];
-  Timer? timer;
   bool isLoading = false;
   String? errorMessage;
 
@@ -36,6 +41,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   int hargaPaket = 0;
   int biayaPembayaran = 0;
   int biayaPPN = 0;
+  int biayaDPP = 0;
   int totalPembayaran = 0;
 
   @override
@@ -46,7 +52,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
   @override
   void dispose() {
-    timer?.cancel();
     super.dispose();
   }
 
@@ -78,21 +83,17 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   }
 
   void setHarga() {
+    biayaDPP = (penawaran!.harga / 1.11).round();
+    biayaPPN = penawaran!.harga - biayaDPP;
     hargaPaket = penawaran!.harga;
-    biayaPPN = hargaPaket * 11 ~/ 100;
-    totalPembayaran = hargaPaket + biayaPembayaran + biayaPPN;
+    totalPembayaran = hargaPaket + biayaPembayaran;
     setState(() {});
   }
 
   Future<void> getMetodePembayaran() async {
     try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
-
       final result = await metodePembayaranService.getAll(
-          orderBy: "cara_bayar", orderDir: "asc");
+          status: "aktif", orderBy: "cara_bayar", orderDir: "asc");
 
       if (result.isEmpty) {
         throw Exception("Metode pembayaran kosong");
@@ -102,9 +103,58 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       setState(() {});
     } catch (e) {
       errorMessage = "Metode pembayaran tidak ditemukan";
+    }
+  }
+
+  Future<void> createPesanan() async {
+    try {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+
+      if (penawaran == null) return;
+
+      final newPesanan = PesananModel(
+        noBukti: "new",
+        noPenawaran: penawaran!.noId,
+        idVendor: penawaran!.idVendor,
+        idCustomer: penawaran!.idCustomer,
+        idPaket: penawaran!.idPaket,
+        namaPaket: penawaran!.namaPaket,
+        kota: penawaran!.kota,
+        harga: penawaran!.harga,
+        lokasi: penawaran!.lokasi,
+        tglRealisasi: penawaran!.tglRealisasi,
+        status: "aktif",
+        statusBayar: null,
+        metodeBayar: kodeMetode,
+        idPaymentGateway: null,
+        subtotal: 0,
+        grandTotal: 0,
+      );
+
+      final result = await pesananService.create(newPesanan);
+
+      final pesanan = await pesananService.getAll(noBukti: result.noBukti);
+
+      CustomSnackbar.showSuccessSnackbar(
+        context,
+        "Pesanan berhasil dibuat, segera selesaikan pembayaran",
+      );
+
+      /// 🔥 NAVIGASI DARI DATA NYATA
+      context.read<NavigationProvider>().navigateToPage(
+            context,
+            targetTabIndex: 2,
+            WaitingPaymentPage(paymentData: pesanan.first),
+          );
+    } catch (e) {
+      errorMessage = e.toString();
+      CustomSnackbar.showErrorSnackbar(context, errorMessage!);
     } finally {
       setState(() {
-        isLoading = false;
+        isLoading = false; // ✅ FIX
       });
     }
   }
@@ -192,7 +242,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             children: [
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -241,7 +291,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                         content: Column(
                           children: [
                             _buildPriceRow(
-                              "Harga Paket",
+                              "Harga Paket (termasuk PPN)",
                               Helper.formatCurrency(hargaPaket),
                             ),
                             const SizedBox(height: 8),
@@ -378,8 +428,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                         ),
                         onPressed: kodeMetode == null
                             ? null
-                            : () {
+                            : () async {
                                 // Action bayar sekarang
+                                await createPesanan();
                               },
                         child: Text(
                           kodeMetode == null

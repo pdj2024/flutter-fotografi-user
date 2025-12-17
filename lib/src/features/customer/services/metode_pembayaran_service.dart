@@ -18,7 +18,7 @@ class MetodePembayaranService {
     int? minFee,
     int? maxFee,
     int? provider,
-    int? status,
+    String? status,
     String? orderBy,
     String? orderDir,
   }) async {

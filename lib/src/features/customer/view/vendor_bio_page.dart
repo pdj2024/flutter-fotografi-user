@@ -227,7 +227,9 @@ class _VendorBioPageState extends State<VendorBioPage> {
                       return GestureDetector(
                         onTap: () {
                           context.read<NavigationProvider>().navigateToPage(
-                              context, SinglePostPage(noId: p.noId),
+                              context,
+                              SinglePostPage(
+                                  noId: p.noId, idVendor: p.idVendor),
                               targetTabIndex: 0);
                         },
                         child: Container(

@@ -23,7 +23,7 @@ class PaketService {
     List<String>? idList,
   }) async {
     try {
-      final response = await apiClient.get(
+      final response = await _client.get(
         '/$controller/getAll',
         queryParameters: {
           if (noId != null) 'no_id': noId,
@@ -74,7 +74,7 @@ class PaketService {
     List<String>? idList,
   }) async {
     try {
-      final response = await apiClient.get(
+      final response = await _client.get(
         '/$controller/getAll',
         queryParameters: {
           if (noId != null) 'no_id': noId,
@@ -106,7 +106,7 @@ class PaketService {
 
   /// CREATE
   Future<void> create(PaketModel model) async {
-    final response = await apiClient.post(
+    final response = await _client.post(
       '/$controller/create',
       body: jsonEncode(model.toJson()),
       headers: {'Content-Type': 'application/json'},
@@ -119,10 +119,10 @@ class PaketService {
 
   /// UPDATE
   Future<void> update(PaketModel model) async {
-    final response = await apiClient.put(
+    final response = await _client.put(
       '/$controller/update',
       queryParameters: {'no_id': model.no_id},
-      body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
+      body: jsonEncode(_client.toJsonSafe(model.toJson())),
       headers: {'Content-Type': 'application/json'},
     );
 
@@ -133,7 +133,7 @@ class PaketService {
 
   /// DELETE
   Future<void> delete(String noId) async {
-    final response = await apiClient.delete(
+    final response = await _client.delete(
       '/$controller/delete',
       queryParameters: {'no_id': noId},
       headers: {'Content-Type': 'application/json'},
