@@ -320,59 +320,65 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-                      _buildCardSection(
-                        title: "Metode Pembayaran",
-                        content: GestureDetector(
-                          onTap: () => CustomDialog.showPaymentMethodDialog(
-                            context: context,
-                            metodePembayaran:
-                                metodePembayaran, // List dari model Anda
-                            currentKodeMetode: kodeMetode,
-                            onSelected: (kode, text, fee) {
-                              setState(() {
-                                kodeMetode = kode;
-                                textMetode = text;
-                                biayaPembayaran = fee;
-                              });
-                              setHarga();
-                            },
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                )
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      CustomIcons.getMetodeIcon(
-                                          kodeMetode ?? ""),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      textMetode ?? "Pilih Metode Pembayaran",
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
+                      penawaran!.noPesanan == ""
+                          ? _buildCardSection(
+                              title: "Metode Pembayaran",
+                              content: GestureDetector(
+                                onTap: () =>
+                                    CustomDialog.showPaymentMethodDialog(
+                                  context: context,
+                                  metodePembayaran:
+                                      metodePembayaran, // List dari model Anda
+                                  currentKodeMetode: kodeMetode,
+                                  onSelected: (kode, text, fee) {
+                                    setState(() {
+                                      kodeMetode = kode;
+                                      textMetode = text;
+                                      biayaPembayaran = fee;
+                                    });
+                                    setHarga();
+                                  },
                                 ),
-                                const Icon(Icons.arrow_forward_ios, size: 16),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 4,
+                                        offset: Offset(0, 2),
+                                      )
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            CustomIcons.getMetodeIcon(
+                                                kodeMetode ?? ""),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            textMetode ??
+                                                "Pilih Metode Pembayaran",
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                      const Icon(Icons.arrow_forward_ios,
+                                          size: 16),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          : SizedBox()
                     ],
                   ),
                 ),
@@ -433,9 +439,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                 await createPesanan();
                               },
                         child: Text(
-                          kodeMetode == null
-                              ? "Pilih Metode Pembayaran"
-                              : "Bayar Sekarang",
+                          penawaran!.noPesanan != ""
+                              ? "Penawaran ini sudah ditutup"
+                              : kodeMetode == null
+                                  ? "Pilih Metode Pembayaran"
+                                  : "Bayar Sekarang",
                           style: TextStyle(
                             color: kodeMetode == null
                                 ? Colors.grey.shade600
