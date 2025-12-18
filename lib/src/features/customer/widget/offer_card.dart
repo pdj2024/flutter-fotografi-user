@@ -9,7 +9,8 @@ import 'package:provider/provider.dart';
 class OfferCard extends StatelessWidget {
   final PaketModel paket;
   final bool isPreview;
-  const OfferCard({super.key, required this.paket, this.isPreview = true});
+  final VoidCallback onSend;
+  const OfferCard({super.key, required this.paket, this.isPreview = true, required this.onSend});
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +22,7 @@ class OfferCard extends StatelessWidget {
           context: context,
           paket: paket,
           isAsk: true,
+          onSend: onSend
         );
       },
       child: Container(
@@ -48,6 +50,8 @@ class OfferCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     paket.nama_paket,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,

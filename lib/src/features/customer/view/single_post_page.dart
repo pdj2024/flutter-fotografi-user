@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/post_header.dart';
@@ -156,6 +159,37 @@ class _SinglePostPageState extends State<SinglePostPage> {
                           ...paketList.map(
                             (paket) => OfferCard(
                               paket: paket,
+                              onSend: () async {
+                                setState(() {
+                                  isLoading = true;
+                                });
+                                final userId =
+                                    context.read<UserProvider>().userId!;
+                                final roomChatProvider =
+                                    context.read<RoomChatProvider>();
+
+                                roomChatProvider.setTawaranPaket(paket);
+                                roomChatProvider.activeRoomId = null;
+                                roomChatProvider.vendorId = paket.id_vendor;
+
+                                await roomChatProvider.sendMessage(
+                                  currentUserId: userId,
+                                );
+                                setState(() {
+                                  isLoading = false;
+                                });
+
+                                Navigator.pop(context);
+                                context
+                                    .read<NavigationProvider>()
+                                    .navigateToPage(
+                                      context,
+                                      targetTabIndex: 1,
+                                      RoomChatPage(
+                                        partnerId: paket.id_vendor,
+                                      ),
+                                    );
+                              },
                             ),
                           ),
                         const SizedBox(height: 20),

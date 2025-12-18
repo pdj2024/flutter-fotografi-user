@@ -386,7 +386,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
 
   @override
   Widget build(BuildContext context) {
-
     return WillPopScope(
       onWillPop: () async {
         widget.onClose();
@@ -682,6 +681,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
                       )
                     : Scrollbar(
                         child: ListView(
+                          physics: NeverScrollableScrollPhysics(),
                           shrinkWrap: true,
                           children: items.map((item) {
                             return ListTile(
