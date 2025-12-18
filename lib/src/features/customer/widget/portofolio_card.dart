@@ -53,7 +53,7 @@ class PortofolioCard extends StatelessWidget {
           GestureDetector(
             onTap: () => nav.navigateToPage(
               context,
-              SinglePostPage(noId: noId),
+              SinglePostPage(noId: noId, idVendor: idVendor),
               targetTabIndex: 0,
               targetPage: 'SinglePostPage',
             ),

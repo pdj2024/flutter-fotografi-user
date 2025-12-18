@@ -386,7 +386,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
 
   @override
   Widget build(BuildContext context) {
-
     return WillPopScope(
       onWillPop: () async {
         widget.onClose();
@@ -682,6 +681,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
                       )
                     : Scrollbar(
                         child: ListView(
+                          physics: NeverScrollableScrollPhysics(),
                           shrinkWrap: true,
                           children: items.map((item) {
                             return ListTile(
@@ -772,12 +772,23 @@ class _FilterOverlayState extends State<FilterOverlay> {
                     ),
                   )
                 : filteredPhotographers.isEmpty
-                    ? Text(
-                        'Pencarian tidak ada',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
+                    ? Column(
+                        children: const [
+                          SizedBox(height: 80),
+                          Icon(Icons.camera_alt_outlined,
+                              size: 150, color: Colors.grey),
+                          SizedBox(height: 10),
+                          Center(
+                            child: Text(
+                              "Belum ada portoflio",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
                       )
                     : Scrollbar(
                         thumbVisibility:

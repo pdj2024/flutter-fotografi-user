@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:provider/provider.dart';
 
 class VendorListPackagePage extends StatefulWidget {
   final VendorModel vendor;
@@ -113,6 +118,34 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                     (paket) {
                       return OfferCard(
                         paket: paket,
+                        onSend: () async {
+                          setState(() {
+                            isLoading = true;
+                          });
+                          final userId = context.read<UserProvider>().userId!;
+                          final roomChatProvider =
+                              context.read<RoomChatProvider>();
+
+                          roomChatProvider.setTawaranPaket(paket);
+                          roomChatProvider.activeRoomId = null;
+                          roomChatProvider.vendorId = paket.id_vendor;
+
+                          await roomChatProvider.sendMessage(
+                            currentUserId: userId,
+                          );
+                          setState(() {
+                            isLoading = false;
+                          });
+
+                          Navigator.pop(context);
+                          context.read<NavigationProvider>().navigateToPage(
+                                context,
+                                targetTabIndex: 1,
+                                RoomChatPage(
+                                  partnerId: paket.id_vendor,
+                                ),
+                              );
+                        },
                       );
                     },
                   ).toList(),

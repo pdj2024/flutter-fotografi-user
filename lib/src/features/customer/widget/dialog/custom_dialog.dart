@@ -16,6 +16,7 @@ class CustomDialog {
   static Future<void> showDetailPaketDialog({
     required BuildContext context,
     required PaketModel paket,
+    VoidCallback? onSend,
     bool isAsk = false,
   }) {
     return showDialog(
@@ -86,25 +87,32 @@ class CustomDialog {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Expanded(
-                                child: TextField(
-                                  controller:
-                                      roomChatProvider.messageController,
-                                  // ✅ Auto expand kebawah
-                                  minLines: 1,
-                                  maxLines: 5,
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: TextInputAction.newline,
-                                  cursorColor: Constants.primaryColor,
-                                  decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        vertical: 10, horizontal: 16),
-                                    hintText: "Tanyakan sesuatu...",
-                                    filled: true,
-                                    fillColor: const Color(0xFFE8E8E8),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                      borderSide: BorderSide.none,
+                              Flexible(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 120, // ≈ 4 baris
+                                  ),
+                                  child: TextField(
+                                    controller:
+                                        roomChatProvider.messageController,
+                                    minLines: 1,
+                                    maxLines: null, // biar mengikuti tinggi
+                                    keyboardType: TextInputType.multiline,
+                                    textInputAction: TextInputAction.newline,
+                                    cursorColor: Constants.primaryColor,
+                                    decoration: InputDecoration(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                        horizontal: 16,
+                                      ),
+                                      hintText: "Tanyakan sesuatu...",
+                                      filled: true,
+                                      fillColor: const Color(0xFFE8E8E8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: BorderSide.none,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -126,33 +134,9 @@ class CustomDialog {
                                             key: const ValueKey("sendButton"),
                                             icon: const Icon(Icons.send,
                                                 color: Constants.primaryColor),
-                                            onPressed: () async {
-                                              final userId = context
-                                                  .read<UserProvider>()
-                                                  .userId!;
-
-                                              Navigator.pop(context);
-                                              roomChatProvider
-                                                  .setTawaranPaket(paket);
-                                              roomChatProvider.activeRoomId =
-                                                  null;
-                                              roomChatProvider.vendorId =
-                                                  paket.id_vendor;
-
-                                              await roomChatProvider
-                                                  .sendMessage(
-                                                currentUserId: userId,
-                                              );
-
-                                              context
-                                                  .read<NavigationProvider>()
-                                                  .navigateToPage(
-                                                    context,
-                                                    RoomChatPage(
-                                                      partnerId:
-                                                          paket.id_vendor,
-                                                    ),
-                                                  );
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              isAsk ? onSend?.call() : null;
                                             },
                                           )
                                         : const SizedBox.shrink(),
