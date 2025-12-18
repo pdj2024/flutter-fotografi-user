@@ -212,7 +212,7 @@ class _SearchPageState extends State<SearchPage> {
           GestureDetector(
             onTap: () => context.read<NavigationProvider>().navigateToPage(
                   context,
-                  SinglePostPage(noId: noId),
+                  SinglePostPage(noId: noId, idVendor: idVendor,),
                   targetTabIndex: 0,
                   targetPage: "SinglePostPage",
                 ),
@@ -317,6 +317,7 @@ class _SearchPageState extends State<SearchPage> {
                 context,
                 SinglePostPage(
                   noId: noId,
+                  idVendor: idVendor,
                 ),
                 targetTabIndex: 0,
                 targetPage: "SinglePostPage",
@@ -558,7 +559,24 @@ class _SearchPageState extends State<SearchPage> {
                                   },
                                 )
                               : portofolioList.isEmpty
-                                  ? const Center(child: Text('Tidak ada hasil'))
+                                  ? Column(
+                                      children: const [
+                                        SizedBox(height: 80),
+                                        Icon(Icons.camera_alt_outlined,
+                                            size: 150, color: Colors.grey),
+                                        SizedBox(height: 10),
+                                        Center(
+                                          child: Text(
+                                            "Belum ada portofolio yang sesuai",
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
                                   : ListView(
                                       shrinkWrap: true,
                                       physics:
@@ -590,8 +608,12 @@ class _SearchPageState extends State<SearchPage> {
                                                               .getMediaUrl(
                                                                   firstPorto) ??
                                                           '',
-                                                      firstPorto.usernameVendor ?? "",
-                                                      firstPorto.idMediaVendor ?? "",
+                                                      firstPorto
+                                                              .usernameVendor ??
+                                                          "",
+                                                      firstPorto
+                                                              .idMediaVendor ??
+                                                          "",
                                                       firstPorto.noId,
                                                       firstPorto.idVendor,
                                                     ),
@@ -611,9 +633,11 @@ class _SearchPageState extends State<SearchPage> {
                                                                     secondPorto) ??
                                                             '',
                                                         secondPorto
-                                                            .usernameVendor ?? "",
+                                                                .usernameVendor ??
+                                                            "",
                                                         secondPorto
-                                                            .idMediaVendor ?? "",
+                                                                .idMediaVendor ??
+                                                            "",
                                                         secondPorto.noId,
                                                         secondPorto.idVendor,
                                                       ),
