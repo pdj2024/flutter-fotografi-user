@@ -31,7 +31,7 @@ class VendorService {
   /// GET ALL dengan parameter opsional
   Future<List<VendorModel>> getAll({
     String? no_id,
-    String? nama_vendor,
+    String? namaDisplay,
      String? username,
     String? id_media,
     String? status,
@@ -43,7 +43,7 @@ class VendorService {
         '/$controller/getAll',
         queryParameters: {
           if (no_id != null) 'no_id': no_id,
-          if (nama_vendor != null) 'nama_vendor': nama_vendor,
+          if (namaDisplay != null) 'Nama_Display': namaDisplay,
             if (username != null) 'username': username,
           if (id_media != null) 'id_media': id_media,
           if (status != null) 'status': status,

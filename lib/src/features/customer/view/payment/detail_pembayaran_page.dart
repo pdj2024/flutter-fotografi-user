@@ -84,9 +84,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
   void setHarga() {
     biayaDPP = (penawaran!.harga / 1.11).round();
-    biayaPPN = penawaran!.harga - biayaDPP;
     hargaPaket = penawaran!.harga;
     totalPembayaran = hargaPaket + biayaPembayaran;
+    biayaPPN = totalPembayaran - biayaDPP;
     setState(() {});
   }
 
@@ -123,7 +123,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         idPaket: penawaran!.idPaket,
         namaPaket: penawaran!.namaPaket,
         kota: penawaran!.kota,
-        harga: penawaran!.harga,
+        harga: totalPembayaran,
         lokasi: penawaran!.lokasi,
         tglRealisasi: penawaran!.tglRealisasi,
         status: "aktif",
@@ -286,43 +286,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-                      _buildCardSection(
-                        title: "Ringkasan Pembayaran",
-                        content: Column(
-                          children: [
-                            _buildPriceRow(
-                              "Harga Paket (termasuk PPN)",
-                              Helper.formatCurrency(hargaPaket),
-                            ),
-                            const SizedBox(height: 8),
-                            _buildPriceRow(
-                              "PPN 11%",
-                              Helper.formatCurrency(biayaPPN),
-                            ),
-                            (kodeMetode != null)
-                                ? Column(
-                                    children: [
-                                      const SizedBox(height: 8),
-                                      _buildPriceRow(
-                                        "Biaya Pembayaran",
-                                        Helper.formatCurrency(biayaPembayaran),
-                                      ),
-                                    ],
-                                  )
-                                : Container(),
-                            const Divider(height: 24),
-                            _buildPriceRow(
-                              "Total Pembayaran",
-                              Helper.formatCurrency(totalPembayaran),
-                              isBold: true,
-                              valueColor: Constants.primaryColorVendor,
-                            ),
-                          ],
-                        ),
-                      ),
                       penawaran!.noPesanan == ""
                           ? _buildCardSection(
                               title: "Metode Pembayaran",
+                              isRequired: true,
                               content: GestureDetector(
                                 onTap: () =>
                                     CustomDialog.showPaymentMethodDialog(
@@ -378,7 +345,41 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                 ),
                               ),
                             )
-                          : SizedBox()
+                          : SizedBox(),
+                      _buildCardSection(
+                        title: "Ringkasan Pembayaran",
+                        content: Column(
+                          children: [
+                            _buildPriceRow(
+                              "Harga Paket (termasuk PPN)",
+                              Helper.formatCurrency(hargaPaket),
+                            ),
+                            (kodeMetode != null)
+                                ? Column(
+                                    children: [
+                                      const SizedBox(height: 8),
+                                      _buildPriceRow(
+                                        "Biaya Pembayaran",
+                                        Helper.formatCurrency(biayaPembayaran),
+                                      ),
+                                    ],
+                                  )
+                                : Container(),
+                            const SizedBox(height: 8),
+                            _buildPriceRow(
+                              "PPN 11%",
+                              Helper.formatCurrency(biayaPPN),
+                            ),
+                            const Divider(height: 24),
+                            _buildPriceRow(
+                              "Total Pembayaran",
+                              Helper.formatCurrency(totalPembayaran),
+                              isBold: true,
+                              valueColor: Constants.primaryColorVendor,
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -441,9 +442,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                         child: Text(
                           penawaran!.noPesanan != ""
                               ? "Penawaran ini sudah ditutup"
-                              : kodeMetode == null
-                                  ? "Pilih Metode Pembayaran"
-                                  : "Bayar Sekarang",
+                              : "Bayar Sekarang",
                           style: TextStyle(
                             color: kodeMetode == null
                                 ? Colors.grey.shade600
@@ -463,7 +462,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     );
   }
 
-  Widget _buildCardSection({required String title, required Widget content}) {
+  Widget _buildCardSection(
+      {required String title,
+      required Widget content,
+      bool isRequired = false}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -477,9 +479,31 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          isRequired
+              ? Row(
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(
+                      width: 2,
+                    ),
+                    Text(
+                      "*",
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red),
+                    ),
+                  ],
+                )
+              : Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold),
+                ),
           const SizedBox(height: 12),
           content,
         ],

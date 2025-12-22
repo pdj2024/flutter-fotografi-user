@@ -4,9 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:path/path.dart' as p;
 
 class Helper {
+  static void copyToClipboard(BuildContext context, String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    CustomSnackbar.showSuccessSnackbar(context, "$label berhasil disalin");
+  }
+
   static formatCurrency(num value, {String prefix = "IDR "}) {
     return "$prefix${NumberFormat("#,##0", "id_ID").format(value)}";
   }

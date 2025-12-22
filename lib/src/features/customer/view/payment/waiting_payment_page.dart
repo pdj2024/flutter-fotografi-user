@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
@@ -9,6 +8,10 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
+import 'package:mpjnew/src/features/customer/widget/payment/qris_payment_cart.dart';
+import 'package:mpjnew/src/features/customer/widget/payment/va_payment_card.dart';
 import 'package:provider/provider.dart';
 
 class WaitingPaymentPage extends StatefulWidget {
@@ -25,7 +28,7 @@ class WaitingPaymentPage extends StatefulWidget {
 
 class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   PesananService pesananService = PesananService();
-  Duration remainingTime = const Duration(minutes: 0, seconds: 30);
+  Duration remainingTime = const Duration(minutes: 5, seconds: 0);
   Timer? _timer;
   bool _isExpiredHandled = false;
   Timer? _checkPaymentTimer;
@@ -101,87 +104,27 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
       final nonAktifPayment = widget.paymentData.copyWith(
         status: "nonaktif",
       );
-
       await pesananService.update(nonAktifPayment);
 
       if (!mounted) return;
-      _showExpiredDialog();
+      CustomDialog.showTimeoutDialog(
+          context: context,
+          onTap: () {
+            context.read<NavigationProvider>().popAllToRoot();
+            context.read<NavigationProvider>().changeTab(2, context);
+          });
     } catch (e) {
       debugPrint("Gagal update status pembayaran: $e");
     }
   }
 
-  void _showExpiredDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.timer_off, color: Colors.red, size: 28),
-            SizedBox(width: 12),
-            Text("Waktu Habis"),
-          ],
-        ),
-        content: const Text(
-          "Waktu pembayaran telah habis. Silakan buat pesanan baru.",
-          style: TextStyle(fontSize: 15),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              context.read<NavigationProvider>().popAllToRoot();
-              context.read<NavigationProvider>().changeTab(2, context);
-            },
-            child: const Text("OK"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _copyToClipboard(String text, String label) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("$label berhasil disalin"),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
-  IconData _getPaymentIcon(String method) {
-    if (method.contains('QRIS')) return Icons.qr_code_2_rounded;
-    if (method.contains('VA') || method.contains('BANK'))
-      return Icons.account_balance_rounded;
-    if (method.contains('ALFAMART') || method.contains('INDOMARET'))
-      return Icons.store_rounded;
-    if (method.contains('CARD')) return Icons.credit_card_rounded;
-    return Icons.payment_rounded;
-  }
-
-  Color _getPaymentColor(String method) {
-    if (method.contains('QRIS')) return Colors.purple;
-    if (method.contains('VA') || method.contains('BANK')) return Colors.blue;
-    if (method.contains('ALFAMART') || method.contains('INDOMARET'))
-      return Colors.orange;
-    if (method.contains('CARD')) return Colors.green;
-    return Colors.grey;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final String metodeBayar = widget.paymentData.metodeBayar ?? "";
-    final String orderNumber = widget.paymentData.noBukti ?? '-';
+    final String orderNumber = widget.paymentData.noBukti;
     final String trackingNumber = widget.paymentData.noTrackingPesanan ?? '-';
-    final int grandTotal = widget.paymentData.grandTotal ?? 0;
-    final int subtotal = widget.paymentData.subtotal ?? 0;
+    final int grandTotal = widget.paymentData.grandTotal;
+    final int subtotal = widget.paymentData.subtotal;
     final int ppn = widget.paymentData.totPpn ?? 0;
-
-    final paymentColor = _getPaymentColor(metodeBayar);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -251,97 +194,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Payment Method Card
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: paymentColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                _getPaymentIcon(metodeBayar),
-                                color: paymentColor,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Metode Pembayaran",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    metodeBayar,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Payment Instructions for COUNTER
-                        if (metodeBayar.contains('ALFAMART') ||
-                            metodeBayar.contains('INDOMARET')) ...[
-                          const SizedBox(height: 20),
-                          const Divider(),
-                          const SizedBox(height: 16),
-                          const Text(
-                            "Cara Pembayaran:",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildInstructionStep(
-                            "1",
-                            "Kunjungi ${metodeBayar.split(' ').last} terdekat",
-                          ),
-                          _buildInstructionStep(
-                            "2",
-                            "Tunjukkan kode pembayaran ke kasir",
-                          ),
-                          _buildInstructionStep(
-                            "3",
-                            "Lakukan pembayaran sejumlah ${Helper.formatCurrency(grandTotal)}",
-                          ),
-                          _buildInstructionStep(
-                            "4",
-                            "Simpan struk pembayaran sebagai bukti",
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  _buildPaymentCodeSection(),
 
                   const SizedBox(height: 16),
 
@@ -390,8 +243,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                     icon: Icons.receipt_rounded,
                     content: Column(
                       children: [
-                        _buildPriceRow(
-                            "Subtotal", Helper.formatCurrency(subtotal)),
+                        _buildPriceRow("Subtotal (termasuk PPN)",
+                            Helper.formatCurrency(subtotal)),
                         const SizedBox(height: 12),
                         _buildPriceRow("PPN (11%)", Helper.formatCurrency(ppn)),
                         const SizedBox(height: 12),
@@ -415,8 +268,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                     child: Column(
                       children: [
                         SizedBox(
-                          width: 50,
-                          height: 50,
+                          width: 30,
+                          height: 30,
                           child: CircularProgressIndicator(
                             strokeWidth: 3,
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -456,43 +309,33 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     );
   }
 
-  Widget _buildInstructionStep(String number, String instruction) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: Constants.primaryColorVendor.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                number,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Constants.primaryColorVendor,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                instruction,
-                style: const TextStyle(fontSize: 14, height: 1.4),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  Widget _buildPaymentCodeSection() {
+    final String metodeBayar = widget.paymentData.metodeBayar ?? "";
+    final String paymentNumber1 = widget.paymentData.paymentNumber1 ?? "";
+    final String paymentNumber2 = widget.paymentData.paymentNumber2 ?? "";
+    final int grandTotal = widget.paymentData.grandTotal;
+
+    // QRIS
+    if (metodeBayar.contains('QRIS')) {
+      return QrisPaymentCard(qrUrl: paymentNumber1, amount: grandTotal);
+    }
+
+    // Virtual Account (VA)
+    if (metodeBayar.contains('VA') || metodeBayar.contains('BANK')) {
+      return VaPaymentCard(
+          bankName: metodeBayar, vaNumber: paymentNumber1, amount: grandTotal);
+    }
+
+    // Counter (Alfamart/Indomaret)
+    if (metodeBayar.contains('ALFAMART') || metodeBayar.contains('INDOMARET')) {
+      return CounterPaymentCard(
+          storeName: metodeBayar,
+          paymentCode: paymentNumber1,
+          merchantCode: paymentNumber2,
+          amount: grandTotal);
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildCardSection({
@@ -565,7 +408,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
               ),
               if (copyable)
                 InkWell(
-                  onTap: () => _copyToClipboard(value, label),
+                  onTap: () => Helper.copyToClipboard(context, value, label),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(

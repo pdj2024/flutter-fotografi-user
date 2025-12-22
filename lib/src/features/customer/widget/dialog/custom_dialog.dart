@@ -9,6 +9,7 @@ import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/payment_option.dart';
 import 'package:provider/provider.dart';
 
@@ -25,148 +26,202 @@ class CustomDialog {
       builder: (context) {
         final roomChatProvider = context.read<RoomChatProvider>();
         roomChatProvider.messageController.clear();
+        final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
+        final maxHeight = MediaQuery.of(context).size.height * 0.5;
 
         return BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: Dialog(
-            backgroundColor: const Color(0xfff9f9f9),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: 20,
+              top: 16,
             ),
-            child: StatefulBuilder(
-              builder: (context, setStateDialog) {
-                return Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ICON
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: const BoxDecoration(
-                            color: Constants.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.card_giftcard,
-                            color: Colors.white,
-                            size: 36,
-                          ),
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.zero,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: maxHeight,
+                ),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    /// ================= HEADER =================
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // TITLE
-                      Center(
-                        child: Text(
-                          paket.nama_paket,
+                        const SizedBox(width: 8),
+                        Text(
+                          "Detail Paket",
                           style: const TextStyle(
                             fontSize: 20,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
+                      ],
+                    ),
+                    Divider(color: Colors.grey.shade300),
+                    SizedBox(
+                      height: 5,
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            paket.nama_paket,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          Helper.formatCurrency(paket.harga),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Constants.primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
 
-                      const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
-                      _detailItem("Harga", Helper.formatCurrency(paket.harga)),
-                      const SizedBox(height: 10),
-
-                      _detailItem("Rincian", paket.rincian),
-
-                      const SizedBox(height: 20),
-
-                      // MODE BERTANYA
-                      if (isAsk)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Flexible(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxHeight: 120, // ≈ 4 baris
-                                  ),
-                                  child: TextField(
-                                    controller:
-                                        roomChatProvider.messageController,
-                                    minLines: 1,
-                                    maxLines: null, // biar mengikuti tinggi
-                                    keyboardType: TextInputType.multiline,
-                                    textInputAction: TextInputAction.newline,
-                                    cursorColor: Constants.primaryColor,
-                                    decoration: InputDecoration(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                        horizontal: 16,
-                                      ),
-                                      hintText: "Tanyakan sesuatu...",
-                                      filled: true,
-                                      fillColor: const Color(0xFFE8E8E8),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(15),
-                                        borderSide: BorderSide.none,
-                                      ),
+                    /// ================= RINCIAN (SCROLLABLE) =================
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Rincian",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            ...paket.rincian
+                                .split('\n')
+                                .where((e) => e.trim().isNotEmpty)
+                                .map(
+                                  (item) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text("• "),
+                                        Expanded(
+                                          child: Text(
+                                            item.trim(),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              ValueListenableBuilder<TextEditingValue>(
-                                valueListenable:
-                                    roomChatProvider.messageController,
-                                builder: (context, value, _) {
-                                  final hasText = value.text.trim().isNotEmpty;
+                          ],
+                        ),
+                      ),
+                    ),
 
-                                  return AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 200),
-                                    transitionBuilder: (child, anim) =>
-                                        ScaleTransition(
-                                            scale: anim, child: child),
-                                    child: hasText
-                                        ? IconButton(
-                                            key: const ValueKey("sendButton"),
-                                            icon: const Icon(Icons.send,
-                                                color: Constants.primaryColor),
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                              isAsk ? onSend?.call() : null;
-                                            },
-                                          )
-                                        : const SizedBox.shrink(),
-                                  );
-                                },
+                    /// ================= INPUT / ACTION =================
+                    if (isAsk)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 120),
+                              child: TextField(
+                                controller: roomChatProvider.messageController,
+                                minLines: 1,
+                                maxLines: null,
+                                cursorColor: Constants.primaryColor,
+                                decoration: InputDecoration(
+                                  hintText: "Tanyakan sesuatu...",
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 16,
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFFF1F1F1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
                               ),
-                            ],
+                            ),
                           ),
-                        )
-                      else
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Constants.primaryColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                          const SizedBox(width: 8),
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: roomChatProvider.messageController,
+                            builder: (context, value, _) {
+                              final hasText = value.text.trim().isNotEmpty;
+                              return hasText
+                                  ? IconButton(
+                                      icon: const Icon(Icons.send,
+                                          color: Constants.primaryColor),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        onSend?.call();
+                                      },
+                                    )
+                                  : const SizedBox.shrink();
+                            },
+                          ),
+                        ],
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Constants.primaryColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text(
-                              "Tutup",
-                              style: TextStyle(color: Colors.white),
-                            ),
+                          ),
+                          child: const Text(
+                            "Tutup",
+                            style: TextStyle(color: Colors.white),
                           ),
                         ),
-                    ],
-                  ),
-                );
-              },
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -496,6 +551,111 @@ class CustomDialog {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  static void showTimeoutDialog(
+      {required BuildContext context, required VoidCallback onTap}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon dengan background
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.timer_off_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 32,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Title
+                  const Text(
+                    "Waktu Habis",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Message
+                  const Text(
+                    "Waktu pembayaran telah habis. Silakan buat pesanan baru.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Color(0xFF6B7280),
+                      height: 1.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onTap();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        "Mengerti",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

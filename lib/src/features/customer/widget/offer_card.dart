@@ -10,7 +10,11 @@ class OfferCard extends StatelessWidget {
   final PaketModel paket;
   final bool isPreview;
   final VoidCallback onSend;
-  const OfferCard({super.key, required this.paket, this.isPreview = true, required this.onSend});
+  const OfferCard(
+      {super.key,
+      required this.paket,
+      this.isPreview = true,
+      required this.onSend});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +26,7 @@ class OfferCard extends StatelessWidget {
           context: context,
           paket: paket,
           isAsk: true,
-          onSend: onSend
+          onSend: onSend,
         );
       },
       child: Container(
@@ -76,50 +80,88 @@ class OfferCard extends StatelessWidget {
             Divider(color: Colors.grey.shade300),
             const SizedBox(height: 10),
 
-            /// --- BENEFIT TITLE ---
-            Text(
-              "Benefit Paket:",
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
-            ),
-            const SizedBox(height: 6),
-
-            /// --- BENEFIT LIST ---
             ..._buildRincianList(paket.rincian),
+
+            const SizedBox(height: 10),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  context.read<RoomChatProvider>().setTawaranPaket(paket);
+                  CustomDialog.showDetailPaketDialog(
+                    context: context,
+                    paket: paket,
+                    isAsk: true,
+                    onSend: onSend,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  overlayColor: Constants.primaryColorVendor.withAlpha(20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadiusGeometry.circular(15),
+                    side: BorderSide(
+                      width: 2,
+                      color: Constants.primaryColorVendor,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  "Lihat Paket",
+                  style: TextStyle(
+                    color: Constants.primaryColorVendor,
+                  ),
+                ),
+              ),
+            )
           ],
         ),
       ),
     );
   }
 
-  /// Convert rincian menjadi bullet list otomatis
-  List<Widget> _buildRincianList(String rincian) {
-    final list = rincian.split('\n');
+  List<Widget> _buildRincianList(String rincian, {int maxLines = 3}) {
+    final list = rincian.split('\n').where((e) => e.trim().isNotEmpty).toList();
 
-    return list.map((item) {
-      if (item.trim().isEmpty) return const SizedBox();
+    final visibleItems = list.take(maxLines).toList();
+    final hasMore = list.length > maxLines;
 
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("• ", style: TextStyle(fontSize: 14, height: 1.4)),
-            Expanded(
-              child: Text(
-                item.trim(),
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
+    return [
+      ...visibleItems.map(
+        (item) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("• ", style: TextStyle(fontSize: 14, height: 1.4)),
+              Expanded(
+                child: Text(
+                  item.trim(),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
-    }).toList();
+      ),
+
+      /// indikator ada lanjutan
+      if (hasMore)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            "+${list.length - maxLines} lainnya",
+            style: TextStyle(
+              fontSize: 13,
+              color: Constants.primaryColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+    ];
   }
 }

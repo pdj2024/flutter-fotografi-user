@@ -6,9 +6,11 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
@@ -43,7 +45,6 @@ void main() async {
 
   runApp(
     MultiProvider(
-      
       providers: [
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
 
@@ -85,6 +86,10 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) =>
               PenawaranProvider(penawaranService: PenawaranService()),
+        ),
+
+        ChangeNotifierProvider(
+          create: (_) => PesananProvider(pesananService: PesananService()),
         ),
 
         /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat

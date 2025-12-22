@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 import '../../features/auth/services/auth_service.dart';
 
@@ -27,12 +28,15 @@ class ApiClient {
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
-    final headers = await _headers();
 
-    print("📥 [GET] $uri");
-    print("📄 Headers: $headers");
+    return _handleWithAuthRetry(() async {
+      final headers = await _headers();
 
-    return await http.get(uri, headers: headers);
+      print("📥 [GET] $uri");
+      print("📄 Headers: $headers");
+
+      return http.get(uri, headers: headers);
+    });
   }
 
   /// POST request
@@ -44,19 +48,25 @@ class ApiClient {
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
-    final mergedHeaders = await _mergedHeaders(headers);
 
-    Object? finalBody = body;
-    if (body is Map) {
-      finalBody = jsonEncode(body);
-      mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
-    }
+    return _handleWithAuthRetry(() async {
+      final mergedHeaders = await _mergedHeaders(headers);
 
-    print("📤 [POST] $uri");
-    print("📄 Headers: $mergedHeaders");
-    print("📦 Body: $finalBody");
+      Object? finalBody = body;
+      if (body is Map) {
+        finalBody = jsonEncode(body);
+        mergedHeaders.putIfAbsent(
+          'Content-Type',
+          () => 'application/json',
+        );
+      }
 
-    return await http.post(uri, headers: mergedHeaders, body: finalBody);
+      print("📤 [POST] $uri");
+      print("📄 Headers: $mergedHeaders");
+      print("📦 Body: $finalBody");
+
+      return http.post(uri, headers: mergedHeaders, body: finalBody);
+    });
   }
 
   /// PUT request
@@ -68,13 +78,16 @@ class ApiClient {
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
-    final mergedHeaders = await _mergedHeaders(headers);
 
-    print("📤 [PUT] $uri");
-    print("📄 Headers: $mergedHeaders");
-    print("📦 Body: $body");
+    return _handleWithAuthRetry(() async {
+      final mergedHeaders = await _mergedHeaders(headers);
 
-    return await http.put(uri, headers: mergedHeaders, body: body);
+      print("📤 [PUT] $uri");
+      print("📄 Headers: $mergedHeaders");
+      print("📦 Body: $body");
+
+      return http.put(uri, headers: mergedHeaders, body: body);
+    });
   }
 
   /// DELETE request
@@ -85,19 +98,48 @@ class ApiClient {
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
-    final mergedHeaders = await _mergedHeaders(headers);
 
-    print("❌ [DELETE] $uri");
-    print("📄 Headers: $mergedHeaders");
+    return _handleWithAuthRetry(() async {
+      final mergedHeaders = await _mergedHeaders(headers);
 
-    return await http.delete(uri, headers: mergedHeaders);
+      print("❌ [DELETE] $uri");
+      print("📄 Headers: $mergedHeaders");
+
+      return http.delete(uri, headers: mergedHeaders);
+    });
+  }
+
+  Future<http.Response> _handleWithAuthRetry(
+    Future<http.Response> Function() request, {
+    bool retry = true,
+  }) async {
+    final response = await request();
+
+    print("📤 Status Code: ${response.statusCode}");
+    print("📤 Body: ${response.body}");
+
+    if (response.statusCode == 401 &&
+        response.body.contains("Invalid Token") &&
+        retry) {
+      print("🔄 Token invalid, mencoba silent login...");
+
+      final newToken = await _authService.login(silent: true);
+
+      if (newToken == null) {
+        print("❌ Silent login gagal");
+        return response;
+      }
+
+      print("✅ Silent login berhasil, retry request");
+      return _handleWithAuthRetry(request, retry: false);
+    }
+
+    return response;
   }
 
   /// Ambil header standar (opsional token & role)
   Future<Map<String, String>> _headers() async {
-    final token = await _authService.getIdToken(); // nullable token
-
-    // debugPrint('======= MY TOKEN: $token', wrapWidth: 1024);
+    final token = await _authService.getIdToken(); // selalu fresh
 
     return {
       'Content-Type': 'application/json',
