@@ -5,10 +5,12 @@ import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
-import 'package:mpjnew/src/pages/fotografi_user/all_order.dart';
+import 'package:mpjnew/src/features/customer/view/history/all_order.dart';
 import 'package:provider/provider.dart';
 
 class MainMenu extends StatefulWidget {
@@ -44,7 +46,7 @@ class _MainMenuState extends State<MainMenu> {
               children: [
                 _buildOffstageNavigator(0, CustomerHomePage()),
                 _buildOffstageNavigator(1, ChatListPage()),
-                _buildOffstageNavigator(2, AllOrder()),
+                _buildOffstageNavigator(2, MainOrderPage()),
                 _buildOffstageNavigator(3, CustomerAccountPage()),
               ],
             );
@@ -61,14 +63,6 @@ class _MainMenuState extends State<MainMenu> {
               type: BottomNavigationBarType.fixed,
               onTap: (index) async {
                 navigationProvider.onItemTapped(index, context);
-                if (index == 3) {
-                  await context
-                      .read<UserProvider>()
-                      .checkLoginGoogle(role: 'customer');
-                  await context
-                      .read<PortofolioProvider>()
-                      .loadPortofolio(context);
-                }
 
                 if (index == 1 && user != null) {
                   final roomProvider = context.read<RoomChatProvider>();
@@ -85,6 +79,20 @@ class _MainMenuState extends State<MainMenu> {
                     chatProvider.isReady = false;
                     await chatProvider.init(user.noId);
                   }
+                }
+
+                if (index == 2) {
+                  await context.read<PesananProvider>().loadOrder(
+                      userId: context.read<UserProvider>().userId ?? '');
+                }
+
+                if (index == 3) {
+                  await context
+                      .read<UserProvider>()
+                      .checkLoginGoogle(role: 'customer');
+                  await context
+                      .read<PortofolioProvider>()
+                      .loadPortofolio(context);
                 }
               },
               items: [

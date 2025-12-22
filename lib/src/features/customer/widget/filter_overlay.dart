@@ -299,6 +299,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
       final photographerRes = await VendorService().getAll(
         orderBy: 'username',
         username: query,
+        namaDisplay: query,
         no_id: noId, // kalau kosong, kirim null
       );
 
@@ -773,16 +774,16 @@ class _FilterOverlayState extends State<FilterOverlay> {
                   )
                 : filteredPhotographers.isEmpty
                     ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
-                          SizedBox(height: 80),
-                          Icon(Icons.camera_alt_outlined,
-                              size: 150, color: Colors.grey),
+                          Icon(Icons.list_alt_rounded,
+                              size: 50, color: Colors.grey),
                           SizedBox(height: 10),
                           Center(
                             child: Text(
-                              "Belum ada portoflio",
+                              "Data yang anda cari tidak ditemukan",
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey,
                               ),

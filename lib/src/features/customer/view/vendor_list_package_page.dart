@@ -43,6 +43,8 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
       final data = await PaketService().getAll(
         idVendor: widget.vendor.noId,
         status: 'aktif',
+        orderBy: "tgl_created",
+        orderDir: "desc",
       );
       print("==== DATA PAKET: $data");
       setState(() {

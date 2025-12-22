@@ -69,7 +69,7 @@ class ChatPaymentCard extends StatelessWidget {
                     ));
               },
               child: const Text(
-                "Lihat Penawaran",
+                "Detail & Pembayaran",
                 style:
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),

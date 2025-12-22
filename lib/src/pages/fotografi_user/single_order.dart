@@ -58,7 +58,8 @@ class SingleOrder extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       color: isActive ? primaryColor : Colors.black54,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isActive ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                 ],
@@ -89,95 +90,104 @@ class SingleOrder extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Profile + chat button
-                Row(
-  children: [
-    GestureDetector(
-      onTap: () {
-        // Aksi saat klik avatar + nama
-       context.read<NavigationProvider>().navigateToPage(
-                          context, VendorBioPage(idVendor: 'ven_100',), targetTabIndex:0, );  //Ubah idVendor agar sesuai dengan data yang ada
-        // Navigasi ke profil atau lainnya bisa ditaruh di sini
-      },
-      child: Row(
-        children: [
-         CircleAvatar(
-  radius: 30,
-  backgroundColor: Colors.grey.shade300,
-  child: ClipOval(
-    child: CachedNetworkImage(
-      imageUrl: context.read<NavigationProvider>().ambilGambar('d00c8632-393e-49e8-847f-3c01a4dbf701-image_cropper_1748677823909.jpg'),
-      width: 60, // radius * 2
-      height: 60,
-      fit: BoxFit.cover,
-      placeholder: (context, url) => Shimmer.fromColors(
-        baseColor: Colors.grey.shade300,
-        highlightColor: Colors.grey.shade100,
-        child: Container(
-          width: 60,
-          height: 60,
-          color: Colors.white,
-        ),
-      ),
-      errorWidget: (context, url, error) => Icon(
-        Icons.error,
-        size: 30,
-        color: Colors.red,
-      ),
-    ),
-  ),
-),
-
-          const SizedBox(width: 12),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "michaelwilliams_",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                "Michael Williams",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-    const Spacer(),
-    SizedBox(
-      height: 44,
-      width: 44,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Constants.primaryColor),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: EdgeInsets.zero,
-        ),
-        onPressed: () {
-          // context.read<NavigationProvider>().navigateToPage(
-          //   context,
-          //   SingleChat(receiverUserName: 'helooo', receiverEmail:"hello@gmail.com", receiverID: '123'),
-          //   targetTabIndex: 1,
-          // );
-        },
-        child: const Icon(
-          Icons.chat_outlined,
-          color: Constants.primaryColor,
-        ),
-      ),
-    ),
-  ],
-),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          // Aksi saat klik avatar + nama
+                          context.read<NavigationProvider>().navigateToPage(
+                                context,
+                                VendorBioPage(
+                                  idVendor: 'ven_100',
+                                ),
+                                targetTabIndex: 0,
+                              ); //Ubah idVendor agar sesuai dengan data yang ada
+                          // Navigasi ke profil atau lainnya bisa ditaruh di sini
+                        },
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 30,
+                              backgroundColor: Colors.grey.shade300,
+                              child: ClipOval(
+                                child: CachedNetworkImage(
+                                  imageUrl: context
+                                      .read<NavigationProvider>()
+                                      .ambilGambar(
+                                          'd00c8632-393e-49e8-847f-3c01a4dbf701-image_cropper_1748677823909.jpg'),
+                                  width: 60, // radius * 2
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) =>
+                                      Shimmer.fromColors(
+                                    baseColor: Colors.grey.shade300,
+                                    highlightColor: Colors.grey.shade100,
+                                    child: Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) => Icon(
+                                    Icons.error,
+                                    size: 30,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "michaelwilliams_",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  "Michael Williams",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        height: 44,
+                        width: 44,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side:
+                                const BorderSide(color: Constants.primaryColor),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                          onPressed: () {
+                            // context.read<NavigationProvider>().navigateToPage(
+                            //   context,
+                            //   SingleChat(receiverUserName: 'helooo', receiverEmail:"hello@gmail.com", receiverID: '123'),
+                            //   targetTabIndex: 1,
+                            // );
+                          },
+                          child: const Icon(
+                            Icons.chat_outlined,
+                            color: Constants.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: 20),
                   const Text(
@@ -202,8 +212,7 @@ class SingleOrder extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: const [
-                      Icon(Icons.access_time,
-                          size: 18, color: Colors.black54),
+                      Icon(Icons.access_time, size: 18, color: Colors.black54),
                       SizedBox(width: 8),
                       Text(
                         "10:00 AM",
@@ -230,20 +239,35 @@ class SingleOrder extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: 10),
                   // Timeline progress
-                  buildTimelineItem("6 Mei 2024 13:00", "Pesanan diterima", true),
-                  buildTimelineItem("7 Mei 2024 10:00", "Pemotretan dilakukan", true),
-                  buildTimelineItem("7 Mei 2024 12:00", "Pemotretan selesai dan file dikumpulkan", false),
-                  buildTimelineItem("8 Mei 2024 09:00", "Proses editing dimulai oleh tim desain", false),
-                  buildTimelineItem("9 Mei 2024 17:00", "Review internal hasil edit selesai", false),
-                  buildTimelineItem("10 Mei 2024 11:00", "Preview dikirim ke pelanggan untuk review", false),
-                  buildTimelineItem("10 Mei 2024 14:00", "Revisi diminta oleh pelanggan", false),
-                  buildTimelineItem("11 Mei 2024 16:00", "Revisi selesai dan diverifikasi", false),
-                  buildTimelineItem("12 Mei 2024 10:00", "File akhir disiapkan untuk dikirim", false),
-                  buildTimelineItem("12 Mei 2024 15:00", "Hasil akhir dikirim melalui email", false),
-                  buildTimelineItem("13 Mei 2024 09:00", "Pelanggan mengonfirmasi penerimaan hasil", false),
-                  buildTimelineItem("13 Mei 2024 12:00", "Feedback pelanggan diterima", false),
-                  buildTimelineItem("14 Mei 2024 10:00", "Testimoni pelanggan dipublikasikan", false),
-                  buildTimelineItem("14 Mei 2024 12:00", "Project dinyatakan selesai", false, isLast: true),
+                  buildTimelineItem(
+                      "6 Mei 2024 13:00", "Pesanan diterima", true),
+                  buildTimelineItem(
+                      "7 Mei 2024 10:00", "Pemotretan dilakukan", true),
+                  buildTimelineItem("7 Mei 2024 12:00",
+                      "Pemotretan selesai dan file dikumpulkan", false),
+                  buildTimelineItem("8 Mei 2024 09:00",
+                      "Proses editing dimulai oleh tim desain", false),
+                  buildTimelineItem("9 Mei 2024 17:00",
+                      "Review internal hasil edit selesai", false),
+                  buildTimelineItem("10 Mei 2024 11:00",
+                      "Preview dikirim ke pelanggan untuk review", false),
+                  buildTimelineItem("10 Mei 2024 14:00",
+                      "Revisi diminta oleh pelanggan", false),
+                  buildTimelineItem("11 Mei 2024 16:00",
+                      "Revisi selesai dan diverifikasi", false),
+                  buildTimelineItem("12 Mei 2024 10:00",
+                      "File akhir disiapkan untuk dikirim", false),
+                  buildTimelineItem("12 Mei 2024 15:00",
+                      "Hasil akhir dikirim melalui email", false),
+                  buildTimelineItem("13 Mei 2024 09:00",
+                      "Pelanggan mengonfirmasi penerimaan hasil", false),
+                  buildTimelineItem("13 Mei 2024 12:00",
+                      "Feedback pelanggan diterima", false),
+                  buildTimelineItem("14 Mei 2024 10:00",
+                      "Testimoni pelanggan dipublikasikan", false),
+                  buildTimelineItem(
+                      "14 Mei 2024 12:00", "Project dinyatakan selesai", false,
+                      isLast: true),
                 ],
               ),
             ),

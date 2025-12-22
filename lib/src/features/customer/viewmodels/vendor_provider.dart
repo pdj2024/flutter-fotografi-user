@@ -19,7 +19,7 @@ class VendorProvider with ChangeNotifier {
 
   Future<void> getAll({
     String? no_id,
-    String? nama_vendor,
+    String? namaDisplay,
     String? id_media,
     String? status,
     String? orderBy,
@@ -32,7 +32,7 @@ class VendorProvider with ChangeNotifier {
     try {
       _vendorList = await service.getAll(
         no_id: no_id,
-        nama_vendor: nama_vendor,
+        namaDisplay: namaDisplay,
         id_media: id_media,
         status: status,
         orderBy: orderBy,

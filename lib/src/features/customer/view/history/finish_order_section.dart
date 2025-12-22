@@ -1,0 +1,20 @@
+import 'package:flutter/cupertino.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/order_card.dart';
+import 'package:provider/provider.dart';
+
+class FinishOrderSection extends StatelessWidget {
+  const FinishOrderSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final progressOrder = context.watch<PesananProvider>().pesananSelesai;
+    return ListView.builder(
+      itemCount: progressOrder.length,
+      itemBuilder: (context, index) {
+        final item = progressOrder[index];
+        return OrderCard(pesanan: item, onTap: () {});
+      },
+    );
+  }
+}
