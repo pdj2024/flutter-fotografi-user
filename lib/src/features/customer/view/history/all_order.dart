@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/pages/fotografi_user/single_order.dart';
-import 'package:provider/provider.dart';
-
-import '../../features/customer/widget/custom_back_button.dart';
-import '../../core/routing/navigation_provider.dart';
+import '../../widget/custom_back_button.dart';
 
 class AllOrder extends StatefulWidget {
   const AllOrder({super.key});
@@ -184,9 +180,14 @@ class OrderCard extends StatelessWidget {
     // context.read<NavigationProvider>().ambilGambar(order["image"]);
 
     return GestureDetector(
-      onTap: () => context
-          .read<NavigationProvider>()
-          .navigateToPage(context, SingleOrder(), targetTabIndex: 2),
+      // onTap: () => context.read<NavigationProvider>().navigateToPage(
+      //     context,
+      //     BayarCounter(
+      //       orderId: 'asdf',
+      //       grossAmount: 123,
+      //       store: 'asdfasdf',
+      //     ),
+      //     targetTabIndex: 2),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.all(12),
@@ -250,11 +251,7 @@ class OrderCard extends StatelessWidget {
                     ),
                     onPressed: onDetailPressed ??
                         () {
-                          context.read<NavigationProvider>().navigateToPage(
-                                context,
-                                SingleOrder(),
-                                targetTabIndex: 2,
-                              );
+                          
                         },
                     child: const Text("Detil",
                         style: TextStyle(color: Colors.white)),

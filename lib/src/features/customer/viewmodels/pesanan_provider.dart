@@ -7,9 +7,11 @@ class PesananProvider with ChangeNotifier {
 
   PesananProvider({required this.pesananService});
 
+  List<PesananModel> _pesananBelumBayar = [];
   List<PesananModel> _pesananProgress = [];
   List<PesananModel> _pesananSelesai = [];
 
+  List<PesananModel> get pesananBelumBayar => _pesananBelumBayar;
   List<PesananModel> get pesananProgress => _pesananProgress;
   List<PesananModel> get pesananSelesai => _pesananSelesai;
 
@@ -37,15 +39,30 @@ class PesananProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await pesananService.getAll(
-          status: status,
-          idCustomer: userId,
-          orderBy: "Created_At",
-          orderDir: "desc");
+      final belumBayar = await pesananService.getAll(
+        status: status,
+        statusBayar: "belum bayar",
+        idCustomer: userId,
+        orderBy: "Created_At",
+        orderDir: "desc",
+      );
+      _pesananBelumBayar = belumBayar;
 
-      print("RESULT PENAWRAN PROVIDER => $result");
+      final progress = await pesananService.getAll(
+        status: status,
+        idCustomer: userId,
+        orderBy: "Created_At",
+        orderDir: "desc",
+      );
+      _pesananProgress = progress;
 
-      _pesananProgress = result;
+      final selesai = await pesananService.getAll(
+        status: "nonaktif",
+        idCustomer: userId,
+        orderBy: "Created_At",
+        orderDir: "desc",
+      );
+      _pesananSelesai = selesai;
     } catch (e) {
       _errorPesanan = "Error memuat Penawaran";
     } finally {

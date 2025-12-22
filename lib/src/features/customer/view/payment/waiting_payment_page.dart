@@ -7,6 +7,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
@@ -82,19 +83,37 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   }
 
   Future<void> _checkPaymentStatus() async {
-    // TODO: Implement API call to check payment status
-    final pesanan = await pesananService.getAll(
-        noBukti: widget.paymentData.noBukti, orderBy: "no_bukti");
+    try {
+      final pesanan = await pesananService.getAll(
+        noBukti: widget.paymentData.noBukti,
+        orderBy: "no_bukti",
+      );
 
-    statusBayar = pesanan.first.statusBayar;
+      statusBayar = pesanan.first.statusBayar;
 
-    if (statusBayar == "berhasil") {
-      context.read<NavigationProvider>().popAllToRoot();
-      context.read<NavigationProvider>().changeTab(2, context);
+      if (statusBayar == "settlement" || statusBayar == "berhasil") {
+        // Stop timers
+        _timer?.cancel();
+        _checkPaymentTimer?.cancel();
+
+        // Navigate to splash screen
+        if (!mounted) return;
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => PaymentSuccessSplashScreen(
+              orderNumber: widget.paymentData.noBukti ?? '-',
+              amount: widget.paymentData.grandTotal ?? 0,
+            ),
+          ),
+        );
+      }
+
+      setState(() {});
+      print("Checking payment status for order: ${widget.paymentData.noBukti}");
+    } catch (e) {
+      debugPrint("Error checking payment status: $e");
     }
-
-    setState(() {});
-    print("Checking payment status for order: ${widget.paymentData.noBukti}");
   }
 
   Future<void> _handlePaymentExpired() async {
