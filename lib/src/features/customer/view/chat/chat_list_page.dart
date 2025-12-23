@@ -97,8 +97,8 @@ class _ChatListPageState extends State<ChatListPage> {
                     itemBuilder: (context, index) {
                       final chat = filteredChats[index];
                       return ChatListTile(
-                        username: chat.usernameLawan,
-                        avatar: chat.idMediaLawan as String?,
+                        username: chat.usernameLawan ?? "Vendor",
+                        avatar: chat.idMediaLawan,
                         message: chat.lastMessage as String?,
                         time: chat.lastMessageAt,
                         unreadCount: chat.unread ?? 0,

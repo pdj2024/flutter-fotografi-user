@@ -35,15 +35,6 @@ class ChatPackageCard extends StatelessWidget {
             bottomLeft: Radius.circular(isMe ? 15 : 2),
             bottomRight: Radius.circular(isMe ? 2 : 15),
           ),
-          boxShadow: isMe
-              ? null
-              : [
-                  const BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  )
-                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

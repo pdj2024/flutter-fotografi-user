@@ -232,11 +232,11 @@ class _RoomChatPageState extends State<RoomChatPage>
                               }
                             }
 
-                            if (message.noInvoice != null &&
+                            if (message.noPenawaran != null &&
                                 roomChatProvider.penawaranList.isNotEmpty) {
                               final index = roomChatProvider.penawaranList
                                   .indexWhere(
-                                      (p) => p.noId == message.noInvoice);
+                                      (p) => p.noId == message.noPenawaran);
                               if (index != -1) {
                                 offer = roomChatProvider.penawaranList[index];
                               } else {
@@ -270,8 +270,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                               );
                             }
 
-                            if (message.jenisPesan == "payment" ||
-                                message.noInvoice != null) {
+                            if (message.noPenawaran != null &&
+                                message.noPenawaran!.isNotEmpty) {
                               if (offer == null) {
                                 return Container(
                                   width: double.infinity,
