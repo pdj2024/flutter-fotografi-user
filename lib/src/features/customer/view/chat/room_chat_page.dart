@@ -42,13 +42,6 @@ class _RoomChatPageState extends State<RoomChatPage>
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
-  // String? _activeRoomId;
-  // RoomChatModel? _roomInfo;
-  // bool _isLoading = true;
-  // List<PaketModel?> paketList = [];
-  // List<PenawaranModel?> penawaranlist = [];
-  // List<ChatModel> messages = [];
-
   @override
   void initState() {
     super.initState();
@@ -166,7 +159,7 @@ class _RoomChatPageState extends State<RoomChatPage>
         ),
         toolbarHeight: 72,
       ),
-      backgroundColor: const Color(0xFFF9F9F9),
+      backgroundColor: const Color.fromARGB(255, 242, 242, 242),
       body: Column(
         children: [
           // Daftar pesan
@@ -343,16 +336,6 @@ class _RoomChatPageState extends State<RoomChatPage>
             ),
           ),
 
-          // if (roomChatProvider.tawaranPaket != null)
-          //   Padding(
-          //     padding: const EdgeInsets.only(right: 15, top: 10),
-          //     child: ChatPackageCard(
-          //       namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
-          //       hargaPaket: roomChatProvider.tawaranPaket!.harga,
-          //       isMe: true,
-          //     ),
-          //   ),
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white.withOpacity(0),
@@ -369,7 +352,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                           vertical: 10, horizontal: 16),
                       hintText: "Ketik pesan...",
                       filled: true,
-                      fillColor: const Color(0xFFE8E8E8),
+                      fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,

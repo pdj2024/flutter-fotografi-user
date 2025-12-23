@@ -20,6 +20,7 @@ class ProgressOrderSection extends StatelessWidget {
           onTap: () {
             context.read<NavigationProvider>().navigateToPage(
                   context,
+                  targetTabIndex: 2,
                   DetailOrderPage(pesananModel: item),
                 );
           },

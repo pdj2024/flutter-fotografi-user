@@ -102,8 +102,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => PaymentSuccessSplashScreen(
-              orderNumber: widget.paymentData.noBukti ?? '-',
-              amount: widget.paymentData.grandTotal ?? 0,
+              orderNumber: widget.paymentData.noBukti,
+              amount: widget.paymentData.grandTotal,
             ),
           ),
         );
@@ -120,10 +120,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     if (!mounted) return;
 
     try {
-      final nonAktifPayment = widget.paymentData.copyWith(
-        status: "nonaktif",
-      );
-      await pesananService.update(nonAktifPayment);
 
       if (!mounted) return;
       CustomDialog.showTimeoutDialog(

@@ -90,7 +90,7 @@ dependencies:
   fraction:
   http_parser:
   pull_to_refresh: ^2.0.0
-  image_gallery_saver: ^2.0.3
+  gal: ^2.3.2
 
 dev_dependencies:
   flutter_test:

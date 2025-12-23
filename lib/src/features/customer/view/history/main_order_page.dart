@@ -3,6 +3,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finish_order_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/progress_order_section.dart';
+import 'package:mpjnew/src/features/customer/view/history/unpaid_order_section.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -74,7 +75,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
         ),
         body: TabBarView(
           children: [
-            ProgressOrderSection(),
+            UnpaidOrderSection(),
             ProgressOrderSection(),
             FinishOrderSection(),
           ],
