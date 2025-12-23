@@ -2,22 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
-import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
-import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
-import 'package:provider/provider.dart';
 
 class ChatPaymentCard extends StatelessWidget {
   final PenawaranModel penawaran;
   final PaketModel? paket;
   final String roomId;
   final String customerId;
+  final VoidCallback? onTap;
   const ChatPaymentCard(
       {super.key,
       required this.penawaran,
       required this.roomId,
       required this.customerId,
+      required this.onTap,
       this.paket});
 
   @override
@@ -60,16 +59,11 @@ class ChatPaymentCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: () {
-                context.read<NavigationProvider>().navigateToPage(
-                    context,
-                    targetTabIndex: 2,
-                    DetailPembayaranPage(
-                      penawaranId: penawaran.noId,
-                    ));
-              },
-              child: const Text(
-                "Detail & Pembayaran",
+              onPressed: onTap,
+              child: Text(
+                penawaran.noPesanan == ""
+                    ? "Detail & Pembayaran"
+                    : "Lihat Pesanan",
                 style:
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),

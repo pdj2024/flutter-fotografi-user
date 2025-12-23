@@ -7,6 +7,9 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
@@ -38,6 +41,7 @@ class RoomChatPage extends StatefulWidget {
 
 class _RoomChatPageState extends State<RoomChatPage>
     with TickerProviderStateMixin {
+  PesananService pesananService = PesananService();
   final ScrollController _scrollController = ScrollController();
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
@@ -302,6 +306,33 @@ class _RoomChatPageState extends State<RoomChatPage>
                                 penawaran: offer,
                                 roomId: widget.roomId ?? "",
                                 customerId: userProv.customer?.noId ?? "",
+                                onTap: () async {
+                                  print(offer!.noPesanan);
+                                  if (offer.noPesanan != "") {
+                                    final pesanan = await pesananService.getAll(
+                                      noBukti: offer.noPesanan,
+                                    );
+                                    context
+                                        .read<NavigationProvider>()
+                                        .navigateToPage(
+                                          context,
+                                          targetTabIndex: 2,
+                                          DetailOrderPage(
+                                            pesananModel: pesanan.first,
+                                          ),
+                                        );
+                                  } else {
+                                    context
+                                        .read<NavigationProvider>()
+                                        .navigateToPage(
+                                          context,
+                                          targetTabIndex: 2,
+                                          DetailPembayaranPage(
+                                            penawaranId: message.noPenawaran!,
+                                          ),
+                                        );
+                                  }
+                                },
                               );
                             }
 

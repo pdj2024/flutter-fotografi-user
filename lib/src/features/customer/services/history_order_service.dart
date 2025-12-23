@@ -84,7 +84,7 @@ class HistoryOrderService {
   Future<void> update(HistoryOrderModel model) async {
     final response = await apiClient.put(
       '/$controller/update',
-      queryParameters: {'no_bukti': model.noId},
+      queryParameters: {'no_id': model.noId},
       body: jsonEncode(model.toJson()),
       headers: {'Content-Type': 'application/json'},
     );
