@@ -14,6 +14,8 @@ import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -278,8 +280,28 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       // Aksi Pesanan Selesai
+
+                                      ConfirmDialog.showSelesaikanPesananDialog(
+                                        context: context,
+                                        onConfirm: () async {
+                                          final historySelesaikanPesanan =
+                                              HistoryOrderService.createSelesai(
+                                            noOrder:
+                                                widget.pesananModel.noBukti,
+                                            senderId:
+                                                widget.pesananModel.idCustomer,
+                                          );
+
+                                          await historyOrderService
+                                              .create(historySelesaikanPesanan);
+
+                                          if (!mounted) return;
+
+                                          Navigator.pop(context);
+                                        },
+                                      );
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor:
@@ -343,7 +365,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                       DateFormat("dd MMM yyyy")
                                           .format(history.tglProgress),
                                       history.deskripsi,
-                                      index == historyOrder.length - 1,
+                                      index == 0,
                                     );
                                   },
                                 ),

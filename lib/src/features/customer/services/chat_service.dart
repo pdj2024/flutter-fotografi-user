@@ -204,7 +204,8 @@ class ChatService {
       final editedAt =
           msg["editedAt"] != null ? _parseDateTime(msg["editedAt"]) : null;
       final tipeUser = msg["tipeUser"]?.toString() ?? "";
-      final noInvoice = msg["noPenawaran"]?.toString() ?? "";
+      final noInvoice = msg["noPesanan"]?.toString() ?? "";
+      final noPenawaran = msg["noPenawaran"]?.toString() ?? "";
       final idPaket = msg["idPaket"]?.toString() ?? "";
       final status = msg["status"]?.toString() ?? "";
       final jenisPesan = msg["jenisPesan"]?.toString() ?? "";
@@ -220,6 +221,7 @@ class ChatService {
         editedAt: editedAt,
         tipeUser: tipeUser,
         noInvoice: noInvoice.isEmpty ? null : noInvoice,
+        noPenawaran: noPenawaran.isEmpty ? null : noPenawaran,
         idPaket: idPaket.isEmpty ? null : idPaket,
         status: status,
         jenisPesan: jenisPesan,
@@ -237,8 +239,8 @@ class ChatService {
         _fetchPaketData(idPaket);
       }
 
-      if (noInvoice.isNotEmpty) {
-        _fetchPenawaranData(noInvoice);
+      if (noPenawaran.isNotEmpty) {
+        _fetchPenawaranData(noPenawaran);
       }
     } catch (e, st) {
       debugPrint("[ChatService] ❌ Parse message error: $e\n$st");

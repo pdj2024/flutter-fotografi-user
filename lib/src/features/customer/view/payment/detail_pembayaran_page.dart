@@ -141,19 +141,13 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       final result = await pesananService.create(newPesanan);
 
       final pesanan = await pesananService.getAll(noBukti: result.noBukti);
-      final newHistoryOrder = HistoryOrderModel(
-        noId: "",
+
+      final historyMenungguBayar = HistoryOrderService.createMenungguPembayaran(
         noOrder: result.noBukti,
-        tglProgress: pesanan.first.tglRealisasi,
-        deskripsi: "Pesanan dibuat",
         senderId: pesanan.first.idCustomer,
-        tipeUser: "customer",
-        namaSender: pesanan.first.namaCustomer ?? context.read<UserProvider>().displayName,
-        status: "aktif",
-        statusProgressPesanan: 'menunggu pembayaran',
       );
 
-      await historyOrderService.create(newHistoryOrder);
+      await historyOrderService.create(historyMenungguBayar);
 
       CustomSnackbar.showSuccessSnackbar(
         context,

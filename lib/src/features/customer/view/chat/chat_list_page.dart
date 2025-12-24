@@ -99,7 +99,9 @@ class _ChatListPageState extends State<ChatListPage> {
                       return ChatListTile(
                         username: chat.usernameLawan ?? "Vendor",
                         avatar: chat.idMediaLawan,
-                        message: chat.lastMessage as String?,
+                        message: chat.lastMessage == ""
+                            ? "ada tawaran dari vendor"
+                            : chat.lastMessage,
                         time: chat.lastMessageAt,
                         unreadCount: chat.unread ?? 0,
                         roomId: chat.roomId,
