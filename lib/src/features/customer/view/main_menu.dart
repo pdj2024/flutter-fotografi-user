@@ -81,8 +81,8 @@ class _MainMenuState extends State<MainMenu> {
                 }
 
                 if (index == 2) {
-                  await context.read<PesananProvider>().loadOrder(
-                      userId: context.read<UserProvider>().userId ?? '');
+                  context.read<PesananProvider>().loadOrder(
+                      userId: user!.noId);
                 }
 
                 if (index == 3) {
