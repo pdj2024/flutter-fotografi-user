@@ -90,7 +90,9 @@ dependencies:
   fraction:
   http_parser:
   pull_to_refresh: ^2.0.0
-  image_gallery_saver: ^2.0.3
+  gal: ^2.3.2
+  workmanager: ^0.9.0+3
+  flutter_foreground_task: ^9.1.0
 
 dev_dependencies:
   flutter_test:

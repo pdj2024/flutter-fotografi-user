@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -12,49 +14,51 @@ class QrisPaymentCard extends StatelessWidget {
 
   Future<void> _downloadQrCode(BuildContext context) async {
     if (qrUrl.isEmpty) {
-      CustomSnackbar.showErrorSnackbar(context, "QR Code tidak tersedia!");
+      CustomSnackbar.showErrorSnackbar(
+        context,
+        "QR Code tidak tersedia!",
+      );
       return;
     }
 
     try {
-      // Show loading
-
-      // Request storage permission (for Android)
-      var status = await Permission.storage.request();
-      if (status.isDenied) {
-        if (!context.mounted) return;
-        CustomSnackbar.showErrorSnackbar(
-            context, "Izin penyimpanan diperlukan untuk mengunduh QR Code");
-
-        return;
+      // 🔐 Request permission (Android only)
+      if (Platform.isAndroid) {
+        final status = await Permission.photos.request();
+        if (!status.isGranted) {
+          if (!context.mounted) return;
+          CustomSnackbar.showErrorSnackbar(
+            context,
+            "Izin penyimpanan diperlukan untuk mengunduh QR Code",
+          );
+          return;
+        }
       }
 
-      // Download image
+      // 🌐 Download image
       final response = await http.get(Uri.parse(qrUrl));
-
-      if (response.statusCode == 200) {
-        // Save to gallery
-        final result = await ImageGallerySaver.saveImage(
-          response.bodyBytes,
-          quality: 100,
-          name: "QRIS_Payment_${DateTime.now().millisecondsSinceEpoch}",
-        );
-
-        if (!context.mounted) return;
-
-        if (result['isSuccess'] == true) {
-          CustomSnackbar.showSuccessSnackbar(
-              context, "QR Code berhasil disimpan");
-        } else {
-          throw Exception("Gagal menyimpan gambar");
-        }
-      } else {
+      if (response.statusCode != 200) {
         throw Exception("Gagal mengunduh QR Code");
       }
+
+      // 💾 Save to gallery using GAL
+      await Gal.putImageBytes(
+        response.bodyBytes,
+        album: 'QRIS Payment',
+        name: 'QRIS_Payment_${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      if (!context.mounted) return;
+      CustomSnackbar.showSuccessSnackbar(
+        context,
+        "QR Code berhasil disimpan",
+      );
     } catch (e) {
       if (!context.mounted) return;
       CustomSnackbar.showErrorSnackbar(
-          context, "Gagal mengunduh QR Code: ${e.toString()}");
+        context,
+        "Gagal mengunduh QR Code: ${e.toString()}",
+      );
     }
   }
 

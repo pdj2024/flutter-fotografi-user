@@ -5,8 +5,15 @@ class ChatModel {
   final String tipeUser;
   final String message;
   final String jenisPesan;
+
   final String? idPaket;
   final String? noInvoice;
+  final String? noPenawaran;
+
+  final String status;
+  final String sendStatus;
+  final String roomType;
+
   final DateTime sentAt;
   final DateTime? editedAt;
   final List<String> userIds;
@@ -18,43 +25,18 @@ class ChatModel {
     required this.tipeUser,
     required this.message,
     required this.jenisPesan,
-    required this.idPaket,
-    required this.noInvoice,
+    this.idPaket,
+    this.noInvoice,
+    this.noPenawaran,
+    required this.status,
+    required this.sendStatus,
+    required this.roomType,
     required this.sentAt,
-    required this.editedAt,
+    this.editedAt,
     required this.userIds,
   });
 
-  /// COPY WITH
-  ChatModel copyWith({
-    String? messageId,
-    String? roomId,
-    String? senderId,
-    String? tipeUser,
-    String? message,
-    String? jenisPesan,
-    String? idPaket,
-    String? noInvoice,
-    DateTime? sentAt,
-    DateTime? editedAt,
-    List<String>? userIds,
-  }) {
-    return ChatModel(
-      messageId: messageId ?? this.messageId,
-      roomId: roomId ?? this.roomId,
-      senderId: senderId ?? this.senderId,
-      tipeUser: tipeUser ?? this.tipeUser,
-      message: message ?? this.message,
-      jenisPesan: jenisPesan ?? this.jenisPesan,
-      idPaket: idPaket ?? this.idPaket,
-      noInvoice: noInvoice ?? this.noInvoice,
-      sentAt: sentAt ?? this.sentAt,
-      editedAt: editedAt ?? this.editedAt,
-      userIds: userIds ?? List<String>.from(this.userIds),
-    );
-  }
-
-  /// FROM JSON
+  /// FROM JSON (REST API)
   factory ChatModel.fromJson(Map<String, dynamic> json) {
     return ChatModel(
       messageId: json["Message_Id"] ?? "",
@@ -65,6 +47,10 @@ class ChatModel {
       jenisPesan: json["Jenis_Pesan"] ?? "",
       idPaket: json["Id_Paket"],
       noInvoice: json["No_Invoice"],
+      noPenawaran: json["No_Penawaran"],
+      status: json["Status"] ?? "aktif",
+      sendStatus: json["Send_Status"] ?? "",
+      roomType: json["Room_Type"] ?? "direct",
       sentAt: DateTime.parse(json["Sent_At"]),
       editedAt:
           json["Edited_At"] != null ? DateTime.parse(json["Edited_At"]) : null,
@@ -73,20 +59,44 @@ class ChatModel {
     );
   }
 
-  /// TO JSON
+  /// TO JSON (REST API)
   Map<String, dynamic> toJson() {
     return {
-      "Message_Id": messageId,
-      "Room_Id": roomId,
-      "Sender_Id": senderId,
-      "Tipe_User": tipeUser,
-      "Message": message,
-      "Jenis_Pesan": jenisPesan,
-      "Id_Paket": idPaket,
-      "No_Invoice": noInvoice,
+      "message_Id": messageId,
+      "room_Id": roomId,
+      "sender_Id": senderId,
+      "tipe_User": tipeUser,
+      "message": message,
+      "jenis_Pesan": jenisPesan,
+      "id_Paket": idPaket,
+      "no_pesanan": noInvoice,
+      "no_penawaran": noPenawaran,
+      "status": status,
+      "send_status": sendStatus,
+      "room_type": roomType,
       "Sent_At": sentAt.toIso8601String(),
       "Edited_At": editedAt?.toIso8601String(),
-      "User_Ids": userIds,
+      "user_Ids": userIds,
+    };
+  }
+
+  /// TO JSON (SignalR)
+  Map<String, dynamic> toSignalRJson() {
+    return {
+      "messageId": messageId,
+      "roomId": roomId,
+      "sender": senderId,
+      "message": message,
+      "sentAt": sentAt.toIso8601String(),
+      "editedAt": editedAt?.toIso8601String(),
+      "tipeUser": tipeUser,
+      "noInvoice": noInvoice,
+      "noPenawaran": noPenawaran,
+      "idPaket": idPaket,
+      "status": status,
+      "jenisPesan": jenisPesan,
+      "sendStatus": sendStatus,
+      "roomType": roomType,
     };
   }
 }

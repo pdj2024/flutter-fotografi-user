@@ -1,10 +1,10 @@
 class RoomChatModel {
   final String roomId;
   final String roomType;
-  final String usernameLawan;
+  final String? usernameLawan;
   final String idLawan;
-  final String idMediaLawan;
-  final String tipeUserLawan;
+  final String? idMediaLawan;
+  final String? tipeUserLawan;
   final DateTime lastMessageAt;
   final String lastMessage;
   final String status;
@@ -14,10 +14,10 @@ class RoomChatModel {
   RoomChatModel({
     required this.roomId,
     required this.roomType,
-    required this.usernameLawan,
+    this.usernameLawan,
     required this.idLawan,
-    required this.idMediaLawan,
-    required this.tipeUserLawan,
+    this.idMediaLawan,
+    this.tipeUserLawan,
     required this.lastMessageAt,
     required this.lastMessage,
     required this.status,

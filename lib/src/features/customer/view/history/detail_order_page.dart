@@ -10,8 +10,12 @@ import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
+import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -55,9 +59,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           .first;
     } catch (e) {
       print(e);
-      setState(() {
-        error = e.toString();
-      });
+      error = e.toString();
       CustomSnackbar.showErrorSnackbar(context, e.toString());
     } finally {
       setState(() {
@@ -76,6 +78,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
 
   @override
   Widget build(BuildContext context) {
+    print("Jumlah History Order: ${historyOrder.length}");
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
@@ -89,75 +93,233 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
+      body: Builder(
+        builder: (context) {
+          if (isLoading) {
+            return DetailOrderShimmer(fetchData: fetchData);
+          }
+
+          return RefreshIndicator(
+            onRefresh: fetchData,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Profile + chat button
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          // Aksi saat klik avatar + nama
-                          context.read<NavigationProvider>().navigateToPage(
-                                context,
-                                VendorBioPage(
-                                  idVendor: vendor?.noId ?? '',
-                                ),
-                                targetTabIndex: 0,
-                              ); //Ubah idVendor agar sesuai dengan data yang ada
-                          // Navigasi ke profil atau lainnya bisa ditaruh di sini
-                        },
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 30,
-                              backgroundColor: Colors.grey.shade300,
-                              child: ClipOval(
-                                child: CachedNetworkImage(
-                                  imageUrl: vendor?.idMedia ?? '',
-                                  width: 60, // radius * 2
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) =>
-                                      Shimmer.fromColors(
-                                    baseColor: Colors.grey.shade300,
-                                    highlightColor: Colors.grey.shade100,
-                                    child: Container(
-                                      width: 60,
+                      // Profile + chat button
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              // Aksi saat klik avatar + nama
+                              context.read<NavigationProvider>().navigateToPage(
+                                    context,
+                                    VendorBioPage(
+                                      idVendor: vendor?.noId ?? '',
+                                    ),
+                                    targetTabIndex: 0,
+                                  ); //Ubah idVendor agar sesuai dengan data yang ada
+                              // Navigasi ke profil atau lainnya bisa ditaruh di sini
+                            },
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundColor: Colors.grey.shade300,
+                                  child: ClipOval(
+                                    child: CachedNetworkImage(
+                                      imageUrl: vendor?.idMedia ?? '',
+                                      width: 60, // radius * 2
                                       height: 60,
-                                      color: Colors.white,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) =>
+                                          Shimmer.fromColors(
+                                        baseColor: Colors.grey.shade300,
+                                        highlightColor: Colors.grey.shade100,
+                                        child: Container(
+                                          width: 60,
+                                          height: 60,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) =>
+                                          Icon(
+                                        Icons.error,
+                                        size: 30,
+                                        color: Colors.red,
+                                      ),
                                     ),
                                   ),
-                                  errorWidget: (context, url, error) => Icon(
-                                    Icons.error,
-                                    size: 30,
-                                    color: Colors.red,
-                                  ),
                                 ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      vendor?.username ?? "Vendor",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      vendor?.namaDisplay ?? "Nama Vendor",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          SizedBox(
+                            height: 44,
+                            width: 44,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                    color: Constants.primaryColor),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                              onPressed: () {
+                                context
+                                    .read<NavigationProvider>()
+                                    .navigateToPage(
+                                      context,
+                                      RoomChatPage(
+                                        partnerId: vendor?.noId,
+                                      ),
+                                      targetTabIndex: 1,
+                                    );
+                              },
+                              child: const Icon(
+                                Icons.chat_outlined,
+                                color: Constants.primaryColor,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      _buildCardSection(
+                        title: "Detail Pesanan",
+                        icon: Icons.receipt_long_rounded,
+                        content: Column(
+                          children: [
+                            _buildDetailRow(
+                              "No. Pesanan",
+                              widget.pesananModel.noBukti,
+                              copyable: true,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildDetailRow(
+                              "No. Tracking",
+                              widget.pesananModel.noTrackingPesanan ?? "",
+                              copyable: true,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildDetailRow(
+                              "Paket",
+                              widget.pesananModel.namaPaket,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildDetailRow(
+                              "Tanggal Realisasi",
+                              DateFormat("dd MMM yyyy", "id_ID")
+                                  .format(widget.pesananModel.tglRealisasi),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildDetailRow(
+                              "Lokasi",
+                              "${widget.pesananModel.lokasi}, ${widget.pesananModel.namaKota}",
+                            ),
+                            const SizedBox(height: 12),
+                            _buildDetailRow(
+                                "Total (termasuk PPN)",
+                                Helper.formatCurrency(
+                                    widget.pesananModel.harga)),
+                            const SizedBox(height: 12),
+                            // Action Buttons
+                            Row(
                               children: [
-                                Text(
-                                  vendor?.username ?? "Vendor",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      // Aksi Ajukan Banding
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                          color: Constants.primaryColorVendor),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
+                                    ),
+                                    child: Text(
+                                      'Ajukan Banding',
+                                      style: TextStyle(
+                                        color: Constants.primaryColorVendor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  vendor?.namaDisplay ?? "Nama Vendor",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      // Aksi Pesanan Selesai
+
+                                      ConfirmDialog.showSelesaikanPesananDialog(
+                                        context: context,
+                                        onConfirm: () async {
+                                          final historySelesaikanPesanan =
+                                              HistoryOrderService.createSelesai(
+                                            noOrder:
+                                                widget.pesananModel.noBukti,
+                                            senderId:
+                                                widget.pesananModel.idCustomer,
+                                          );
+
+                                          await historyOrderService
+                                              .create(historySelesaikanPesanan);
+
+                                          if (!mounted) return;
+
+                                          Navigator.pop(context);
+                                        },
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          Constants.primaryColorVendor,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: const Text(
+                                      'Selesaikan',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -165,168 +327,145 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                           ],
                         ),
                       ),
-                      const Spacer(),
-                      SizedBox(
-                        height: 44,
-                        width: 44,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side:
-                                const BorderSide(color: Constants.primaryColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                          onPressed: () {
-                            // context.read<NavigationProvider>().navigateToPage(
-                            //   context,
-                            //   SingleChat(receiverUserName: 'helooo', receiverEmail:"hello@gmail.com", receiverID: '123'),
-                            //   targetTabIndex: 1,
-                            // );
-                          },
-                          child: const Icon(
-                            Icons.chat_outlined,
-                            color: Constants.primaryColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
 
-                  const SizedBox(height: 20),
-                  Text(
-                    paket?.nama_paket ?? "Paket",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Icon(Icons.calendar_today_outlined,
-                          size: 18, color: Colors.black54),
-                      SizedBox(width: 8),
-                      Text(
-                        DateFormat('dd MMM yyyy')
-                            .format(widget.pesananModel.tglRealisasi),
-                        style: TextStyle(fontSize: 14),
-                      ),
+                      const SizedBox(height: 20),
+
+                      _buildCardSection(
+                        title: "Progress Pesanan",
+                        icon: Icons.history_edu_rounded,
+                        content: historyOrder.isEmpty
+                            ? Column(
+                                children: [
+                                  Icon(
+                                    Icons.timeline_rounded,
+                                    size: 100,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      "Belum ada history progress pesanan",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 10),
+                                ],
+                              )
+                            : Column(
+                                children: List.generate(
+                                  historyOrder.length,
+                                  (index) {
+                                    final history = historyOrder[index];
+
+                                    return buildTimelineItem(
+                                      DateFormat("dd MMM yyyy")
+                                          .format(history.tglProgress),
+                                      history.deskripsi,
+                                      index == 0,
+                                    );
+                                  },
+                                ),
+                              ),
+                      )
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time, size: 18, color: Colors.black54),
-                      SizedBox(width: 8),
-                      Text(
-                        Helper.toLocalTime(widget.pesananModel.tglRealisasi),
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.location_on_outlined,
-                          size: 18, color: Colors.black54),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "${widget.pesananModel.lokasi} - ${widget.pesananModel.namaKota}",
-                          style: TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(),
-                  const SizedBox(height: 10),
-                  // Timeline progress
-                  buildTimelineItem(
-                      "6 Mei 2024 13:00", "Pesanan diterima", true),
-                  buildTimelineItem(
-                      "7 Mei 2024 10:00", "Pemotretan dilakukan", true),
-                  buildTimelineItem("7 Mei 2024 12:00",
-                      "Pemotretan selesai dan file dikumpulkan", false),
-                  buildTimelineItem("8 Mei 2024 09:00",
-                      "Proses editing dimulai oleh tim desain", false),
-                  buildTimelineItem("9 Mei 2024 17:00",
-                      "Review internal hasil edit selesai", false),
-                  buildTimelineItem("10 Mei 2024 11:00",
-                      "Preview dikirim ke pelanggan untuk review", false),
-                  buildTimelineItem("10 Mei 2024 14:00",
-                      "Revisi diminta oleh pelanggan", false),
-                  buildTimelineItem("11 Mei 2024 16:00",
-                      "Revisi selesai dan diverifikasi", false),
-                  buildTimelineItem("12 Mei 2024 10:00",
-                      "File akhir disiapkan untuk dikirim", false),
-                  buildTimelineItem("12 Mei 2024 15:00",
-                      "Hasil akhir dikirim melalui email", false),
-                  buildTimelineItem("13 Mei 2024 09:00",
-                      "Pelanggan mengonfirmasi penerimaan hasil", false),
-                  buildTimelineItem("13 Mei 2024 12:00",
-                      "Feedback pelanggan diterima", false),
-                  buildTimelineItem("14 Mei 2024 10:00",
-                      "Testimoni pelanggan dipublikasikan", false),
-                  buildTimelineItem(
-                      "14 Mei 2024 12:00", "Project dinyatakan selesai", false,
-                      isLast: true),
                 ],
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 5, 20, 20),
-            color: const Color(0xFFF9F9F9),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      // Aksi Ajukan Banding
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Constants.primaryColorVendor),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                    ),
-                    child: Text(
-                      'Ajukan Banding',
-                      style: TextStyle(color: Constants.primaryColorVendor),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Aksi Pesanan Selesai
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Constants.primaryColorVendor,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
-                    child: const Text(
-                      'Pesanan Selesai',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCardSection({
+    required String title,
+    required IconData icon,
+    required Widget content,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
         ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 22, color: Constants.primaryColorVendor),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          content,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool copyable = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (copyable)
+                InkWell(
+                  onTap: () => Helper.copyToClipboard(context, value, label),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 18,
+                      color: Constants.primaryColorVendor,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

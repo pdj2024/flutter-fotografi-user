@@ -5,6 +5,7 @@ class PesananModel {
   final String noBukti;
   final String? noTrackingPesanan;
   final String? status;
+  final String? statusProgresPesanan;
   final String? noPenawaran;
 
   // =======================
@@ -63,6 +64,7 @@ class PesananModel {
     required this.noBukti,
     this.noTrackingPesanan,
     this.status,
+    this.statusProgresPesanan,
     this.noPenawaran,
     required this.idVendor,
     this.namaVendor,
@@ -100,6 +102,7 @@ class PesananModel {
       noBukti: json['No_Bukti'],
       noTrackingPesanan: json['No_Tracking_Pesanan'],
       status: json['Status'],
+      statusProgresPesanan: json['Status_Progress_Pesanan'],
       noPenawaran: json['No_Penawaran'],
       idVendor: json['Id_Vendor'],
       namaVendor: json['Nama_Vendor'],
@@ -181,6 +184,7 @@ class PesananModel {
     String? noBukti,
     String? noTrackingPesanan,
     String? status,
+    String? statusProgresPesanan,
     String? noPenawaran,
     String? idVendor,
     String? namaVendor,
@@ -213,6 +217,7 @@ class PesananModel {
       noBukti: noBukti ?? this.noBukti,
       noTrackingPesanan: noTrackingPesanan ?? this.noTrackingPesanan,
       status: status ?? this.status,
+      statusProgresPesanan: statusProgresPesanan ?? this.statusProgresPesanan,
       noPenawaran: noPenawaran ?? this.noPenawaran,
       idVendor: idVendor ?? this.idVendor,
       namaVendor: namaVendor ?? this.namaVendor,

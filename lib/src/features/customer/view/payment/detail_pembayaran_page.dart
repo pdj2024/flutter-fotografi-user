@@ -7,9 +7,12 @@ import 'package:mpjnew/src/core/constants/custom_icons.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -29,6 +32,7 @@ class DetailPembayaranPage extends StatefulWidget {
 
 class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   PenawaranService penawaranService = PenawaranService();
+  HistoryOrderService historyOrderService = HistoryOrderService();
   PesananService pesananService = PesananService();
   MetodePembayaranService metodePembayaranService = MetodePembayaranService();
   PenawaranModel? penawaran;
@@ -137,6 +141,13 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       final result = await pesananService.create(newPesanan);
 
       final pesanan = await pesananService.getAll(noBukti: result.noBukti);
+
+      final historyMenungguBayar = HistoryOrderService.createMenungguPembayaran(
+        noOrder: result.noBukti,
+        senderId: pesanan.first.idCustomer,
+      );
+
+      await historyOrderService.create(historyMenungguBayar);
 
       CustomSnackbar.showSuccessSnackbar(
         context,

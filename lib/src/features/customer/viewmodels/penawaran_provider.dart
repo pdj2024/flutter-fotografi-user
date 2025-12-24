@@ -37,8 +37,8 @@ class PenawaranProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result =
-          await penawaranService.getAll(status: status, idCustomer: userId, idVendor: vendorId);
+      final result = await penawaranService.getAll(
+          status: status, idCustomer: userId, idVendor: vendorId);
 
       print("RESULT PENAWRAN PROVIDER => $result");
 
@@ -70,8 +70,8 @@ class PenawaranProvider with ChangeNotifier {
       final Set<String> penawaranIds = {};
 
       for (final msg in messages) {
-        if (msg.noInvoice != null && msg.noInvoice!.isNotEmpty) {
-          penawaranIds.add(msg.noInvoice!);
+        if (msg.noPenawaran != null && msg.noPenawaran!.isNotEmpty) {
+          penawaranIds.add(msg.noPenawaran!);
         }
       }
       print("ID Penawaran dalam room ini: $penawaranIds");

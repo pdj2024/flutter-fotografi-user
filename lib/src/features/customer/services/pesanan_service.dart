@@ -16,6 +16,7 @@ class PesananService {
     String? idCustomer,
     String? status,
     String? statusBayar,
+    String? statusProgresPesanan,
     String? idPayment,
     String? orderBy,
     String? orderDir,
@@ -28,6 +29,8 @@ class PesananService {
           if (idCustomer != null) 'id_customer': idCustomer,
           if (status != null) 'status': status,
           if (statusBayar != null) 'status_bayar': statusBayar,
+          if (statusProgresPesanan != null)
+            'status_bayar': statusProgresPesanan,
           if (idPayment != null) 'id_payment_gateway': idPayment,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,

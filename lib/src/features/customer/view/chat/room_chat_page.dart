@@ -7,6 +7,9 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
@@ -38,16 +41,10 @@ class RoomChatPage extends StatefulWidget {
 
 class _RoomChatPageState extends State<RoomChatPage>
     with TickerProviderStateMixin {
+  PesananService pesananService = PesananService();
   final ScrollController _scrollController = ScrollController();
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
-
-  // String? _activeRoomId;
-  // RoomChatModel? _roomInfo;
-  // bool _isLoading = true;
-  // List<PaketModel?> paketList = [];
-  // List<PenawaranModel?> penawaranlist = [];
-  // List<ChatModel> messages = [];
 
   @override
   void initState() {
@@ -166,7 +163,7 @@ class _RoomChatPageState extends State<RoomChatPage>
         ),
         toolbarHeight: 72,
       ),
-      backgroundColor: const Color(0xFFF9F9F9),
+      backgroundColor: const Color.fromARGB(255, 242, 242, 242),
       body: Column(
         children: [
           // Daftar pesan
@@ -239,11 +236,11 @@ class _RoomChatPageState extends State<RoomChatPage>
                               }
                             }
 
-                            if (message.noInvoice != null &&
+                            if (message.noPenawaran != null &&
                                 roomChatProvider.penawaranList.isNotEmpty) {
                               final index = roomChatProvider.penawaranList
                                   .indexWhere(
-                                      (p) => p.noId == message.noInvoice);
+                                      (p) => p.noId == message.noPenawaran);
                               if (index != -1) {
                                 offer = roomChatProvider.penawaranList[index];
                               } else {
@@ -277,8 +274,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                               );
                             }
 
-                            if (message.jenisPesan == "payment" ||
-                                message.noInvoice != null) {
+                            if (message.noPenawaran != null &&
+                                message.noPenawaran!.isNotEmpty) {
                               if (offer == null) {
                                 return Container(
                                   width: double.infinity,
@@ -309,6 +306,33 @@ class _RoomChatPageState extends State<RoomChatPage>
                                 penawaran: offer,
                                 roomId: widget.roomId ?? "",
                                 customerId: userProv.customer?.noId ?? "",
+                                onTap: () async {
+                                  print(offer!.noPesanan);
+                                  if (offer.noPesanan != "") {
+                                    final pesanan = await pesananService.getAll(
+                                      noBukti: offer.noPesanan,
+                                    );
+                                    context
+                                        .read<NavigationProvider>()
+                                        .navigateToPage(
+                                          context,
+                                          targetTabIndex: 2,
+                                          DetailOrderPage(
+                                            pesananModel: pesanan.first,
+                                          ),
+                                        );
+                                  } else {
+                                    context
+                                        .read<NavigationProvider>()
+                                        .navigateToPage(
+                                          context,
+                                          targetTabIndex: 2,
+                                          DetailPembayaranPage(
+                                            penawaranId: message.noPenawaran!,
+                                          ),
+                                        );
+                                  }
+                                },
                               );
                             }
 
@@ -343,16 +367,6 @@ class _RoomChatPageState extends State<RoomChatPage>
             ),
           ),
 
-          // if (roomChatProvider.tawaranPaket != null)
-          //   Padding(
-          //     padding: const EdgeInsets.only(right: 15, top: 10),
-          //     child: ChatPackageCard(
-          //       namaPaket: roomChatProvider.tawaranPaket!.nama_paket,
-          //       hargaPaket: roomChatProvider.tawaranPaket!.harga,
-          //       isMe: true,
-          //     ),
-          //   ),
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white.withOpacity(0),
@@ -369,7 +383,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                           vertical: 10, horizontal: 16),
                       hintText: "Ketik pesan...",
                       filled: true,
-                      fillColor: const Color(0xFFE8E8E8),
+                      fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,

@@ -6,6 +6,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
@@ -29,6 +30,7 @@ class WaitingPaymentPage extends StatefulWidget {
 
 class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   PesananService pesananService = PesananService();
+  HistoryOrderService historyOrderService = HistoryOrderService();
   Duration remainingTime = const Duration(minutes: 5, seconds: 0);
   Timer? _timer;
   bool _isExpiredHandled = false;
@@ -99,11 +101,18 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         // Navigate to splash screen
         if (!mounted) return;
 
+        final historyPersiapan = HistoryOrderService.createPersiapan(
+          noOrder: pesanan.first.noBukti,
+          senderId: pesanan.first.idCustomer,
+        );
+
+        await historyOrderService.create(historyPersiapan);
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => PaymentSuccessSplashScreen(
-              orderNumber: widget.paymentData.noBukti ?? '-',
-              amount: widget.paymentData.grandTotal ?? 0,
+              orderNumber: widget.paymentData.noBukti,
+              amount: widget.paymentData.grandTotal,
             ),
           ),
         );
@@ -120,11 +129,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     if (!mounted) return;
 
     try {
-      final nonAktifPayment = widget.paymentData.copyWith(
-        status: "nonaktif",
-      );
-      await pesananService.update(nonAktifPayment);
-
       if (!mounted) return;
       CustomDialog.showTimeoutDialog(
           context: context,

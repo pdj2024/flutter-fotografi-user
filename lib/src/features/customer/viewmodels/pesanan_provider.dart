@@ -7,11 +7,11 @@ class PesananProvider with ChangeNotifier {
 
   PesananProvider({required this.pesananService});
 
-  List<PesananModel> _pesananBelumBayar = [];
+  List<PesananModel> _pesananUnpaid = [];
   List<PesananModel> _pesananProgress = [];
   List<PesananModel> _pesananSelesai = [];
 
-  List<PesananModel> get pesananBelumBayar => _pesananBelumBayar;
+  List<PesananModel> get pesananUnpaid => _pesananUnpaid;
   List<PesananModel> get pesananProgress => _pesananProgress;
   List<PesananModel> get pesananSelesai => _pesananSelesai;
 
@@ -46,10 +46,11 @@ class PesananProvider with ChangeNotifier {
         orderBy: "Created_At",
         orderDir: "desc",
       );
-      _pesananBelumBayar = belumBayar;
+      _pesananUnpaid = belumBayar;
 
       final progress = await pesananService.getAll(
         status: status,
+        statusBayar: "settlement",
         idCustomer: userId,
         orderBy: "Created_At",
         orderDir: "desc",
@@ -57,7 +58,7 @@ class PesananProvider with ChangeNotifier {
       _pesananProgress = progress;
 
       final selesai = await pesananService.getAll(
-        status: "nonaktif",
+        status: "selesai",
         idCustomer: userId,
         orderBy: "Created_At",
         orderDir: "desc",

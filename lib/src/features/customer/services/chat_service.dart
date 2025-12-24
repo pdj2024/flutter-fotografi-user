@@ -4,142 +4,101 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:signalr_netcore/http_connection_options.dart';
 import 'package:signalr_netcore/hub_connection.dart';
 import 'package:signalr_netcore/hub_connection_builder.dart';
-import 'package:signalr_netcore/itransport.dart';
 
-/// ChatService
-/// - Mengelola koneksi SignalR (hub)
-/// - Parsing event "ReceiveMessage", "RoomCreated", "SendMessageToRoom"
-/// - Menyediakan fungsi API untuk fetch room / messages / post message
-///
-/// Compatible: semua nama public (connect, joinRoom, sendMessage, disconnect, fetchRoomsForUser, fetchMessagesForRoom, postChat)
 class ChatService {
-  // -------------------------
-  // Config & dependencies
-  // -------------------------
   final String controller = 'chat';
   final ApiClient _client = apiClient;
   bool _isConnecting = false;
 
-  // gunakan endpoint chathub yang sesuai
   final String hubUrl = "${Constants.baseUrlHub}/api/chathub";
 
-  // -------------------------
-  // SignalR internals
-  // -------------------------
   HubConnection? _connection;
   final List<String> _joinedRooms = [];
   final Set<String> _joinedUserChannels = {};
-
   String _lastConnectedUserId = "";
 
-  /// Callback events (public)
-  Function(String sender, String message, DateTime sentAt)? onMessageReceived;
-  Function(String roomId, String sender, String message, String? idPaket,
-      String? noInvoice, DateTime sentAt)? onRoomMessageReceived;
+  // ✅ UPDATED CALLBACKS - Sesuai dengan data SignalR
+  Function(ChatModel chat)? onFullMessageReceived;
+  Function(String roomId, ChatModel chat)? onRoomMessageReceived;
   Function(String roomId)? onNewRoomDetected;
   Function(String roomId, String roomName, DateTime createdAt)? onRoomCreated;
+  Function(PaketModel paket)? onPaketDataReceived;
+  Function(PenawaranModel penawaran)? onPenawaranDataReceived;
 
-  ChatService();
-
-  // -------------------------
-  // Properties
-  // -------------------------
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
+  HubConnection? get connection => _connection;
 
-  // -------------------------
-  // Utilities
-  // -------------------------
-  /// Safe parse: terima Map atau JSON string
-  Map<String, Object?> safeParse(dynamic obj) {
-    if (obj is Map) {
-      return obj
-          .map((key, value) => MapEntry(key.toString(), value as Object?));
-    }
-    if (obj is String) {
-      final decoded = jsonDecode(obj);
-      if (decoded is Map) {
-        return decoded
-            .map((key, value) => MapEntry(key.toString(), value as Object?));
-      }
-    }
-    throw Exception("Unsupported payload type: ${obj.runtimeType}");
-  }
+  final PaketService _paketService = PaketService();
+  final PenawaranService _penawaranService = PenawaranService();
 
-  // -------------------------
-  // SIGNALR: CONNECT / SETUP
-  // -------------------------
-
-  /// Connect ke SignalR hub.
-  /// - currentUserId: id user yang sedang login (digunakan untuk join user-channel)
-  /// - apiClient: instance ApiClient untuk ambil token & role
-  /// Return int: 99 = success, -1 = token missing
+  // =========================================
+  // CONNECT
+  // =========================================
   Future<int> connect(String currentUserId, ApiClient apiClient) async {
-    print("[ChatService] connect() start for userId: $currentUserId");
+    debugPrint("[ChatService] 🔌 Connecting for userId: $currentUserId");
 
-    // ⛔ Mencegah connect ganda
     if (_isConnecting) {
-      print("[ChatService] 🚫 connect() ignored: still connecting...");
+      debugPrint("[ChatService] ⏸️ Already connecting, skip");
       return -1;
     }
 
     try {
       _isConnecting = true;
 
-      // Ambil token & role
       final token = await apiClient.getIdToken();
       final role = apiClient.getRole() ?? 'customer';
 
       if (token == null || token.isEmpty) {
-        print("[ChatService] ❌ token null/empty, abort connect");
+        debugPrint("[ChatService] ❌ No token available");
         return -1;
       }
 
-      // Init connection sekali
-      await _ensureConnectionInitialized(token, role);
-
-      // Start connection aman (punya state checking)
+      await _ensureConnectionInitialized(token, role, currentUserId);
       final startResult = await _startConnectionIfNeeded();
+
       if (startResult == -1) {
-        print("[ChatService] ❌ Failed to start connection");
+        debugPrint("[ChatService] ❌ Failed to start connection");
         return -1;
       }
 
-      // Join channel user bila perlu
       if (currentUserId != _lastConnectedUserId ||
           !_joinedUserChannels.contains(currentUserId)) {
         await joinUserChannel(currentUserId);
         _lastConnectedUserId = currentUserId;
       }
 
-      print("[ChatService] connect() finished successfully");
+      debugPrint("[ChatService] ✅ Connected successfully");
       return 99;
     } catch (e, st) {
-      print("[ChatService] ❌ connect failed: $e\n$st");
+      debugPrint("[ChatService] ❌ Connect error: $e\n$st");
       return -1;
     } finally {
       _isConnecting = false;
     }
   }
 
-  /// Inisialisasi HubConnection & setup listeners (hanya sekali)
-  Future<void> _ensureConnectionInitialized(String token, String role) async {
-    if (_connection != null) {
-      print("[ChatService] _ensureConnectionInitialized: already exists");
-      return;
-    }
+  Future<void> _ensureConnectionInitialized(
+    String token,
+    String role,
+    String currentUserId,
+  ) async {
+    if (_connection != null) return;
 
-    print("[ChatService] Initializing HubConnection (role=$role)");
+    debugPrint("[ChatService] 🔧 Initializing HubConnection (role=$role)");
 
     _connection = HubConnectionBuilder()
         .withUrl(
       '$hubUrl?role=$role',
       options: HttpConnectionOptions(
         accessTokenFactory: () async => token,
-        transport: HttpTransportType.WebSockets,
         requestTimeout: 15000,
       ),
     )
@@ -147,233 +106,221 @@ class ChatService {
       retryDelays: const [1000, 2000, 5000, 10000],
     ).build();
 
-    _setupListeners();
-
-    print("[ChatService] HubConnection created");
+    _setupListeners(currentUserId);
   }
 
-  /// Start connection bila perlu
   Future<int> _startConnectionIfNeeded() async {
-    if (_connection == null) {
-      print("[ChatService] ❌ _startConnectionIfNeeded: connection null");
-      return -1;
-    }
+    if (_connection == null) return -1;
 
     final state = _connection!.state;
-    print("[ChatService] Current connection state: $state");
 
-    // Sudah connected → aman
     if (state == HubConnectionState.Connected) {
-      print("[ChatService] _startConnectionIfNeeded: already connected");
+      debugPrint("[ChatService] ✅ Already connected");
       return 1;
     }
 
-    // Jika sedang connect / reconnect → jangan start lagi
     if (state == HubConnectionState.Connecting ||
         state == HubConnectionState.Reconnecting) {
-      print("[ChatService] ⏳ Connection is busy ($state), skip start()");
+      debugPrint("[ChatService] ⏳ Connection busy ($state)");
       return -1;
     }
 
-    // Pastikan benar-benar Disconnected sebelum start
     if (state != HubConnectionState.Disconnected) {
-      print(
-          "[ChatService] 🚫 Cannot start. State is $state (not Disconnected)");
+      debugPrint("[ChatService] ⚠️ Invalid state: $state");
       return -1;
     }
-
-    print("[ChatService] Starting connection...");
 
     try {
       await _connection!.start();
-      print("[ChatService] ✅ Connected (state=${_connection!.state})");
+      debugPrint("[ChatService] ✅ Started connection");
       return 1;
     } catch (e) {
-      print("[ChatService] ❌ start() failed: $e");
+      debugPrint("[ChatService] ❌ Start failed: $e");
       return -1;
     }
   }
 
-  /// Pasang semua listener SignalR
-  void _setupListeners() {
+  void _setupListeners(String currentUserId) {
     if (_connection == null) return;
-    print("[ChatService] _setupListeners");
 
-    // ReceiveMessage: pesan umum / room
+    // ✅ LISTENER untuk pesan baru
     _connection!.on("ReceiveMessage", (args) {
-      print("Ada Pesan Baru");
-      try {
-        if (args == null || args.isEmpty) return;
-        _handleReceiveMessage(args);
-      } catch (e, st) {
-        print("[ChatService] Error in ReceiveMessage handler: $e\n$st");
-      }
+      debugPrint("📨 ReceiveMessage event fired => $args");
+      if (args == null || args.isEmpty) return;
+      _handleReceiveMessage(args, currentUserId);
     });
 
-    // RoomCreated: notifikasi kalau ada room baru
+    // ✅ LISTENER untuk room baru
     _connection!.on("RoomCreated", (args) {
-      try {
-        if (args == null || args.isEmpty) return;
-        _handleRoomCreated(args);
-      } catch (e, st) {
-        print("[ChatService] Error in RoomCreated handler: $e\n$st");
-      }
+      debugPrint("🆕 RoomCreated event fired => $args");
+      if (args == null || args.isEmpty) return;
+      _handleRoomCreated(args);
     });
 
-    // onclose: auto reconnect logic (bersih-bersih dulu)
     _connection!.onclose(({error}) async {
-      print("[ChatService] Connection closed: $error");
+      debugPrint("[ChatService] 🔌 Connection closed: $error");
       _resetJoinState();
-      // wait then try reconnect (connect() di caller bisa dipanggil ulang,
-      // atau implement auto-reconnect custom di sini)
-      await Future.delayed(const Duration(seconds: 2));
-      // Jangan panggil start otomatis tanpa token; caller harus panggil connect kembali
-      print("[ChatService] Connection closed handler finished");
+    });
+
+    _connection!.onreconnecting(({error}) {
+      debugPrint("[ChatService] 🔄 Reconnecting: $error");
+    });
+
+    _connection!.onreconnected(({connectionId}) async {
+      debugPrint("[ChatService] ✅ Reconnected: $connectionId");
+
+      // Re-join semua room yang sebelumnya joined
+      final roomsToRejoin = List<String>.from(_joinedRooms);
+      _joinedRooms.clear();
+
+      for (final roomId in roomsToRejoin) {
+        await joinRoom(roomId);
+      }
+
+      // Re-join user channel
+      if (_lastConnectedUserId.isNotEmpty) {
+        _joinedUserChannels.clear();
+        await joinUserChannel(_lastConnectedUserId);
+      }
     });
   }
 
-  // -------------------------
-  // SIGNALR: HANDLERS
-  // -------------------------
-  void _handleReceiveMessage(List<Object?> args) {
-    print(args);
+  // =========================================
+  // ✅ HANDLERS - UPDATED UNTUK LANGSUNG FETCH DATA
+  // =========================================
+  void _handleReceiveMessage(List<Object?> args, String currentUserId) {
     try {
-      final dynamic raw = args[0];
-      final Map<String, Object?> msg = safeParse(raw);
+      final raw = args[0];
+      final msg = _safeParse(raw);
 
+      debugPrint("[ChatService] 📦 Raw message data: $msg");
+
+      // ✅ Parse SEMUA field yang dikirim SignalR
+      final messageId = msg["messageId"]?.toString() ?? "";
       final roomId = msg["roomId"]?.toString() ?? "";
       final sender = msg["sender"]?.toString() ?? "";
       final text = msg["message"]?.toString() ?? "";
+      final sentAt = _parseDateTime(msg["sentAt"]);
+      final editedAt =
+          msg["editedAt"] != null ? _parseDateTime(msg["editedAt"]) : null;
+      final tipeUser = msg["tipeUser"]?.toString() ?? "";
+      final noInvoice = msg["noPesanan"]?.toString() ?? "";
+      final noPenawaran = msg["noPenawaran"]?.toString() ?? "";
       final idPaket = msg["idPaket"]?.toString() ?? "";
-      final noInvoice = msg["noInvoice"]?.toString() ?? "";
-      final sentAt = msg["sentAt"] != null
-          ? DateTime.tryParse(msg["sentAt"].toString())?.toLocal() ??
-              DateTime.now()
-          : DateTime.now();
+      final status = msg["status"]?.toString() ?? "";
+      final jenisPesan = msg["jenisPesan"]?.toString() ?? "";
+      final sendStatus = msg["sendStatus"]?.toString() ?? "";
 
-      // Cache joined rooms supaya UI tahu kita pernah gabung room ini
-      if (roomId.isNotEmpty && !_joinedRooms.contains(roomId)) {
-        _joinedRooms.add(roomId);
-        print("[ChatService] Added to _joinedRooms: $roomId");
+      // ✅ Buat ChatModel lengkap
+      final chatModel = ChatModel(
+        messageId: messageId,
+        roomId: roomId,
+        senderId: sender,
+        message: text,
+        sentAt: sentAt,
+        editedAt: editedAt,
+        tipeUser: tipeUser,
+        noInvoice: noInvoice.isEmpty ? null : noInvoice,
+        noPenawaran: noPenawaran.isEmpty ? null : noPenawaran,
+        idPaket: idPaket.isEmpty ? null : idPaket,
+        status: status,
+        jenisPesan: jenisPesan,
+        userIds: [sender, currentUserId],
+        sendStatus: 'receive',
+        roomType: 'direct',
+      );
+
+      // ✅ Trigger callback untuk pesan
+      onFullMessageReceived?.call(chatModel);
+      onRoomMessageReceived?.call(roomId, chatModel);
+
+      // ✅ LANGSUNG FETCH DATA JIKA ADA IDPAKET ATAU NOINVOICE
+      if (idPaket.isNotEmpty) {
+        _fetchPaketData(idPaket);
       }
 
-      print(
-          "[ChatService] ReceiveMessage -> room:$roomId sender:$sender text:$text time:$sentAt");
-
-      // Emit callbacks
-      try {
-        onMessageReceived?.call(sender, text, sentAt);
-        onRoomMessageReceived?.call(
-            roomId, sender, text, idPaket, noInvoice, sentAt);
-      } catch (cbErr) {
-        print("[ChatService] Callback error onMessage/onRoomMessage: $cbErr");
+      if (noPenawaran.isNotEmpty) {
+        _fetchPenawaranData(noPenawaran);
       }
     } catch (e, st) {
-      print("[ChatService] Error parsing ReceiveMessage: $e\n$st");
+      debugPrint("[ChatService] ❌ Parse message error: $e\n$st");
+    }
+  }
+
+  // =========================================
+  // ✅ METHOD UNTUK FETCH DATA PAKET
+  // =========================================
+  Future<void> _fetchPaketData(String idPaket) async {
+    try {
+      debugPrint("[ChatService] 📦 Fetching paket data for id: $idPaket");
+
+      final paket = await _paketService.getAll(noId: idPaket);
+
+      if (paket != null) {
+        debugPrint(
+            "[ChatService] ✅ Paket data received: ${paket.first.nama_paket}");
+        onPaketDataReceived?.call(paket.first);
+      } else {
+        debugPrint("[ChatService] ⚠️ Paket not found for id: $idPaket");
+      }
+    } catch (e, st) {
+      debugPrint("[ChatService] ❌ Error fetching paket: $e\n$st");
+    }
+  }
+
+  // =========================================
+  // ✅ METHOD UNTUK FETCH DATA PENAWARAN
+  // =========================================
+  Future<void> _fetchPenawaranData(String noPenawaran) async {
+    try {
+      debugPrint(
+          "[ChatService] 📄 Fetching penawaran data for no: $noPenawaran");
+
+      final penawaran = await _penawaranService.getAll(noId: noPenawaran);
+
+      if (penawaran != null) {
+        debugPrint(
+            "[ChatService] ✅ Penawaran data received: ${penawaran.first.noTrackingPenawaran}");
+        onPenawaranDataReceived?.call(penawaran.first);
+      } else {
+        debugPrint("[ChatService] ⚠️ Penawaran not found for no: $noPenawaran");
+      }
+    } catch (e, st) {
+      debugPrint("[ChatService] ❌ Error fetching penawaran: $e\n$st");
     }
   }
 
   void _handleRoomCreated(List<Object?> args) {
     try {
-      final dynamic raw = args[0];
-      Map<String, Object?> payload;
-      if (raw is Map) {
-        payload = raw.map((k, v) => MapEntry(k.toString(), v as Object?));
-      } else {
-        payload = safeParse(raw);
-      }
+      final raw = args[0];
+      final payload = _safeParse(raw);
 
       final roomId = payload["roomId"]?.toString() ?? "";
       final roomName = payload["roomName"]?.toString() ?? "";
-      final createdAt = payload["createdAt"] != null
-          ? DateTime.tryParse(payload["createdAt"].toString()) ?? DateTime.now()
-          : DateTime.now();
+      final createdAt = _parseDateTime(payload["createdAt"]);
 
-      print(
-          "[ChatService] RoomCreated -> roomId:$roomId roomName:$roomName createdAt:$createdAt");
+      debugPrint("[ChatService] 🆕 Room created: $roomId ($roomName)");
 
-      try {
-        onRoomCreated?.call(roomId, roomName, createdAt);
-        onNewRoomDetected?.call(roomId);
-      } catch (cbErr) {
-        print(
-            "[ChatService] Callback error onRoomCreated/onNewRoomDetected: $cbErr");
-      }
+      onRoomCreated?.call(roomId, roomName, createdAt);
+      onNewRoomDetected?.call(roomId);
     } catch (e, st) {
-      print("[ChatService] Error parsing RoomCreated: $e\n$st");
+      debugPrint("[ChatService] ❌ Parse RoomCreated error: $e\n$st");
     }
   }
 
-  // -------------------------
-  // JOIN / LEAVE / SEND
-  // -------------------------
+  // =========================================
+  // SEND MESSAGE
+  // =========================================
+  Future<void> sendMessage({
+    required ChatModel chat,
+  }) async {
+    debugPrint("[ChatService] 📤 Sending message to room: ${chat.roomId}");
 
-  /// Join single room (via SignalR invoke "JoinRoom")
-  Future<void> joinRoom(String roomId) async {
-    try {
-      if (_connection?.state == HubConnectionState.Connected &&
-          !_joinedRooms.contains(roomId)) {
-        print("[ChatService] joinRoom -> invoking JoinRoom for $roomId");
-        await _connection!.invoke("JoinRoom", args: [roomId]);
-        _joinedRooms.add(roomId);
-        print("[ChatService] Joined room $roomId");
-      } else {
-        print(
-            "[ChatService] joinRoom skipped (already joined or not connected)");
-      }
-    } catch (e, st) {
-      print("[ChatService] joinRoom error: $e\n$st");
-    }
-  }
-
-  /// Join multiple rooms (helper)
-  Future<void> joinMultipleRooms(List<String> roomIds) async {
-    for (final r in roomIds) {
-      await joinRoom(r);
-    }
-  }
-
-  /// Join private channel user (invoke "JoinUserChannel")
-  Future<void> joinUserChannel(String userId) async {
-    try {
-      if (_connection?.state == HubConnectionState.Connected &&
-          !_joinedUserChannels.contains(userId)) {
-        await _connection!.invoke("JoinUserChannel", args: [userId]);
-        _joinedUserChannels.add(userId);
-        print("✅ [ChatService] Joined user channel user-$userId");
-      } else {
-        print(
-            "✅[ChatService] joinUserChannel skipped (already joined or not connected)");
-      }
-    } catch (e, st) {
-      print("[ChatService] joinUserChannel error: $e\n$st");
-    }
-  }
-
-  /// Send message: sebenarnya mengirim via REST API (backend yang akan broadcast via SignalR)
-  Future<void> sendMessage(
-    String roomId,
-    String senderUserId,
-    String tipeUser,
-    String message,
-    String? idPaket,
-    String? noInvoice,
-    List<String> userIds,
-  ) async {
     final payload = {
-      "chat": {
-        "sender_Id": senderUserId,
-        "tipe_User": tipeUser,
-        "id_Paket": idPaket,
-        "no_Invoice": noInvoice,
-        "message": message,
-      },
-      "room_Id": roomId,
-      "user_Ids": userIds,
+      "chat": chat.toJson(),
+      "room_id": chat.roomId,
+      "user_ids": chat.userIds,
     };
-
-    print(
-        "[ChatService] sendMessage -> room:$roomId sender:$senderUserId text:$message");
 
     try {
       final response = await _client.post(
@@ -383,70 +330,81 @@ class ChatService {
       );
 
       if (response.statusCode != 200) {
-        print(
-            "[ChatService] sendMessage -> API responded ${response.statusCode}: ${response.body}");
-        throw Exception('Gagal mengirim pesan ke room $roomId');
+        throw Exception("API failed: ${response.statusCode}");
       }
 
-      // print(
-      //     "[SignalR] status connection ${_connection?.state == HubConnectionState.Connected}");
-      // if (_connection?.state == HubConnectionState.Connected) {
-      //   await _connection!.invoke("SendMessageToRoom", args: [
-      //     roomId,
-      //     senderUserId,
-      //     message,
-      //     // idPaket ?? "",
-      //     // noInvoice ?? ""
-      //   ]);
-      //   print("================ [SignalR] Sent message to $roomId: $message");
+      debugPrint("[ChatService] ✅ Message saved via API");
 
-      //   print("[API] ✅ Pesan terkirim ke $roomId: $message");
-      // }
+      // ✅ PostgreSQL trigger akan otomatis broadcast via SignalR
+      // Tidak perlu manual invoke SignalR di sini
     } catch (e, st) {
-      print("[ChatService] sendMessage error: $e\n$st");
+      debugPrint("❌ ChatService sendMessage error: $e\n$st");
       rethrow;
     }
   }
 
-  /// Disconnect (stop HubConnection & clear caches)
-  Future<void> disconnect() async {
+  // =========================================
+  // JOIN / LEAVE
+  // =========================================
+  Future<void> joinRoom(String roomId) async {
+    if (_connection?.state != HubConnectionState.Connected) {
+      debugPrint("[ChatService] ⚠️ Cannot join room: not connected");
+      return;
+    }
+
+    if (_joinedRooms.contains(roomId)) {
+      debugPrint("[ChatService] ℹ️ Already joined room: $roomId");
+      return;
+    }
+
     try {
-      if (_connection != null &&
-          _connection!.state == HubConnectionState.Connected) {
-        print("[ChatService] disconnect -> stopping connection");
-        await _connection!.stop();
-        print("[ChatService] Disconnected");
-      }
+      await _connection!.invoke("JoinRoom", args: [roomId]);
+      _joinedRooms.add(roomId);
+      debugPrint("[ChatService] ✅ Joined room: $roomId");
     } catch (e, st) {
-      print("[ChatService] disconnect error: $e\n$st");
-    } finally {
-      _connection = null;
-      _joinedRooms.clear();
-      _joinedUserChannels.clear();
-      _lastConnectedUserId = "";
-      print("[ChatService] disconnect -> cleaned internal state");
+      debugPrint("[ChatService] ❌ Join room error: $e\n$st");
     }
   }
 
-  void _resetJoinState() {
-    _joinedRooms.clear();
-    _joinedUserChannels.clear();
-    _lastConnectedUserId = "";
-    print("[ChatService] _resetJoinState executed");
+  Future<void> joinMultipleRooms(List<String> roomIds) async {
+    for (final roomId in roomIds) {
+      await joinRoom(roomId);
+    }
   }
 
-  // -------------------------
-  // API: fetch rooms / messages / post chat
-  // -------------------------
+  Future<void> leaveRoom(String roomId) async {
+    if (_connection?.state != HubConnectionState.Connected) return;
 
-  /// Fetch rooms for a user. Returns empty list on error.
+    try {
+      await _connection!.invoke("LeaveRoom", args: [roomId]);
+      _joinedRooms.remove(roomId);
+      debugPrint("[ChatService] 👋 Left room: $roomId");
+    } catch (e, st) {
+      debugPrint("[ChatService] ❌ Leave room error: $e\n$st");
+    }
+  }
+
+  Future<void> joinUserChannel(String userId) async {
+    if (_connection?.state != HubConnectionState.Connected) return;
+    if (_joinedUserChannels.contains(userId)) return;
+
+    try {
+      await _connection!.invoke("JoinUserChannel", args: [userId]);
+      _joinedUserChannels.add(userId);
+      debugPrint("[ChatService] ✅ Joined user channel: $userId");
+    } catch (e, st) {
+      debugPrint("[ChatService] ❌ Join user channel error: $e\n$st");
+    }
+  }
+
+  // =========================================
+  // API METHODS
+  // =========================================
   Future<List<RoomChatModel>> fetchRoomsForUser(
     String userId, {
     String? roomId,
     String? idLawan,
   }) async {
-    debugPrint('[ChatService] fetchRoomsForUser user: $userId');
-
     try {
       final queryParams = <String, dynamic>{
         'user_id': userId,
@@ -459,99 +417,126 @@ class ChatService {
         queryParameters: queryParams,
       );
 
-      if (response.statusCode != 200) {
-        debugPrint(
-            '[ChatService] fetchRoomsForUser status ${response.statusCode}');
-        debugPrint('[ChatService] body: ${response.body}');
-        return [];
-      }
+      if (response.statusCode != 200) return [];
 
       final body = jsonDecode(response.body);
-
-      if (body is! Map<String, dynamic>) {
-        debugPrint(
-            "[ChatService] fetchRoomsForUser unexpected body type: ${body.runtimeType}");
-        return [];
-      }
-
       final raw = body['Data'] ?? [];
-      if (raw is! List) {
-        debugPrint(
-            "[ChatService] fetchRoomsForUser Data is not List: ${raw.runtimeType}");
-        return [];
-      }
+
+      if (raw is! List) return [];
 
       final rooms = raw
-          .map((e) {
-            if (e is Map<String, dynamic>) {
-              return RoomChatModel.fromJson(e);
-            }
-            debugPrint("[ChatService] fetchRoomsForUser skipped item: $e");
-            return null;
-          })
+          .map((e) =>
+              e is Map<String, dynamic> ? RoomChatModel.fromJson(e) : null)
           .whereType<RoomChatModel>()
           .toList();
 
-      debugPrint(
-          '[ChatService] fetchRoomsForUser => found ${rooms.length} rooms');
+      debugPrint('[ChatService] 📥 Fetched ${rooms.length} rooms');
       return rooms;
     } catch (e, st) {
-      debugPrint('[ChatService] fetchRoomsForUser error: $e');
-      debugPrintStack(stackTrace: st);
+      debugPrint('[ChatService] ❌ fetchRooms error: $e\n$st');
       return [];
     }
   }
 
-  /// Fetch messages for a room (history)
   Future<List<ChatModel>> fetchMessagesForRoom(String roomId) async {
-    print("[ChatService] fetchMessagesForRoom -> roomId: $roomId");
     try {
       final response = await _client.get(
         '/$controller/getAll',
         queryParameters: {'room_id': roomId},
       );
 
-      if (response.statusCode != 200) {
-        print(
-            "[ChatService] fetchMessagesForRoom -> non-200: ${response.statusCode}");
-        return [];
-      }
+      if (response.statusCode != 200) return [];
 
-      final Map<String, dynamic> json = jsonDecode(response.body);
-      final List<dynamic> data = json['Data'] ?? [];
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = json['Data'] as List<dynamic>? ?? [];
 
       final messages = data
-          .map((item) {
-            if (item is Map<String, dynamic>) {
-              return ChatModel.fromJson(item);
-            }
-            return null;
-          })
+          .map((item) =>
+              item is Map<String, dynamic> ? ChatModel.fromJson(item) : null)
           .whereType<ChatModel>()
           .toList();
 
-      print(
-          "[ChatService] fetchMessagesForRoom -> loaded ${messages.length} messages");
+      debugPrint('[ChatService] 📥 Fetched ${messages.length} messages');
       return messages;
     } catch (e, st) {
-      print("[ChatService] fetchMessagesForRoom error: $e\n$st");
+      debugPrint('[ChatService] ❌ fetchMessages error: $e\n$st');
       return [];
     }
   }
 
-  /// Post chat via API (helper, returns boolean)
-  Future<bool> postChat(Map<String, dynamic> payload) async {
+  Future<bool> updateMessageStatus(String messageId, String status) async {
     try {
-      final response = await _client.post(
-        '/$controller/create',
-        body: jsonEncode(payload),
+      final response = await _client.put(
+        '/$controller/update-send-status/$messageId',
+        body: jsonEncode({'send_status': status}),
         headers: {'Content-Type': 'application/json'},
       );
-      print("[ChatService] postChat -> status ${response.statusCode}");
       return response.statusCode == 200;
-    } catch (e, st) {
-      print("[ChatService] postChat error: $e\n$st");
+    } catch (e) {
+      debugPrint('[ChatService] ❌ updateStatus error: $e');
       return false;
     }
   }
+
+  // =========================================
+  // DISCONNECT
+  // =========================================
+  Future<void> disconnect() async {
+    try {
+      if (_connection?.state == HubConnectionState.Connected) {
+        await _connection!.stop();
+        debugPrint("[ChatService] 🔌 Disconnected");
+      }
+    } catch (e) {
+      debugPrint("[ChatService] ❌ Disconnect error: $e");
+    } finally {
+      _connection = null;
+      _resetJoinState();
+    }
+  }
+
+  void _resetJoinState() {
+    _joinedRooms.clear();
+    _joinedUserChannels.clear();
+    _lastConnectedUserId = "";
+  }
+
+  // =========================================
+  // UTILITIES
+  // =========================================
+  Map<String, Object?> _safeParse(dynamic obj) {
+    if (obj is Map) {
+      return obj.map((k, v) => MapEntry(k.toString(), v as Object?));
+    }
+    if (obj is String) {
+      try {
+        final decoded = jsonDecode(obj);
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), v as Object?));
+        }
+      } catch (e) {
+        debugPrint("[ChatService] ⚠️ Failed to parse string as JSON: $e");
+      }
+    }
+    throw Exception("Unsupported type: ${obj.runtimeType}");
+  }
+
+  DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value.toLocal();
+
+    try {
+      return DateTime.parse(value.toString()).toLocal();
+    } catch (e) {
+      debugPrint("[ChatService] ⚠️ Failed to parse date: $value");
+      return DateTime.now();
+    }
+  }
+
+  // =========================================
+  // GETTERS
+  // =========================================
+  List<String> get joinedRooms => List.unmodifiable(_joinedRooms);
+  Set<String> get joinedUserChannels => Set.unmodifiable(_joinedUserChannels);
+  String get lastConnectedUserId => _lastConnectedUserId;
 }

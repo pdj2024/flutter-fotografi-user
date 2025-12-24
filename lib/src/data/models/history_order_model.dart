@@ -7,6 +7,7 @@ class HistoryOrderModel {
   final String tipeUser;
   final String namaSender;
   final String status;
+  final String statusProgressPesanan;
 
   HistoryOrderModel({
     required this.noId,
@@ -17,6 +18,7 @@ class HistoryOrderModel {
     required this.tipeUser,
     required this.namaSender,
     required this.status,
+    required this.statusProgressPesanan,
   });
 
   // =====================================================
@@ -32,6 +34,7 @@ class HistoryOrderModel {
       tipeUser: json['Tipe_User'] ?? '',
       namaSender: json['Nama_Sender'] ?? '',
       status: json['Status'] ?? '',
+      statusProgressPesanan: json['Status_Progress_Pesanan'] ?? '',
     );
   }
 
@@ -48,6 +51,17 @@ class HistoryOrderModel {
       'Tipe_User': tipeUser,
       'Nama_Sender': namaSender,
       'Status': status,
+      'Status_Progress_Pesanan': statusProgressPesanan,
+    };
+  }
+
+  Map<String, dynamic> toJsonCreate() {
+    return {
+      'no_order': noOrder,
+      'deskripsi': deskripsi,
+      'sender_Id': senderId,
+      'status': status,
+      'status_Progress_Pesanan': statusProgressPesanan,
     };
   }
 
@@ -63,6 +77,7 @@ class HistoryOrderModel {
     String? tipeUser,
     String? namaSender,
     String? status,
+    String? statusProgressPesanan,
   }) {
     return HistoryOrderModel(
       noId: noId ?? this.noId,
@@ -73,6 +88,8 @@ class HistoryOrderModel {
       tipeUser: tipeUser ?? this.tipeUser,
       namaSender: namaSender ?? this.namaSender,
       status: status ?? this.status,
+      statusProgressPesanan:
+          statusProgressPesanan ?? this.statusProgressPesanan,
     );
   }
 }

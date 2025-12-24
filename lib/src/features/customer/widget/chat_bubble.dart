@@ -10,6 +10,21 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Icon? statusMessage;
+    switch (message.status) {
+      case "sent":
+        statusMessage = Icon(Icons.check, size: 14, color: Colors.grey);
+        break;
+      case "received":
+        statusMessage = Icon(Icons.done_all, size: 14, color: Colors.grey);
+        break;
+      case "read":
+        statusMessage = Icon(Icons.done_all, size: 14, color: Colors.blue);
+        break;
+      default:
+        statusMessage = Icon(Icons.check, size: 14, color: Colors.grey);
+    }
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -32,9 +47,20 @@ class ChatBubble extends StatelessWidget {
             Text(message.message,
                 style: const TextStyle(fontSize: 14, color: Colors.black)),
             const SizedBox(height: 4),
-            Text(
-              DateFormat('hh:mm a').format(message.sentAt.toLocal()),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  DateFormat('hh:mm a').format(message.sentAt.toLocal()),
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                ),
+                isMe
+                    ? Padding(
+                        padding: const EdgeInsets.only(left: 5),
+                        child: statusMessage,
+                      )
+                    : SizedBox()
+              ],
             ),
           ],
         ),
