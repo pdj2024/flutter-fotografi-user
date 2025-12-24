@@ -15,8 +15,8 @@ class ChatProvider extends ChangeNotifier {
 
   List<RoomChatModel> _rooms = [];
   Map<String, List<ChatModel>> _messages = {};
-  Map<String, PaketModel> _paketCache = {}; // Cache untuk paket
-  Map<String, PenawaranModel> _penawaranCache = {}; // Cache untuk penawaran
+  Map<String, PaketModel> _paketCache = {};
+  Map<String, PenawaranModel> _penawaranCache = {};
 
   String? _currentUserId;
   bool _initialized = false;
@@ -49,6 +49,63 @@ class ChatProvider extends ChangeNotifier {
   Function(PenawaranModel)? onPenawaranDataReceived;
 
   //=============================
+  // ✅ HELPER: CHECK IF MESSAGE IS DUPLICATE/REPLACEMENT
+  //=============================
+  bool _isMessageDuplicate(ChatModel newMsg, List<ChatModel> existingMessages) {
+    // Cek apakah ada pesan dengan messageId yang sama
+    final exactMatch = existingMessages.any((m) => m.messageId == newMsg.messageId);
+    
+    if (exactMatch) {
+      debugPrint("CHAT_PROVIDER :: Exact duplicate detected (messageId: ${newMsg.messageId})");
+      return true;
+    }
+
+    // Cek apakah ini adalah pesan dari server yang menggantikan local echo
+    // Kriteria: roomId, senderId, message, dan sentAt sangat mirip (dalam 5 detik)
+    final potentialLocalEcho = existingMessages.where(
+      (m) =>
+          m.messageId.startsWith('local-') && // Local echo
+          m.roomId == newMsg.roomId &&
+          m.senderId == newMsg.senderId &&
+          m.message == newMsg.message &&
+          m.sentAt.difference(newMsg.sentAt).inSeconds.abs() < 5, // Dalam 5 detik
+    ).toList();
+
+    return potentialLocalEcho.isNotEmpty;
+  }
+
+  //=============================
+  // ✅ HELPER: REPLACE LOCAL ECHO WITH SERVER MESSAGE
+  //=============================
+  void _replaceLocalEchoWithServerMessage(String roomId, ChatModel serverMsg) {
+    final messages = _messages[roomId] ?? [];
+
+    // Cari local echo yang cocok
+    final localEchoIndex = messages.indexWhere(
+      (m) =>
+          m.messageId.startsWith('local-') &&
+          m.roomId == serverMsg.roomId &&
+          m.senderId == serverMsg.senderId &&
+          m.message == serverMsg.message &&
+          m.sentAt.difference(serverMsg.sentAt).inSeconds.abs() < 5,
+    );
+
+    if (localEchoIndex != -1) {
+      final localMessageId = messages[localEchoIndex].messageId;
+      debugPrint(
+          "CHAT_PROVIDER :: Replacing local echo ($localMessageId) with server message (${serverMsg.messageId})");
+      
+      // Replace local echo dengan server message
+      messages[localEchoIndex] = serverMsg;
+      _messages[roomId] = List.from(messages);
+    } else {
+      // Tidak ada local echo yang cocok, tambahkan sebagai pesan baru
+      debugPrint("CHAT_PROVIDER :: Adding new message (no local echo found)");
+      _messages[roomId] = [...messages, serverMsg];
+    }
+  }
+
+  //=============================
   // INIT CONNECTION - UPDATED
   //=============================
   Future<void> init(String userId) async {
@@ -65,7 +122,6 @@ class ChatProvider extends ChangeNotifier {
     _currentUserId = userId;
     debugPrint("CHAT_PROVIDER :: INIT dengan userId = $userId");
 
-    // Connect SignalR
     final connectStatus = await _chatService.connect(userId, _client);
     debugPrint("CHAT_PROVIDER :: connect result = $connectStatus");
 
@@ -74,13 +130,55 @@ class ChatProvider extends ChangeNotifier {
     }
 
     //=============================
-    // ✅ LISTENER PESAN MASUK - UPDATED
+    // ✅ LISTENER PESAN MASUK - DENGAN SMART DEDUPLICATION
     //=============================
     _chatService.onFullMessageReceived = (ChatModel chat) {
-      debugPrint(
-          "CHAT_PROVIDER :: Pesan diterima dengan idPaket: ${chat.idPaket}, noInvoice: ${chat.noInvoice}");
+      debugPrint("CHAT_PROVIDER :: Pesan diterima dari SignalR");
+      debugPrint("   - messageId: ${chat.messageId}");
+      debugPrint("   - senderId: ${chat.senderId}");
+      debugPrint("   - currentUserId: $_currentUserId");
+      debugPrint("   - message: ${chat.message}");
 
-      _chatService.updateMessageStatus(chat.messageId, "received");
+      // ✅ FILTER: Skip jika pengirim adalah user sendiri DAN messageId adalah dari server
+      // (ini berarti pesan sudah ditambahkan via local echo)
+      final isSentByMe = chat.senderId == _currentUserId;
+      final isServerMessage = !chat.messageId.startsWith('local-');
+
+      if (isSentByMe && isServerMessage) {
+        debugPrint("CHAT_PROVIDER :: Pesan dari diri sendiri via SignalR, akan replace local echo");
+        
+        // Replace local echo dengan server message
+        _replaceLocalEchoWithServerMessage(chat.roomId, chat);
+        
+        // Update message status
+        _chatService.updateMessageStatus(chat.messageId, "sent");
+        
+        // Update preview room
+        final i = _rooms.indexWhere((r) => r.roomId == chat.roomId);
+        if (i >= 0) {
+          _rooms[i] = _rooms[i].copyWith(
+            lastMessage: chat.message,
+            lastMessageAt: chat.sentAt,
+          );
+        }
+        
+        notifyListeners();
+        return;
+      }
+
+      // ✅ UNTUK PESAN DARI ORANG LAIN
+      final oldList = _messages[chat.roomId] ?? [];
+
+      // Cek duplikasi
+      if (_isMessageDuplicate(chat, oldList)) {
+        debugPrint("CHAT_PROVIDER :: Message duplicate detected, skip add");
+        return;
+      }
+
+      // Update message status untuk pesan masuk
+      if (!isSentByMe) {
+        _chatService.updateMessageStatus(chat.messageId, "received");
+      }
 
       // Update preview room
       final i = _rooms.indexWhere((r) => r.roomId == chat.roomId);
@@ -91,52 +189,33 @@ class ChatProvider extends ChangeNotifier {
         );
       }
 
-      // Tambahkan ke messages list
-      final oldList = _messages[chat.roomId] ?? [];
-
-      // Cek duplikasi berdasarkan messageId
-      final isDuplicate = oldList.any((m) => m.messageId == chat.messageId);
-
-      if (!isDuplicate) {
-        _messages[chat.roomId] = [...oldList, chat];
-        notifyListeners();
-      } else {
-        debugPrint("CHAT_PROVIDER :: Message duplicate detected, skip add");
-      }
+      // Tambahkan pesan baru
+      _messages[chat.roomId] = [...oldList, chat];
+      notifyListeners();
     };
 
     //=============================
-    // ✅ LISTENER DATA PAKET YANG SUDAH DI-FETCH
+    // ✅ LISTENER DATA PAKET
     //=============================
     _chatService.onPaketDataReceived = (PaketModel paket) {
       debugPrint("CHAT_PROVIDER :: Data paket diterima: ${paket.nama_paket}");
-
-      // Simpan ke cache
       _paketCache[paket.no_id] = paket;
-
-      // Notify listeners untuk update UI
       notifyListeners();
 
-      // Notify RoomChatProvider jika ada yang listen
       if (onPaketDataReceived != null) {
         onPaketDataReceived!(paket);
       }
     };
 
     //=============================
-    // ✅ LISTENER DATA PENAWARAN YANG SUDAH DI-FETCH
+    // ✅ LISTENER DATA PENAWARAN
     //=============================
     _chatService.onPenawaranDataReceived = (PenawaranModel penawaran) {
       debugPrint(
           "CHAT_PROVIDER :: Data penawaran diterima: ${penawaran.noPesanan}");
-
-      // Simpan ke cache
       _penawaranCache[penawaran.noPesanan] = penawaran;
-
-      // Notify listeners untuk update UI
       notifyListeners();
 
-      // Notify RoomChatProvider jika ada yang listen
       if (onPenawaranDataReceived != null) {
         onPenawaranDataReceived!(penawaran);
       }
@@ -162,13 +241,11 @@ class ChatProvider extends ChangeNotifier {
           _rooms.add(roomList.first);
           notifyListeners();
           debugPrint("CHAT_PROVIDER :: Room baru ditambahkan ke list");
-        } else {
-          debugPrint("CHAT_PROVIDER :: Room sudah ada di list");
         }
       }
     };
 
-    await fetchRooms(); // load room
+    await fetchRooms();
     _initialized = true;
     notifyListeners();
 
@@ -180,7 +257,6 @@ class ChatProvider extends ChangeNotifier {
   //=============================
   Future<PaketModel?> fetchPaket(String idPaket,
       {bool forceRefresh = false}) async {
-    // Jika ada di cache dan tidak force refresh, return dari cache
     if (!forceRefresh && _paketCache.containsKey(idPaket)) {
       return _paketCache[idPaket];
     }
@@ -200,7 +276,6 @@ class ChatProvider extends ChangeNotifier {
 
   Future<PenawaranModel?> fetchPenawaran(String noInvoice,
       {bool forceRefresh = false}) async {
-    // Jika ada di cache dan tidak force refresh, return dari cache
     if (!forceRefresh && _penawaranCache.containsKey(noInvoice)) {
       return _penawaranCache[noInvoice];
     }
@@ -288,13 +363,11 @@ class ChatProvider extends ChangeNotifier {
         idLawan: idLawan,
       );
 
-      // Update internal state jika fetch all rooms
       if (roomId == null && idLawan == null) {
         _rooms = List.from(rooms);
         debugPrint("CHAT_PROVIDER :: Loaded ${_rooms.length} rooms");
       }
 
-      // Join semua room aktif ke SignalR
       final validRooms =
           _rooms.map((e) => e.roomId).where((id) => id.isNotEmpty).toList();
 
@@ -305,8 +378,6 @@ class ChatProvider extends ChangeNotifier {
         } catch (e) {
           debugPrint("❌ CHAT_PROVIDER :: Join multiple rooms gagal: $e");
         }
-      } else {
-        debugPrint("CHAT_PROVIDER :: Tidak ada room yang bisa di-join");
       }
 
       return rooms;
@@ -335,7 +406,6 @@ class ChatProvider extends ChangeNotifier {
       debugPrint(
           "CHAT_PROVIDER :: Loaded ${msgs.length} messages for room $roomId");
 
-      // Pastikan sudah join room ini
       await _chatService.joinRoom(roomId);
     } catch (e, st) {
       debugPrint("❌ CHAT_PROVIDER :: fetchMessages error: $e\n$st");
@@ -346,7 +416,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   //=============================
-  // ✅ SEND MESSAGE - UPDATED
+  // ✅ SEND MESSAGE - DENGAN LOCAL ECHO YANG AKAN DIGANTI
   //=============================
   Future<void> sendMessage(
     String roomId,
@@ -365,12 +435,12 @@ class ChatProvider extends ChangeNotifier {
       return;
     }
 
-    // Generate unique messageId
     final messageId = "local-${DateTime.now().millisecondsSinceEpoch}";
     final now = DateTime.now();
 
     debugPrint("""
 CHAT_PROVIDER :: Sending message
+  - Local messageId: $messageId
   - RoomId: $roomId
   - Message: $text
   - IdPaket: $idPaket
@@ -379,7 +449,7 @@ CHAT_PROVIDER :: Sending message
     """);
 
     // ===============================
-    // ✅ LOCAL ECHO (Optimistic UI)
+    // ✅ LOCAL ECHO (akan diganti oleh server message)
     // ===============================
     final chat = ChatModel(
       messageId: messageId,
@@ -394,11 +464,11 @@ CHAT_PROVIDER :: Sending message
       editedAt: null,
       userIds: userIds,
       status: 'aktif',
-      sendStatus: 'sent',
+      sendStatus: 'sending', // Status awal: sending
       roomType: 'direct',
     );
 
-    // Tambahkan ke local state untuk immediate feedback
+    // Tambahkan ke local state
     _messages[roomId] = [...?_messages[roomId], chat];
 
     // Update room preview
@@ -415,34 +485,23 @@ CHAT_PROVIDER :: Sending message
     // ===============================
     try {
       await _chatService.sendMessage(chat: chat);
-      debugPrint("✅ CHAT_PROVIDER :: Message sent successfully");
+      debugPrint("✅ CHAT_PROVIDER :: Message sent to server");
+      
+      // Server akan broadcast via SignalR
+      // onFullMessageReceived akan replace local echo dengan server message
+      
     } catch (e, st) {
       debugPrint("❌ CHAT_PROVIDER :: sendMessage failed: $e\n$st");
 
-      // Rollback optimistic update jika gagal
+      // Rollback: hapus local echo
       final currentMessages = _messages[roomId] ?? [];
       _messages[roomId] =
           currentMessages.where((m) => m.messageId != messageId).toList();
 
       notifyListeners();
-
       rethrow;
     }
   }
-
-  //=============================
-  // POST CHAT (API) - untuk custom payload
-  //=============================
-  // Future<bool> postChat(Map<String, dynamic> payload) async {
-  //   debugPrint("CHAT_PROVIDER :: postChat()");
-
-  //   try {
-  //     return await _chatService.postChat(payload);
-  //   } catch (e) {
-  //     debugPrint("❌ CHAT_PROVIDER :: postChat error: $e");
-  //     return false;
-  //   }
-  // }
 
   //=============================
   // SIGNALR WRAPPER METHODS
@@ -470,31 +529,13 @@ CHAT_PROVIDER :: Sending message
   //=============================
   // UTILITY METHODS
   //=============================
-
-  /// Clear messages untuk room tertentu
   void clearMessagesForRoom(String roomId) {
     _messages.remove(roomId);
     notifyListeners();
   }
 
-  /// Clear semua messages
   void clearAllMessages() {
     _messages.clear();
     notifyListeners();
   }
-
-  /// Get total unread messages (implement jika ada field unread)
-  // int getUnreadCount() {
-  //   return _rooms.fold(0, (sum, room) => sum + (room.unreadCount ?? 0));
-  // }
-
-  /// Mark room as read (implement jika ada API)
-  // Future<void> markRoomAsRead(String roomId) async {
-  //   // TODO: Call API to mark as read
-  //   final index = _rooms.indexWhere((r) => r.roomId == roomId);
-  //   if (index >= 0) {
-  //     _rooms[index] = _rooms[index].copyWith(unreadCount: 0);
-  //     notifyListeners();
-  //   }
-  // }
 }

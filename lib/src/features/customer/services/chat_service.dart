@@ -198,7 +198,7 @@ class ChatService {
       // ✅ Parse SEMUA field yang dikirim SignalR
       final messageId = msg["messageId"]?.toString() ?? "";
       final roomId = msg["roomId"]?.toString() ?? "";
-      final sender = msg["sender"]?.toString() ?? "";
+      final senderId = msg["senderId"]?.toString() ?? "";
       final text = msg["message"]?.toString() ?? "";
       final sentAt = _parseDateTime(msg["sentAt"]);
       final editedAt =
@@ -215,7 +215,7 @@ class ChatService {
       final chatModel = ChatModel(
         messageId: messageId,
         roomId: roomId,
-        senderId: sender,
+        senderId: senderId,
         message: text,
         sentAt: sentAt,
         editedAt: editedAt,
@@ -225,7 +225,7 @@ class ChatService {
         idPaket: idPaket.isEmpty ? null : idPaket,
         status: status,
         jenisPesan: jenisPesan,
-        userIds: [sender, currentUserId],
+        userIds: [senderId, currentUserId],
         sendStatus: 'receive',
         roomType: 'direct',
       );
@@ -442,7 +442,7 @@ class ChatService {
     try {
       final response = await _client.get(
         '/$controller/getAll',
-        queryParameters: {'room_id': roomId},
+        queryParameters: {'room_id': roomId, 'status': "aktif"},
       );
 
       if (response.statusCode != 200) return [];
