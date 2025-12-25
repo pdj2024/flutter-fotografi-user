@@ -7,6 +7,10 @@ class PesananProvider with ChangeNotifier {
 
   PesananProvider({required this.pesananService});
 
+  /// ALL DATA
+  List<PesananModel> _allPesanan = [];
+
+  /// FILTERED DATA
   List<PesananModel> _pesananUnpaid = [];
   List<PesananModel> _pesananProgress = [];
   List<PesananModel> _pesananSelesai = [];
@@ -17,21 +21,15 @@ class PesananProvider with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-  set isLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
 
   String? _errorPesanan;
   String? get errorPesanan => _errorPesanan;
-  set errorPesanan(String? value) {
-    _errorPesanan = value;
-    notifyListeners();
-  }
 
+  /// ==============================
+  /// LOAD ORDER (1x FETCH)
+  /// ==============================
   Future<void> loadOrder({
     required String userId,
-    String? vendorId,
     String status = 'aktif',
   }) async {
     _isLoading = true;
@@ -39,36 +37,45 @@ class PesananProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final belumBayar = await pesananService.getAll(
+      /// 🔥 FETCH SEKALI SAJA
+      final result = await pesananService.getAll(
+        idCustomer: userId,
         status: status,
-        statusBayar: "belum bayar",
-        idCustomer: userId,
         orderBy: "Created_At",
         orderDir: "desc",
       );
-      _pesananUnpaid = belumBayar;
 
-      final progress = await pesananService.getAll(
-        status: status,
-        statusBayar: "settlement",
-        idCustomer: userId,
-        orderBy: "Created_At",
-        orderDir: "desc",
-      );
-      _pesananProgress = progress;
+      _allPesanan = result;
 
-      final selesai = await pesananService.getAll(
-        status: "selesai",
-        idCustomer: userId,
-        orderBy: "Created_At",
-        orderDir: "desc",
-      );
-      _pesananSelesai = selesai;
+      /// 🔽 FILTER DATA
+      _filterPesanan();
     } catch (e) {
-      _errorPesanan = "Error memuat Penawaran";
+      _errorPesanan = "Error memuat pesanan";
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// ==============================
+  /// FILTER LOGIC
+  /// ==============================
+  void _filterPesanan() {
+    _pesananUnpaid = _allPesanan.where((pesanan) {
+      return pesanan.statusProgresPesanan == "menunggu bayar";
+    }).toList();
+
+    _pesananProgress = _allPesanan.where((pesanan) {
+      return [
+        "persiapan",
+        "proses",
+        "review",
+        "revisi",
+      ].contains(pesanan.statusProgresPesanan);
+    }).toList();
+
+    _pesananSelesai = _allPesanan.where((pesanan) {
+      return pesanan.statusProgresPesanan == "selesai";
+    }).toList();
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finish_order_section.dart';
+import 'package:mpjnew/src/features/customer/view/history/main_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/history/progress_order_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/unpaid_order_section.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
@@ -25,6 +26,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pesananProvider = context.watch<PesananProvider>();
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -75,9 +77,15 @@ class _MainOrderPageState extends State<MainOrderPage> {
         ),
         body: TabBarView(
           children: [
-            UnpaidOrderSection(),
-            ProgressOrderSection(),
-            FinishOrderSection(),
+            (pesananProvider.isLoading)
+                ? MainOrderShimmer()
+                : UnpaidOrderSection(),
+            (pesananProvider.isLoading)
+                ? MainOrderShimmer()
+                : ProgressOrderSection(),
+            (pesananProvider.isLoading)
+                ? MainOrderShimmer()
+                : FinishOrderSection(),
           ],
         ),
       ),
