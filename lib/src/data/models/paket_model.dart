@@ -4,7 +4,7 @@ class PaketModel {
   final String id_vendor;
   final int harga;
   final String rincian;
-  final bool aktif;
+  final String status;
 
   PaketModel({
     required this.no_id,
@@ -12,7 +12,7 @@ class PaketModel {
     required this.id_vendor,
     required this.harga,
     required this.rincian,
-    required this.aktif,
+    required this.status,
   });
 
   factory PaketModel.fromJson(Map<String, dynamic> json) {
@@ -22,19 +22,46 @@ class PaketModel {
       id_vendor: json['Id_Vendor'] ?? '',
       harga: json['Harga'] ?? 0,
       rincian: json['Rincian'] ?? '',
-      aktif: json['Aktif'] ?? false,
+      status: json['Status'] ?? "",
     );
   }
 
   Map<String, dynamic> toJson() {
-  return {
-    'No_Id': no_id,
-    'Nama_Paket': nama_paket,
-    'Id_Vendor': id_vendor,
-    'Harga': harga,
-    'Rincian': rincian,
-    'Aktif': aktif,
-  };
-}
+    return {
+      'No_Id': no_id,
+      'nama_paket': nama_paket,
+      'id_vendor': id_vendor,
+      'harga': harga,
+      'rincian': rincian,
+      'status': status,
+    };
+  }
+
+  PaketModel copyWith({
+    String? no_id,
+    String? nama_paket,
+    String? id_vendor,
+    int? harga,
+    String? rincian,
+    String? status,
+  }) {
+    return PaketModel(
+      no_id: no_id ?? this.no_id,
+      nama_paket: nama_paket ?? this.nama_paket,
+      id_vendor: id_vendor ?? this.id_vendor,
+      harga: harga ?? this.harga,
+      rincian: rincian ?? this.rincian,
+      status: status ?? this.status,
+    );
+  }
+
+  /// ⬇⬇⬇ Tambahkan ini untuk CREATE
+  Map<String, dynamic> toJsonAPI() => {
+        "nama_paket": nama_paket,
+        "id_vendor": id_vendor,
+        "harga": harga,
+        "rincian": rincian,
+        "status": status,
+      };
 
 }
