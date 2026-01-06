@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/constants/login_status.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
-import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
@@ -13,8 +11,6 @@ import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-
-import 'package:mpjnew/src/features/customer/services/customer_service.dart';
 import 'package:provider/provider.dart';
 
 class UserLogin extends StatefulWidget {
@@ -26,10 +22,6 @@ class UserLogin extends StatefulWidget {
 
 class _UserLoginState extends State<UserLogin>
     with SingleTickerProviderStateMixin {
-  final _auth = AuthService();
-
-  final CustomerService _customerService = CustomerService();
-
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -80,50 +72,56 @@ class _UserLoginState extends State<UserLogin>
 
     try {
       final provider = context.read<UserProvider>();
+      final navigationProvider = context.read<NavigationProvider>();
+
+      // Login dengan Google
       final result = await provider.checkLoginGoogle(
         role: Constants.customer,
         silent: false,
       );
 
-      print(result.status);
-
       if (!mounted) return;
 
-      switch (result.status) {
-        case GoogleLoginStatus.aktif:
-          if (provider.customer != null) {
-            print("Target page: $targetPage");
-            await context.read<ChatProvider>().init(provider.userId ?? '');
-            await context.read<KotaProvider>().getAllKotaList();
-            Navigator.pop(context);
+      // Cek hasil login
+      if (result.name == 'aktif') {
+        // Initialize services setelah login berhasil
+        await context.read<ChatProvider>().init(provider.userId ?? '');
+        await context.read<KotaProvider>().getAllKotaList();
 
-            context.read<NavigationProvider>().navigateToPage(
-                  context,
-                  getPageFromString(
-                    targetPage,
-                    noIdPortofolio: noIdPortofolio,
-                    noIdVendor: noIdVendor,
-                  ),
-                  targetTabIndex: tabIndex,
-                );
-          }
-          break;
+        // Pop halaman login
+        Navigator.pop(context);
 
-        case GoogleLoginStatus.nonaktif:
-          CustomSnackbar.showErrorSnackbar(
-              context, "Status akun Anda: tidak aktif.");
-          break;
-        case GoogleLoginStatus.error:
-        case GoogleLoginStatus.tokenInvalid:
-        default:
-          CustomSnackbar.showErrorSnackbar(context,
-              "Login gagal atau akun tidak terdaftar sebagai customer.");
-          // Tambahkan ini agar bisa memilih akun ulang
-          await provider.logout();
-          break;
+        // Navigate ke target page
+        navigationProvider.navigateToPage(
+          context,
+          getPageFromString(
+            targetPage,
+            noIdPortofolio: noIdPortofolio,
+            noIdVendor: noIdVendor,
+          ),
+          targetTabIndex: tabIndex,
+        );
+      } else if (result.name == 'nonaktif') {
+        CustomSnackbar.showErrorSnackbar(
+          context,
+          "Akun Anda tidak aktif. Silakan hubungi admin.",
+        );
+        await provider.logout();
+      } else {
+        CustomSnackbar.showErrorSnackbar(
+          context,
+          "Login gagal. Silakan coba lagi.",
+        );
+        await provider.logout();
       }
     } catch (e) {
-      CustomSnackbar.showErrorSnackbar(context, "Terjadi kesalahan: $e");
+      print("❌ Error handleLoginGoogle: $e");
+      if (mounted) {
+        CustomSnackbar.showErrorSnackbar(
+          context,
+          "Terjadi kesalahan saat login: $e",
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -131,9 +129,6 @@ class _UserLoginState extends State<UserLogin>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ??
             {};

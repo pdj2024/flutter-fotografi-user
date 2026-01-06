@@ -1,21 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/features/auth/services/auth_service.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/auth/view/user_login.dart';
+import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
+import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../features/auth/services/user_provider.dart';
-import '../../features/auth/view/user_login.dart';
-import '../../features/auth/services/auth_service.dart';
-
 class NavigationProvider with ChangeNotifier {
+  DeviceTokenService deviceTokenService = DeviceTokenService();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
   // ─────────────── State
   int _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
+
+  String? _statusUser;
+  String? get statusUser => _statusUser;
+
+  // 🔑 Storage keys
+  static const String _keyStatusUser = 'status_user';
+  static const String _keyRole = 'user_role';
 
 //  bool get _isLoggedIn => FirebaseAuth.instance.currentUser != null;
 
@@ -24,137 +35,145 @@ class NavigationProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // =========================================================
+  // 💾 SIMPAN & AMBIL STATUS USER (gunakan secure storage)
+  // =========================================================
   Future<void> saveStatusUser(String status) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('status_user', status);
+    await _storage.write(key: _keyStatusUser, value: status);
+    _statusUser = status;
   }
 
   Future<String?> getStatusUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    return 'aktif';
-    //return prefs.getString('status_user');
+    if (_statusUser != null) return _statusUser;
+    _statusUser = await _storage.read(key: _keyStatusUser);
+    return _statusUser;
   }
 
-  Future<void> checkLogin(BuildContext context, String role,
-      {Type? currentPage}) async {
-    print("===== [checkLogin] start for role: $role");
-
-    final auth = AuthService();
-    String? idToken;
-
-    // 🔍 Cek token dari cache atau silent login
-    idToken = await auth.getIdToken(forceRefresh: false);
-
-    if (idToken == null) {
-      print("===== [checkLogin] user belum login, coba silent login...");
-      idToken = await auth.login(silent: true);
-
-      if (idToken == null) {
-        print(
-            "===== [checkLogin] silent login gagal, redirect ke halaman login");
-
-        if (role == Constants.customer) {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (_) => const UserLogin()));
-        }
-        return;
-      }
-    } else {
-      print("===== [checkLogin] sudah login, pakai token cache");
-    }
-
-    print("===== [checkLogin] ambil status user dari backend");
-    final status = await checkStatusUser(idToken, role);
-
-    if (status.toLowerCase() == 'nonaktif') {
-      print("===== [checkLogin] status == nonaktif, redirect ke VendorStatus");
-      // Navigator.pushReplacement(
-      //     context, MaterialPageRoute(builder: (_) => const VendorStatus()));
-      return;
-    } else {
-      print("===== [checkLogin] sudah aktif, lanjut ke halaman saat ini");
-    }
-
-    notifyListeners();
-
-    // ⛔ Jangan redirect ke halaman yang sama
-    print("===== [checkLogin] selesai");
+  Future<void> clearStatusUser() async {
+    await _storage.delete(key: _keyStatusUser);
+    _statusUser = null;
   }
 
-  Future<void> handleLogout(BuildContext context) async {
-    print("===== [handleLogout] Mulai logout");
-
-    try {
-      // 1️⃣ Hapus semua data lokal dulu (role, status user, dsb)
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('role');
-      await prefs.remove('statusUser');
-      print("===== [handleLogout] SharedPreferences dibersihkan");
-
-      // 2️⃣ Hapus role dari API client agar header ikut bersih
-      apiClient.clearRole();
-
-      // 3️⃣ Logout dari Google
-      await context.read<UserProvider>().logout();
-      // await AuthService().logout();
-      print("===== [handleLogout] Logout Google selesai");
-
-      // 4️⃣ Reset navigation index atau state lain
-      resetNavigationHistory();
-      clearSelectedIndex();
-
-      print("===== [handleLogout] Selesai ====");
-    } catch (e, s) {
-      print("❌ Error saat handleLogout: $e");
-      print(s);
-    }
-  }
-
-  Future<String> checkStatusUser(String idToken, String role) async {
-    // Kirim idToken ke API dan cek status user di backend
-    final status = 'aktif'; // await fetchUserStatusFromApi(idToken, role);
-
-    return status;
-  }
-
+  // =========================================================
+  // 💾 SIMPAN & AMBIL ROLE (gunakan secure storage)
+  // =========================================================
   Future<void> saveRole(String role) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('role', role);
-
+    await _storage.write(key: _keyRole, value: role);
     apiClient.setRole(role);
   }
 
   Future<String?> getRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('role');
+    return await _storage.read(key: _keyRole);
   }
 
-  String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  Future<void> clearRole() async {
+    await _storage.delete(key: _keyRole);
+    apiClient.clearRole();
+  }
 
-    if (date == null) {
-      date = now;
+  // =========================================================
+  // 🔐 CHECK LOGIN
+  // =========================================================
+  Future<void> checkLogin(
+      BuildContext context, String role, bool silent) async {
+    print("===== [checkLogin] start for role: $role");
+
+    try {
+      final userProv = context.read<UserProvider>();
+
+      final status = await userProv.checkLoginGoogle(
+        role: role,
+        silent: silent,
+      );
+
+      if (status == null) {
+        print("❌ Status null, logout");
+        await handleLogout(context);
+        return;
+      }
+
+      // Simpan status dan role
+      _statusUser = status.name; // enum -> string
+      await saveStatusUser(_statusUser!);
+      await saveRole(role);
+
+      print("✅ Status updated: $_statusUser, Role: $role");
+      notifyListeners();
+    } catch (e, s) {
+      print("❌ Error checkLogin: $e");
+      print(s);
+      await handleLogout(context);
     }
+  }
 
-    final messageDate = DateTime(date.year, date.month, date.day);
+// =========================================================
+  // 🚪 HANDLE LOGOUT - HAPUS SEMUA DATA
+  // =========================================================
+  Future<void> handleLogout(BuildContext context) async {
+    print("===== [handleLogout] start");
 
-    if (messageDate == today) {
-      if (showTodaysJam) {
-        // Tampilkan jam
-        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      } else {
-        return "Hari ini";
+    try {
+      // 1️⃣ Remove device token jika ada
+      final userProv = context.read<UserProvider>();
+      if (userProv.customer != null) {
+        try {
+          await deviceTokenService.removeDeviceToken(userProv.customer!.noId);
+        } catch (e) {
+          print("⚠️ Error remove device token: $e");
+        }
+      }
+
+      // 2️⃣ Logout dari Google & hapus data di AuthService
+      await authService.logout();
+
+      // 3️⃣ Hapus data lokal di NavigationProvider
+      await clearStatusUser();
+      await clearRole();
+      clearSelectedIndex();
+
+      // 4️⃣ Clear UserProvider
+      userProv.clear();
+
+      print("✅ Semua data berhasil dihapus");
+
+      // 5️⃣ Redirect ke login
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainMenu()),
+          (_) => false,
+        );
+      }
+
+      print("===== [handleLogout] selesai");
+    } catch (e, s) {
+      print("❌ Error saat handleLogout: $e");
+      print(s);
+
+      // Fallback: tetap redirect ke login meskipun ada error
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const UserLogin()),
+          (_) => false,
+        );
       }
     }
-
-    if (messageDate == today.subtract(const Duration(days: 1))) {
-      return "Kemarin";
-    }
-
-    // Format dengan singkatan bulan dan locale Indonesia
-    return DateFormat("d MMM yyyy", "id_ID").format(date); // Contoh: 6 Mei 2025
   }
+
+  // =========================================================
+  // 🔍 CHECK AUTHENTICATION STATUS
+  // =========================================================
+  Future<bool> isAuthenticated() async {
+    return await apiClient.isAuthenticated();
+  }
+
+  // =========================================================
+  // 📱 BOTTOM NAV METHODS
+  // =========================================================
+  final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
+    4,
+    (_) => GlobalKey<NavigatorState>(),
+  );
+  final List<int> _navigationHistory = [0];
 
   void setSelectedIndex(int index) {
     if (_selectedIndex != index) {
@@ -163,87 +182,61 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-  final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
-    4,
-    (_) => GlobalKey<NavigatorState>(),
-  );
-  final List<int> _navigationHistory = [0]; // Track history of selected indexes
-
-  void resetNavigationHistory() {
-    _navigationHistory.clear();
-    _navigationHistory.add(0);
-  }
-
   void pushFullPage(BuildContext context, Widget widget) {
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (context) => widget,
-        settings: RouteSettings(arguments: {
-          // 'targetPage': 'Tab' + index.toString(),
-          // 'tabIndex': index,
-        }),
-      ),
+      MaterialPageRoute(builder: (_) => widget),
     );
   }
 
-  void onItemTapped(int index, BuildContext context) {
-    final customer = context.read<UserProvider>().customer;
-    if (customer != null || index == 0) {
-      // Asumsi tab pertama tidak perlu login (misalnya Home)
-      if (_selectedIndex != index) {
-        _selectedIndex = index;
-        _navigationHistory.add(index);
-        notifyListeners();
+  void onItemTapped(int index, BuildContext context) async {
+    // Cek auth untuk tab yang membutuhkan login (kecuali tab 0)
+    final isAuth = await isAuthenticated();
 
-        // Tambahkan: Refresh portofolio jika pindah ke tab Home (index 0)
-        if (index == 0) {
-          // Panggil provider fetchPortofolio tanpa filter
-          Future.microtask(() {
-            // Reset portofolio dan fetch ulang
-            context.read<PortofolioProvider>().loadPortofolio(context);
-          });
-        }
-      } else {
-        // Reset halaman di tab yang sama
-        // navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    if (!isAuth && index != 0) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => const UserLogin(),
+            settings: RouteSettings(arguments: {
+              'targetPage': 'Tab$index',
+              'tabIndex': index,
+            }),
+          ),
+        );
       }
-    } else {
-      // Jika belum login, navigasi ke halaman login
-      popAllToRoot();
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(
-          builder: (context) => UserLogin(),
-          settings: RouteSettings(arguments: {
-            'targetPage': 'Tab$index',
-            'tabIndex': index,
-          }),
-        ),
-      );
+      return;
+    }
+
+    if (_selectedIndex != index) {
+      _selectedIndex = index;
+      _navigationHistory.add(index);
+      notifyListeners();
     }
   }
 
-  void onItemTappedVendor(int index, BuildContext context) {
-    if (context.read<UserProvider>().userId != null || index == 0) {
-      // Asumsi tab pertama tidak perlu login (misalnya Home)
-      if (_selectedIndex != index) {
-        _selectedIndex = index;
-        _navigationHistory.add(index);
-        notifyListeners();
-      } else {
-        // Reset halaman di tab yang sama
-        // navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
-      }
-    } else {}
+  void onItemTappedVendor(int index, BuildContext context) async {
+    final isAuth = await isAuthenticated();
+
+    if (!isAuth && index != 0) {
+      return;
+    }
+
+    if (_selectedIndex != index) {
+      _selectedIndex = index;
+      _navigationHistory.add(index);
+      notifyListeners();
+    }
   }
 
   Future<bool> onWillPop() async {
-    final currentNavigator = navigatorKeys[_selectedIndex].currentState!;
+    final currentNavigator = navigatorKeys[_selectedIndex].currentState;
+
+    if (currentNavigator == null) return true;
 
     // 1. Coba pop halaman di tab saat ini
     bool didPop = await currentNavigator.maybePop();
 
     if (didPop) {
-      // 1a. Jika berhasil pop, cek apakah pindah tab diperlukan
       if (_navigationHistory.length >= 2) {
         int previousIndex = _navigationHistory[_navigationHistory.length - 2];
         _navigationHistory.removeLast();
@@ -252,8 +245,7 @@ class NavigationProvider with ChangeNotifier {
         }
         notifyListeners();
       }
-
-      return false; // Kita handle sendiri
+      return false;
     }
 
     // 2. Tidak bisa pop → cek apakah kita bisa kembali ke tab sebelumnya
@@ -263,22 +255,18 @@ class NavigationProvider with ChangeNotifier {
 
       if (previousIndex != _selectedIndex) {
         _selectedIndex = previousIndex;
-        // pindah tab saja, biarkan stack-nya
       }
 
       notifyListeners();
-
-      return false; // Kita handle sendiri
+      return false;
     }
-    notifyListeners();
-    // 3. Tidak bisa pop dan tidak ada tab sebelumnya → izinkan keluar app
+
+    // 3. Izinkan keluar app
     return true;
   }
 
-  /// Access any navigator directly
   NavigatorState? getNavigator(int index) => navigatorKeys[index].currentState;
 
-  /// Change tab programmatically
   void changeTab(int index, BuildContext context, {bool popToRoot = false}) {
     if (popToRoot) {
       navigatorKeys[index].currentState?.popUntil((r) => r.isFirst);
@@ -286,32 +274,19 @@ class NavigationProvider with ChangeNotifier {
     onItemTapped(index, context);
   }
 
-  /// Push a route on a specific tab
   Future<void> pushOnTab(int tabIndex, Route route) async {
     navigatorKeys[tabIndex].currentState?.push(route);
   }
 
-  /// Clear all stacks
   void popAllToRoot() {
     for (var key in navigatorKeys) {
       key.currentState?.popUntil((r) => r.isFirst);
     }
   }
 
-  String ambilGambar(String img, {bool umum = false}) {
-    if (umum) {
-      return "https://fotoapi.pdj.web.id/api/files" +
-          "/" +
-          "umum@gmail.com" +
-          "/" +
-          img;
-    }
-
-    return "https://fotoapi.pdj.web.id/api/files" +
-        "/" +
-        'finance.pdj@gmail.com' +
-        "/" +
-        img;
+  void resetNavigationHistory() {
+    _navigationHistory.clear();
+    _navigationHistory.add(0);
   }
 
   Future<void> navigateToPage(
@@ -368,6 +343,41 @@ class NavigationProvider with ChangeNotifier {
     _selectedIndex = targetIndex;
     _navigationHistory.add(targetIndex);
     notifyListeners();
+  }
+
+  // =========================================================
+  // 🛠️ UTILITY METHODS
+  // =========================================================
+  String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (date == null) {
+      date = now;
+    }
+
+    final messageDate = DateTime(date.year, date.month, date.day);
+
+    if (messageDate == today) {
+      if (showTodaysJam) {
+        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      } else {
+        return "Hari ini";
+      }
+    }
+
+    if (messageDate == today.subtract(const Duration(days: 1))) {
+      return "Kemarin";
+    }
+
+    return DateFormat("d MMM yyyy", "id_ID").format(date);
+  }
+
+  String ambilGambar(String img, {bool umum = false}) {
+    if (umum) {
+      return "https://fotoapi.pdj.web.id/api/files/umum@gmail.com/$img";
+    }
+    return "https://fotoapi.pdj.web.id/api/files/finance.pdj@gmail.com/$img";
   }
 
   String? getMediaUrl(dynamic p) {

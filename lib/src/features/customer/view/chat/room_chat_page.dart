@@ -311,6 +311,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                                   if (offer.noPesanan != "") {
                                     final pesanan = await pesananService.getAll(
                                       noBukti: offer.noPesanan,
+                                      status: "aktif"
                                     );
                                     context
                                         .read<NavigationProvider>()
