@@ -174,27 +174,75 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
   Future<void> _loadInitialData() async {
     final nav = Provider.of<NavigationProvider>(context, listen: false);
+    final userProv = Provider.of<UserProvider>(context, listen: false);
 
     try {
-      String? role = await nav.getRole();
-      print("================= MAIN.DART: ROLE Sebelum Logout = $role");
+      print("=== 🚀 APLIKASI DIMULAI ===");
 
-      // 1️⃣ Logout dulu sepenuhnya
-      print("=== LOGOUT DIMULAI ===");
-      await nav.handleLogout(context);
-      print("=== LOGOUT SELESAI ===");
+      // 1️⃣ Cek apakah ada session tersimpan
+      final authService = AuthService();
+      bool sessionRestored = await authService.restoreSession();
 
-      // 2️⃣ Setelah logout selesai, set kembali ke Customer (untuk versi demo saja)
-      await nav.saveRole(Constants.customer);
-      print("================= MAIN.DART: ROLE = $role");
+      if (sessionRestored) {
+        print("✅ Session ditemukan, mencoba restore user data...");
 
+        // 2️⃣ Load user data dari storage
+        await userProv.loadUserData();
+
+        // 3️⃣ Validasi apakah data user berhasil di-load
+        if (userProv.customer != null) {
+          print("✅ User data berhasil di-load: ${userProv.customer!.namaDisplay}");
+
+          // 4️⃣ Load role dari storage
+          String? role = await nav.getRole();
+          if (role != null) {
+            userProv.setRole(role);
+            print("✅ Role di-set: $role");
+          }
+
+          // 5️⃣ Refresh token (silent login) untuk mendapatkan token terbaru
+          try {
+            print("🔄 Melakukan silent login untuk refresh token...");
+            final newToken = await authService.getIdToken(forceRefresh: true);
+            
+            if (newToken != null) {
+              print("✅ Token berhasil di-refresh");
+              
+              // 6️⃣ Register device token
+              await userProv.deviceTokenService.addDeviceToken(userProv.customer!.noId);
+              
+              // 7️⃣ Initialize chat provider jika sudah login
+              final chatProv = Provider.of<ChatProvider>(context, listen: false);
+              await chatProv.init(userProv.userId ?? '');
+              
+              print("✅ User sudah login, langsung ke MainMenu");
+            } else {
+              print("⚠️ Gagal refresh token, perlu login ulang");
+              await nav.handleLogout(context);
+            }
+          } catch (e) {
+            print("❌ Error saat refresh token: $e");
+            await nav.handleLogout(context);
+          }
+        } else {
+          print("⚠️ Session ada tapi user data tidak lengkap, perlu login ulang");
+          await nav.handleLogout(context);
+        }
+      } else {
+        print("ℹ️ Tidak ada session, user belum pernah login");
+        // Set role default untuk user baru
+        await nav.saveRole(Constants.customer);
+      }
+
+      // 8️⃣ Selalu arahkan ke MainMenu (user bisa explore tanpa login)
       _startPage = const MainMenu();
+
     } catch (e, s) {
       print("❌ Error saat init: $e");
       print(s);
-      _startPage = const Scaffold(
-        body: Center(child: Text("Terjadi kesalahan saat memuat data")),
-      );
+      
+      // Jika ada error, tetap arahkan ke MainMenu
+      _startPage = const MainMenu();
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -202,25 +250,31 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
     }
   }
 
-  // ✅ Tambahkan ini supaya loading selesai dan UI update
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
+        backgroundColor: Colors.white,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Constants.primaryColor),
+              ),
               SizedBox(height: 16),
-              Text("Memuat aplikasi...", style: TextStyle(fontSize: 16)),
+              Text(
+                "Memuat aplikasi...",
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black87,
+                ),
+              ),
             ],
           ),
         ),
       );
-    } else {
-      return _startPage;
     }
+    return _startPage;
   }
 }

@@ -218,11 +218,6 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         icon: Icons.receipt_long_rounded,
                         content: Column(
                           children: [
-                            _buildDetailRow(
-                              "No. Pesanan",
-                              widget.pesananModel.noBukti,
-                              copyable: true,
-                            ),
                             const SizedBox(height: 12),
                             _buildDetailRow(
                               "No. Tracking",

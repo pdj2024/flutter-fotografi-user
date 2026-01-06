@@ -254,7 +254,7 @@ class ChatService {
     try {
       debugPrint("[ChatService] 📦 Fetching paket data for id: $idPaket");
 
-      final paket = await _paketService.getAll(noId: idPaket);
+      final paket = await _paketService.getAll(noId: idPaket, status: 'aktif');
 
       if (paket != null) {
         debugPrint(
@@ -276,7 +276,7 @@ class ChatService {
       debugPrint(
           "[ChatService] 📄 Fetching penawaran data for no: $noPenawaran");
 
-      final penawaran = await _penawaranService.getAll(noId: noPenawaran);
+      final penawaran = await _penawaranService.getAll(noId: noPenawaran, status: 'aktif');
 
       if (penawaran != null) {
         debugPrint(

@@ -49,63 +49,6 @@ class ChatProvider extends ChangeNotifier {
   Function(PenawaranModel)? onPenawaranDataReceived;
 
   //=============================
-  // ✅ HELPER: CHECK IF MESSAGE IS DUPLICATE/REPLACEMENT
-  //=============================
-  bool _isMessageDuplicate(ChatModel newMsg, List<ChatModel> existingMessages) {
-    // Cek apakah ada pesan dengan messageId yang sama
-    final exactMatch = existingMessages.any((m) => m.messageId == newMsg.messageId);
-    
-    if (exactMatch) {
-      debugPrint("CHAT_PROVIDER :: Exact duplicate detected (messageId: ${newMsg.messageId})");
-      return true;
-    }
-
-    // Cek apakah ini adalah pesan dari server yang menggantikan local echo
-    // Kriteria: roomId, senderId, message, dan sentAt sangat mirip (dalam 5 detik)
-    final potentialLocalEcho = existingMessages.where(
-      (m) =>
-          m.messageId.startsWith('local-') && // Local echo
-          m.roomId == newMsg.roomId &&
-          m.senderId == newMsg.senderId &&
-          m.message == newMsg.message &&
-          m.sentAt.difference(newMsg.sentAt).inSeconds.abs() < 5, // Dalam 5 detik
-    ).toList();
-
-    return potentialLocalEcho.isNotEmpty;
-  }
-
-  //=============================
-  // ✅ HELPER: REPLACE LOCAL ECHO WITH SERVER MESSAGE
-  //=============================
-  void _replaceLocalEchoWithServerMessage(String roomId, ChatModel serverMsg) {
-    final messages = _messages[roomId] ?? [];
-
-    // Cari local echo yang cocok
-    final localEchoIndex = messages.indexWhere(
-      (m) =>
-          m.messageId.startsWith('local-') &&
-          m.roomId == serverMsg.roomId &&
-          m.senderId == serverMsg.senderId &&
-          m.message == serverMsg.message &&
-          m.sentAt.difference(serverMsg.sentAt).inSeconds.abs() < 5,
-    );
-
-    if (localEchoIndex != -1) {
-      final localMessageId = messages[localEchoIndex].messageId;
-      debugPrint(
-          "CHAT_PROVIDER :: Replacing local echo ($localMessageId) with server message (${serverMsg.messageId})");
-      
-      // Replace local echo dengan server message
-      messages[localEchoIndex] = serverMsg;
-      _messages[roomId] = List.from(messages);
-    } else {
-      // Tidak ada local echo yang cocok, tambahkan sebagai pesan baru
-      debugPrint("CHAT_PROVIDER :: Adding new message (no local echo found)");
-      _messages[roomId] = [...messages, serverMsg];
-    }
-  }
-
-  //=============================
   // INIT CONNECTION - UPDATED
   //=============================
   Future<void> init(String userId) async {
@@ -145,14 +88,15 @@ class ChatProvider extends ChangeNotifier {
       final isServerMessage = !chat.messageId.startsWith('local-');
 
       if (isSentByMe && isServerMessage) {
-        debugPrint("CHAT_PROVIDER :: Pesan dari diri sendiri via SignalR, akan replace local echo");
-        
+        debugPrint(
+            "CHAT_PROVIDER :: Pesan dari diri sendiri via SignalR, akan replace local echo");
+
         // Replace local echo dengan server message
         _replaceLocalEchoWithServerMessage(chat.roomId, chat);
-        
+
         // Update message status
         _chatService.updateMessageStatus(chat.messageId, "sent");
-        
+
         // Update preview room
         final i = _rooms.indexWhere((r) => r.roomId == chat.roomId);
         if (i >= 0) {
@@ -161,7 +105,7 @@ class ChatProvider extends ChangeNotifier {
             lastMessageAt: chat.sentAt,
           );
         }
-        
+
         notifyListeners();
         return;
       }
@@ -262,7 +206,7 @@ class ChatProvider extends ChangeNotifier {
     }
 
     try {
-      final paket = await PaketService().getAll(noId: idPaket);
+      final paket = await PaketService().getAll(noId: idPaket, status: 'aktif');
       if (paket != null) {
         _paketCache[idPaket] = paket.first;
         notifyListeners();
@@ -281,7 +225,8 @@ class ChatProvider extends ChangeNotifier {
     }
 
     try {
-      final penawaran = await PenawaranService().getAll(noId: noInvoice);
+      final penawaran =
+          await PenawaranService().getAll(noId: noInvoice, status: 'aktif');
       if (penawaran != null) {
         _penawaranCache[noInvoice] = penawaran.first;
         notifyListeners();
@@ -486,10 +431,9 @@ CHAT_PROVIDER :: Sending message
     try {
       await _chatService.sendMessage(chat: chat);
       debugPrint("✅ CHAT_PROVIDER :: Message sent to server");
-      
+
       // Server akan broadcast via SignalR
       // onFullMessageReceived akan replace local echo dengan server message
-      
     } catch (e, st) {
       debugPrint("❌ CHAT_PROVIDER :: sendMessage failed: $e\n$st");
 
@@ -524,6 +468,68 @@ CHAT_PROVIDER :: Sending message
   Future<void> joinUserChannel(String userId) async {
     debugPrint("CHAT_PROVIDER :: joinUserChannel($userId)");
     await _chatService.joinUserChannel(userId);
+  }
+
+  //=============================
+  // ✅ HELPER: CHECK IF MESSAGE IS DUPLICATE/REPLACEMENT
+  //=============================
+  bool _isMessageDuplicate(ChatModel newMsg, List<ChatModel> existingMessages) {
+    // Cek apakah ada pesan dengan messageId yang sama
+    final exactMatch =
+        existingMessages.any((m) => m.messageId == newMsg.messageId);
+
+    if (exactMatch) {
+      debugPrint(
+          "CHAT_PROVIDER :: Exact duplicate detected (messageId: ${newMsg.messageId})");
+      return true;
+    }
+
+    // Cek apakah ini adalah pesan dari server yang menggantikan local echo
+    // Kriteria: roomId, senderId, message, dan sentAt sangat mirip (dalam 5 detik)
+    final potentialLocalEcho = existingMessages
+        .where(
+          (m) =>
+              m.messageId.startsWith('local-') && // Local echo
+              m.roomId == newMsg.roomId &&
+              m.senderId == newMsg.senderId &&
+              m.message == newMsg.message &&
+              m.sentAt.difference(newMsg.sentAt).inSeconds.abs() <
+                  5, // Dalam 5 detik
+        )
+        .toList();
+
+    return potentialLocalEcho.isNotEmpty;
+  }
+
+  //=============================
+  // ✅ HELPER: REPLACE LOCAL ECHO WITH SERVER MESSAGE
+  //=============================
+  void _replaceLocalEchoWithServerMessage(String roomId, ChatModel serverMsg) {
+    final messages = _messages[roomId] ?? [];
+
+    // Cari local echo yang cocok
+    final localEchoIndex = messages.indexWhere(
+      (m) =>
+          m.messageId.startsWith('local-') &&
+          m.roomId == serverMsg.roomId &&
+          m.senderId == serverMsg.senderId &&
+          m.message == serverMsg.message &&
+          m.sentAt.difference(serverMsg.sentAt).inSeconds.abs() < 5,
+    );
+
+    if (localEchoIndex != -1) {
+      final localMessageId = messages[localEchoIndex].messageId;
+      debugPrint(
+          "CHAT_PROVIDER :: Replacing local echo ($localMessageId) with server message (${serverMsg.messageId})");
+
+      // Replace local echo dengan server message
+      messages[localEchoIndex] = serverMsg;
+      _messages[roomId] = List.from(messages);
+    } else {
+      // Tidak ada local echo yang cocok, tambahkan sebagai pesan baru
+      debugPrint("CHAT_PROVIDER :: Adding new message (no local echo found)");
+      _messages[roomId] = [...messages, serverMsg];
+    }
   }
 
   //=============================

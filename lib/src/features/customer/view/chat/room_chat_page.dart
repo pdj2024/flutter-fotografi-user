@@ -227,8 +227,9 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                             if (message.idPaket != null) {
                               final index = roomChatProvider.paketList
-                                  .indexWhere(
-                                      (p) => p.no_id == message.idPaket);
+                                  .indexWhere((p) =>
+                                      p.no_id == message.idPaket &&
+                                      p.status == 'aktif');
                               if (index != -1) {
                                 paket = roomChatProvider.paketList[index];
                               } else {
@@ -239,8 +240,9 @@ class _RoomChatPageState extends State<RoomChatPage>
                             if (message.noPenawaran != null &&
                                 roomChatProvider.penawaranList.isNotEmpty) {
                               final index = roomChatProvider.penawaranList
-                                  .indexWhere(
-                                      (p) => p.noId == message.noPenawaran);
+                                  .indexWhere((p) =>
+                                      p.noId == message.noPenawaran &&
+                                      p.status == 'aktif');
                               if (index != -1) {
                                 offer = roomChatProvider.penawaranList[index];
                               } else {
@@ -295,7 +297,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                                   ),
                                   child: Center(
                                     child: Text(
-                                      "Penawaran tidak ditemukan",
+                                      "Penawaran ini sudah ditutup",
                                       style: TextStyle(color: Colors.grey),
                                     ),
                                   ),
@@ -310,8 +312,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                                   print(offer!.noPesanan);
                                   if (offer.noPesanan != "") {
                                     final pesanan = await pesananService.getAll(
-                                      noBukti: offer.noPesanan,
-                                    );
+                                        noBukti: offer.noPesanan,
+                                        status: "aktif");
                                     context
                                         .read<NavigationProvider>()
                                         .navigateToPage(

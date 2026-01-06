@@ -7,7 +7,8 @@ class Constants {
   static const String customer = 'customer';
   static const String vendor = 'vendor';
 
-  static const String baseUrl = 'https://fotoapi1.padajaya.biz.id';
+  // static const String baseUrl = 'https://fotoapi1.padajaya.biz.id';
+  static const String baseUrl = 'http://217.216.34.207:257';
   // static const String baseUrlHub = 'https://fotoapi2.padajaya.biz.id';
   static const String baseUrlHub = 'http://217.216.34.207:543';
 

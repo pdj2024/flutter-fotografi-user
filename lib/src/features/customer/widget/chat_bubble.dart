@@ -44,10 +44,6 @@ class ChatBubble extends StatelessWidget {
           crossAxisAlignment:
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(message.messageId + " - $isMe",
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-            Text("${message.senderId}",
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
             Text(message.message,
                 style: const TextStyle(fontSize: 14, color: Colors.black)),
             const SizedBox(height: 4),

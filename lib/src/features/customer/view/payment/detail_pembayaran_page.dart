@@ -7,13 +7,13 @@ import 'package:mpjnew/src/core/constants/custom_icons.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
@@ -32,13 +32,18 @@ class DetailPembayaranPage extends StatefulWidget {
 
 class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   PenawaranService penawaranService = PenawaranService();
+  PaketService paketService = PaketService();
   HistoryOrderService historyOrderService = HistoryOrderService();
   PesananService pesananService = PesananService();
   MetodePembayaranService metodePembayaranService = MetodePembayaranService();
-  PenawaranModel? penawaran;
   List<MetodePembayaranModel> metodePembayaran = [];
   bool isLoading = false;
   String? errorMessage;
+
+  bool _isExpanded = false;
+
+  PenawaranModel? penawaran;
+  PaketModel? paket;
 
   String? kodeMetode;
   String? textMetode;
@@ -51,7 +56,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   @override
   void initState() {
     super.initState();
-    getPenawaran(widget.penawaranId);
+    getData(widget.penawaranId);
   }
 
   @override
@@ -59,7 +64,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     super.dispose();
   }
 
-  Future<void> getPenawaran(String id) async {
+  Future<void> getData(String id) async {
     try {
       setState(() {
         isLoading = true;
@@ -68,13 +73,17 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
       await getMetodePembayaran();
 
-      final result = await penawaranService.getAll(noId: id);
-
-      if (result.isEmpty) {
+      final resultPenawaran = await penawaranService.getAll(noId: id);
+      if (resultPenawaran.isEmpty) {
         throw Exception("Penawaran kosong");
       }
+      penawaran = resultPenawaran.first;
 
-      penawaran = result.first;
+      final resultPaket = await paketService.getAll(noId: penawaran!.idPaket);
+      if (resultPaket.isEmpty) {
+        throw Exception("Paket kosong");
+      }
+      paket = resultPaket.first;
 
       setHarga();
     } catch (e) {
@@ -165,7 +174,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       CustomSnackbar.showErrorSnackbar(context, errorMessage!);
     } finally {
       setState(() {
-        isLoading = false; // ✅ FIX
+        isLoading = false;
       });
     }
   }
@@ -175,11 +184,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
+        backgroundColor: Colors.white,
         elevation: 0,
         leading: CustomBackButton(),
         title: const Text(
-          "Detail Penawaran",
+          "Detail Pembayaran",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
@@ -225,7 +234,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => getPenawaran(widget.penawaranId),
+                    onPressed: () => getData(widget.penawaranId),
                     child: const Text("Coba Lagi"),
                   )
                 ],
@@ -236,7 +245,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           /// =======================
           /// 3️⃣ EMPTY STATE
           /// =======================
-          if (penawaran == null) {
+          if (penawaran == null || paket == null) {
             return const Center(
               child: Text("Data penawaran tidak tersedia"),
             );
@@ -257,39 +266,167 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      /// =======================
+                      /// 📋 INFORMASI PENAWARAN
+                      /// =======================
                       _buildCardSection(
-                        title: penawaran!.namaPaket,
+                        title: "Informasi Penawaran",
                         content: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(Icons.calendar_today_outlined,
-                                    size: 18, color: Colors.black54),
-                                const SizedBox(width: 8),
-                                Text(tanggal),
-                              ],
+                            _buildInfoRow(
+                              icon: Icons.confirmation_number_outlined,
+                              label: "No. Tracking",
+                              value: penawaran!.noTrackingPenawaran,
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.access_time,
-                                    size: 18, color: Colors.black54),
-                                const SizedBox(width: 8),
-                                Text(waktu),
-                              ],
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              icon: Icons.person_outline,
+                              label: "Customer",
+                              value: penawaran!.namaCustomer,
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              icon: Icons.store_outlined,
+                              label: "Vendor",
+                              value: penawaran!.namaVendor,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      /// =======================
+                      /// 📦 DETAIL PAKET
+                      /// =======================
+                      _buildCardSection(
+                        title: "Detail Paket",
+                        content: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.location_on_outlined,
-                                    size: 18, color: Colors.black54),
-                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Constants.primaryColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.card_giftcard,
+                                    color: Constants.primaryColor,
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(
-                                    "${penawaran!.lokasi}, ${penawaran!.namaKota}",
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        paket!.nama_paket,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        Helper.formatCurrency(penawaran!.harga),
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Constants.primaryColorVendor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (paket!.rincian.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              const SizedBox(height: 12),
+                              const Text(
+                                "Rincian Paket:",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                paket!.rincian,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      /// =======================
+                      /// 📍 LOKASI & JADWAL
+                      /// =======================
+                      _buildCardSection(
+                        title: "Lokasi & Jadwal",
+                        content: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildInfoRow(
+                              icon: Icons.calendar_today_outlined,
+                              label: "Tanggal",
+                              value: tanggal,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              icon: Icons.access_time,
+                              label: "Waktu",
+                              value: waktu,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              icon: Icons.location_city_outlined,
+                              label: "Kota",
+                              value: penawaran!.namaKota,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.location_on_outlined,
+                                  size: 20,
+                                  color: Colors.black54,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Alamat Lengkap",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        penawaran!.lokasi,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -297,175 +434,99 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-                      penawaran!.noPesanan == ""
-                          ? _buildCardSection(
-                              title: "Metode Pembayaran",
-                              isRequired: true,
-                              content: GestureDetector(
-                                onTap: () =>
-                                    CustomDialog.showPaymentMethodDialog(
-                                  context: context,
-                                  metodePembayaran:
-                                      metodePembayaran, // List dari model Anda
-                                  currentKodeMetode: kodeMetode,
-                                  onSelected: (kode, text, fee) {
-                                    setState(() {
-                                      kodeMetode = kode;
-                                      textMetode = text;
-                                      biayaPembayaran = fee;
-                                    });
-                                    setHarga();
-                                  },
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 4,
-                                        offset: Offset(0, 2),
-                                      )
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            CustomIcons.getMetodeIcon(
-                                                kodeMetode ?? ""),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            textMetode ??
-                                                "Pilih Metode Pembayaran",
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
-                                      ),
-                                      const Icon(Icons.arrow_forward_ios,
-                                          size: 16),
-                                    ],
-                                  ),
+
+                      /// =======================
+                      /// 💳 METODE PEMBAYARAN
+                      /// =======================
+                      if (penawaran!.noPesanan.isEmpty)
+                        _buildCardSection(
+                          title: "Metode Pembayaran",
+                          isRequired: true,
+                          content: GestureDetector(
+                            onTap: () => CustomDialog.showPaymentMethodDialog(
+                              context: context,
+                              metodePembayaran: metodePembayaran,
+                              currentKodeMetode: kodeMetode,
+                              onSelected: (kode, text, fee) {
+                                setState(() {
+                                  kodeMetode = kode;
+                                  textMetode = text;
+                                  biayaPembayaran = fee;
+                                });
+                                setHarga();
+                              },
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: kodeMetode == null
+                                    ? Colors.grey.shade50
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: kodeMetode == null
+                                      ? Colors.grey.shade300
+                                      : Constants.primaryColor,
+                                  width: kodeMetode == null ? 1 : 2,
                                 ),
                               ),
-                            )
-                          : SizedBox(),
-                      _buildCardSection(
-                        title: "Ringkasan Pembayaran",
-                        content: Column(
-                          children: [
-                            _buildPriceRow(
-                              "Harga Paket (termasuk PPN)",
-                              Helper.formatCurrency(hargaPaket),
-                            ),
-                            (kodeMetode != null)
-                                ? Column(
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
                                     children: [
-                                      const SizedBox(height: 8),
-                                      _buildPriceRow(
-                                        "Biaya Pembayaran",
-                                        Helper.formatCurrency(biayaPembayaran),
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade200
+                                              : Constants.primaryColor
+                                                  .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          CustomIcons.getMetodeIcon(
+                                              kodeMetode ?? ""),
+                                          size: 24,
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade600
+                                              : Constants.primaryColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        textMetode ?? "Pilih Metode Pembayaran",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade600
+                                              : Colors.black87,
+                                        ),
                                       ),
                                     ],
-                                  )
-                                : Container(),
-                            const SizedBox(height: 8),
-                            _buildPriceRow(
-                              "PPN 11%",
-                              Helper.formatCurrency(biayaPPN),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ],
+                              ),
                             ),
-                            const Divider(height: 24),
-                            _buildPriceRow(
-                              "Total Pembayaran",
-                              Helper.formatCurrency(totalPembayaran),
-                              isBold: true,
-                              valueColor: Constants.primaryColorVendor,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
               ),
 
               /// =======================
-              /// BOTTOM BAR
+              /// 💰 BOTTOM BAR - RINGKASAN
               /// =======================
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF9F9F9),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      offset: Offset(0, -2),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          "Total Bayar",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        Text(
-                          Helper.formatCurrency(totalPembayaran),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Constants.primaryColorVendor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kodeMetode == null
-                              ? Colors.grey.shade300
-                              : Constants.primaryColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          elevation: kodeMetode == null ? 0 : 2,
-                        ),
-                        onPressed: kodeMetode == null
-                            ? null
-                            : () async {
-                                // Action bayar sekarang
-                                await createPesanan();
-                              },
-                        child: Text(
-                          penawaran!.noPesanan != ""
-                              ? "Penawaran ini sudah ditutup"
-                              : "Bayar Sekarang",
-                          style: TextStyle(
-                            color: kodeMetode == null
-                                ? Colors.grey.shade600
-                                : Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+              _buildExpandableBottomBar(),
             ],
           );
         },
@@ -473,75 +534,278 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     );
   }
 
-  Widget _buildCardSection(
-      {required String title,
-      required Widget content,
-      bool isRequired = false}) {
+  /// =======================
+  /// 🎨 WIDGET BUILDERS
+  /// =======================
+
+  Widget _buildCardSection({
+    required String title,
+    required Widget content,
+    bool isRequired = false,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          isRequired
-              ? Row(
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(
-                      width: 2,
-                    ),
-                    Text(
-                      "*",
-                      style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red),
-                    ),
-                  ],
-                )
-              : Text(
-                  title,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-          const SizedBox(height: 12),
+              ),
+              if (isRequired) ...[
+                const SizedBox(width: 4),
+                const Text(
+                  "*",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
           content,
         ],
       ),
     );
   }
 
-  Widget _buildPriceRow(String label, String value,
-      {bool isBold = false, Color? valueColor}) {
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.black54,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style: TextStyle(
-              fontSize: 14,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal),
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: Colors.black87,
+          ),
         ),
         Text(
           value,
           style: TextStyle(
-            fontSize: 14,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            fontSize: isBold ? 16 : 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
             color: valueColor ?? Colors.black87,
           ),
         ),
       ],
+    );
+  }
+
+  /// =======================
+  /// 🔽 EXPANDABLE BOTTOM BAR
+  /// =======================
+  Widget _buildExpandableBottomBar() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, -2),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// =======================
+          /// Header dengan Toggle Button
+          /// =======================
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isExpanded ? "Ringkasan Pembayaran" : "Total Pembayaran",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      Helper.formatCurrency(totalPembayaran),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Constants.primaryColorVendor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      duration: const Duration(milliseconds: 300),
+                      turns: _isExpanded ? 0.5 : 0,
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          /// =======================
+          /// Detail Pembayaran (Expandable)
+          /// =======================
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: [
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                _buildPriceRow(
+                  "Harga Paket",
+                  Helper.formatCurrency(hargaPaket),
+                ),
+                if (kodeMetode != null) ...[
+                  const SizedBox(height: 8),
+                  _buildPriceRow(
+                    "Biaya Pembayaran",
+                    Helper.formatCurrency(biayaPembayaran),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                _buildPriceRow(
+                  "PPN 11%",
+                  Helper.formatCurrency(biayaPPN),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                _buildPriceRow(
+                  "Total Pembayaran",
+                  Helper.formatCurrency(totalPembayaran),
+                  isBold: true,
+                  valueColor: Constants.primaryColorVendor,
+                ),
+              ],
+            ),
+            crossFadeState: _isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 300),
+          ),
+
+          /// =======================
+          /// Button Bayar Sekarang
+          /// =======================
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kodeMetode == null
+                    ? Colors.grey.shade300
+                    : Constants.primaryColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: kodeMetode == null ? 0 : 2,
+              ),
+              onPressed: penawaran!.noPesanan.isNotEmpty
+                  ? null
+                  : kodeMetode == null
+                      ? null
+                      : () async {
+                          await createPesanan();
+                        },
+              child: Text(
+                penawaran!.noPesanan.isNotEmpty
+                    ? "Penawaran Sudah Ditutup"
+                    : "Bayar Sekarang",
+                style: TextStyle(
+                  color:
+                      kodeMetode == null ? Colors.grey.shade600 : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
