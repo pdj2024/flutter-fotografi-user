@@ -35,8 +35,36 @@ class KotaProvider with ChangeNotifier {
     }
   }
 
-  KotaModel getKota(String value) {
-    return _kotaList.firstWhere(
-        (element) => element.noId == value || element.namaKota == value);
+  Future<void> getKotaName({String status = 'aktif', String? name}) async {
+    _isLoading = true;
+    _errorkota = null;
+    notifyListeners();
+
+    try {
+      // Panggil service
+      final kotaList =
+          await _kotaService.getAll(status: status, namaKota: name);
+      _kotaList = kotaList;
+    } catch (e) {
+      debugPrint("⚠️ Error memuat kategori: $e");
+      _errorkota = "Error memuat kategori";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  KotaModel? getKota(String? value) {
+    if (value == null || value.isEmpty) return null;
+
+    try {
+      return _kotaList.firstWhere(
+        (element) =>
+            element.noId == value ||
+            element.namaKota.toLowerCase() == value.toLowerCase(),
+      );
+    } catch (e) {
+      return null; // jika tidak ditemukan -> return null aman
+    }
   }
 }
