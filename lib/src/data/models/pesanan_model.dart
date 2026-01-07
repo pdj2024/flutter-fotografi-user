@@ -45,6 +45,11 @@ class PesananModel {
   final String? paymentNumber2;
 
   // =======================
+  // TIMESTAMP
+  // =======================
+  final String? linkUrl;
+
+  // =======================
   // TOTAL & PAJAK
   // =======================
   final int subtotal;
@@ -84,6 +89,7 @@ class PesananModel {
     this.expiryTime,
     this.paymentNumber1,
     this.paymentNumber2,
+    this.linkUrl,
     required this.subtotal,
     this.totDpp,
     this.ppn,
@@ -124,6 +130,7 @@ class PesananModel {
           : null,
       paymentNumber1: json['Payment_Number_1'],
       paymentNumber2: json['Payment_Number_2'],
+      linkUrl: json['Link_Url'],
       subtotal: json['Subtotal'] ?? 0,
       totDpp: json['Tot_DPP'] != null
           ? double.tryParse(json['Tot_DPP'].toString())
@@ -172,6 +179,7 @@ class PesananModel {
       'kota': kota,
       'harga': harga,
       'lokasi': lokasi,
+      'link_url': linkUrl,
       'tgl_realisasi': tglRealisasi.toUtc().toIso8601String(),
       'status': status,
     };
@@ -204,6 +212,7 @@ class PesananModel {
     DateTime? expiryTime,
     String? paymentNumber1,
     String? paymentNumber2,
+    String? linkUrl,
     int? subtotal,
     double? totDpp,
     int? ppn,
@@ -237,6 +246,7 @@ class PesananModel {
       expiryTime: expiryTime ?? this.expiryTime,
       paymentNumber1: paymentNumber1 ?? this.paymentNumber1,
       paymentNumber2: paymentNumber2 ?? this.paymentNumber2,
+      linkUrl: linkUrl ?? this.linkUrl,
       subtotal: subtotal ?? this.subtotal,
       totDpp: totDpp ?? this.totDpp,
       ppn: ppn ?? this.ppn,
