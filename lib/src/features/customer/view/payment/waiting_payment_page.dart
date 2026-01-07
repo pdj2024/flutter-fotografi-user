@@ -15,6 +15,7 @@ import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card
 import 'package:mpjnew/src/features/customer/widget/payment/qris_payment_cart.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/va_payment_card.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class WaitingPaymentPage extends StatefulWidget {
   final PesananModel paymentData;
@@ -37,11 +38,13 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Timer? _checkPaymentTimer;
 
   String? statusBayar;
+  DateTime? _paymentStartTime;
+  static const int _paymentTimeoutMinutes = 5;
 
   @override
   void initState() {
     super.initState();
-    _startCountdown();
+    _initializePaymentTimer();
     _startPaymentCheck();
   }
 
@@ -52,14 +55,62 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     super.dispose();
   }
 
+  Future<void> _initializePaymentTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storageKey = 'payment_start_${widget.paymentData.noBukti}';
+    final statusKey = 'payment_status_${widget.paymentData.noBukti}';
+
+    // Cek apakah pembayaran ini sudah expired atau dibatalkan sebelumnya
+    final paymentStatus = prefs.getString(statusKey);
+
+    // Ambil waktu mulai dari storage
+    final storedTime = prefs.getString(storageKey);
+
+    if (storedTime != null && paymentStatus != 'expired') {
+      // Ada timer sebelumnya dan belum expired
+      _paymentStartTime = DateTime.parse(storedTime);
+      _calculateRemainingTime();
+
+      // Jika ternyata sudah expired, tandai sebagai expired
+      if (remainingTime.inSeconds <= 0) {
+        await prefs.setString(statusKey, 'expired');
+      }
+    } else {
+      // Buat timer baru jika:
+      // 1. Belum ada timer sebelumnya
+      // 2. Timer sebelumnya sudah expired dan user ingin coba bayar lagi
+      _paymentStartTime = DateTime.now();
+      await prefs.setString(storageKey, _paymentStartTime!.toIso8601String());
+      await prefs.remove(statusKey); // Reset status
+      _calculateRemainingTime();
+    }
+
+    _startCountdown();
+  }
+
+  void _calculateRemainingTime() {
+    if (_paymentStartTime == null) return;
+
+    final elapsed = DateTime.now().difference(_paymentStartTime!);
+    final timeout = Duration(minutes: _paymentTimeoutMinutes);
+
+    if (elapsed >= timeout) {
+      remainingTime = Duration.zero;
+    } else {
+      remainingTime = timeout - elapsed;
+    }
+  }
+
   void _startCountdown() {
-    _timer?.cancel(); // pastikan tidak double timer
+    _timer?.cancel();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
+
+      _calculateRemainingTime();
 
       if (remainingTime.inSeconds <= 0) {
         timer.cancel();
@@ -69,17 +120,13 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
 
         _handlePaymentExpired();
       } else {
-        setState(() {
-          remainingTime -= const Duration(seconds: 1);
-        });
+        setState(() {});
       }
     });
   }
 
   void _startPaymentCheck() {
-    // Check payment status every 10 seconds
     _checkPaymentTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      // TODO: Call API to check payment status
       _checkPaymentStatus();
     });
   }
@@ -94,11 +141,12 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
       statusBayar = pesanan.first.statusBayar;
 
       if (statusBayar == "settlement" || statusBayar == "berhasil") {
-        // Stop timers
         _timer?.cancel();
         _checkPaymentTimer?.cancel();
 
-        // Navigate to splash screen
+        // Hapus waktu mulai dari storage karena pembayaran berhasil
+        await _clearPaymentTimer();
+
         if (!mounted) return;
 
         final historyPersiapan = HistoryOrderService.createPersiapan(
@@ -128,6 +176,11 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Future<void> _handlePaymentExpired() async {
     if (!mounted) return;
 
+    // Tandai pembayaran ini sebagai expired
+    final prefs = await SharedPreferences.getInstance();
+    final statusKey = 'payment_status_${widget.paymentData.noBukti}';
+    await prefs.setString(statusKey, 'expired');
+
     try {
       if (!mounted) return;
       CustomDialog.showTimeoutDialog(
@@ -139,6 +192,12 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     } catch (e) {
       debugPrint("Gagal update status pembayaran: $e");
     }
+  }
+
+  Future<void> _clearPaymentTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storageKey = 'payment_start_${widget.paymentData.noBukti}';
+    await prefs.remove(storageKey);
   }
 
   @override
@@ -338,18 +397,15 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     final String paymentNumber2 = widget.paymentData.paymentNumber2 ?? "";
     final int grandTotal = widget.paymentData.grandTotal;
 
-    // QRIS
     if (metodeBayar.contains('QRIS')) {
       return QrisPaymentCard(qrUrl: paymentNumber1, amount: grandTotal);
     }
 
-    // Virtual Account (VA)
     if (metodeBayar.contains('VA') || metodeBayar.contains('BANK')) {
       return VaPaymentCard(
           bankName: metodeBayar, vaNumber: paymentNumber1, amount: grandTotal);
     }
 
-    // Counter (Alfamart/Indomaret)
     if (metodeBayar.contains('ALFAMART') || metodeBayar.contains('INDOMARET')) {
       return CounterPaymentCard(
           storeName: metodeBayar,

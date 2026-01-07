@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/utils/dropdown_search_config.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
-import 'package:mpjnew/src/data/repositories/kota_provider.dart';
+import 'package:mpjnew/src/data/models/kota_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
 import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
-import 'package:mpjnew/src/features/customer/widget/field/custom_dropdown_search.dart';
 import 'package:mpjnew/src/features/customer/widget/field/custom_text_field.dart';
+import 'package:mpjnew/src/features/customer/widget/field/single_select_dropdown.dart';
 import 'package:provider/provider.dart';
 
 class EditAccountPage extends StatefulWidget {
@@ -24,7 +25,7 @@ class _EditAccountPageState extends State<EditAccountPage> {
   final _formKey = GlobalKey<FormState>();
   TextEditingController nameController = TextEditingController();
   TextEditingController usernameController = TextEditingController();
-  String? selectedKota;
+  KotaModel? selectedKota;
 
   // Error Message
   String? nameError;
@@ -33,7 +34,7 @@ class _EditAccountPageState extends State<EditAccountPage> {
 
   Future<void> update(BuildContext context) async {
     final userProvider = context.read<UserProvider>();
-    final kotaId = context.read<KotaProvider>().getKota(selectedKota!).noId;
+    final kotaId = selectedKota?.noId;
     final customer = userProvider.customer!;
     try {
       final updatedCustomer = customer.copyWith(
@@ -65,7 +66,12 @@ class _EditAccountPageState extends State<EditAccountPage> {
     setState(() {
       nameController.text = customer.namaDisplay;
       usernameController.text = customer.userName;
-      selectedKota = customer.namaKota;
+      selectedKota = KotaModel(
+        noId: customer.kota,
+        namaKota: customer.namaKota,
+        keterangan: "",
+        status: "",
+      );
     });
   }
 
@@ -194,18 +200,19 @@ class _EditAccountPageState extends State<EditAccountPage> {
                 keyboardType: TextInputType.text,
                 errorMessage: usernameError,
               ),
-              CustomDropdownSearch(
+              SingleSelectDropdown<KotaModel>(
+                config: KotaDropdownConfig(
+                  label: 'Kota Domisili',
+                  errorMessage: kotaError,
+                  debounceDuration: 500, // Custom debounce
+                  enableRemoteSearch: true, // Enable remote API call
+                ),
                 selectedValue: selectedKota,
-                label: 'Kota Domisili',
-                errorMessage: kotaError,
-                data: "kota",
                 onChanged: (value) {
-                  setState(() {
-                    selectedKota = value;
-                  });
+                  setState(() => selectedKota = value);
+                  print('Selected kota: ${value?.namaKota}');
                 },
               ),
-
               // Button Section
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 50),

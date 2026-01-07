@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
@@ -9,16 +8,13 @@ import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
-import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 class DetailOrderPage extends StatefulWidget {
   final PesananModel pesananModel;
@@ -39,6 +35,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   bool isLoading = false;
   String error = '';
 
+  // State untuk expand/collapse
+  bool isPaymentExpanded = false;
+  bool isPackageExpanded = false;
+  bool isProgressExpanded = true;
+
   // Fetch data histori order
   Future<void> fetchData() async {
     try {
@@ -47,14 +48,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
         error = '';
       });
 
-      // get data histori
       historyOrder = await historyOrderService.getAll(
         noOrder: widget.pesananModel.noBukti,
         orderBy: 'Tgl_Progress',
         orderDir: 'desc',
       );
 
-      // get data vendor
+      paket = (await PaketService().getAll(noId: widget.pesananModel.idPaket))
+          .first;
+
       vendor = (await vendorService.getAll(no_id: widget.pesananModel.idVendor))
           .first;
     } catch (e) {
@@ -68,8 +70,6 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     }
   }
 
-  // init state page
-
   @override
   void initState() {
     super.initState();
@@ -78,12 +78,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
 
   @override
   Widget build(BuildContext context) {
-    print("Jumlah History Order: ${historyOrder.length}");
+    final tanggal = DateFormat("dd MMM yyyy", "id_ID")
+        .format(widget.pesananModel.tglRealisasi);
+    final waktu = Helper.toLocalTime(widget.pesananModel.tglRealisasi);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
+        elevation: 0,
         leading: CustomBackButton(),
         title: const Text(
           "Detail Pesanan",
@@ -103,270 +106,389 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
             onRefresh: fetchData,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Profile + chat button
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              // Aksi saat klik avatar + nama
-                              context.read<NavigationProvider>().navigateToPage(
-                                    context,
-                                    VendorBioPage(
-                                      idVendor: vendor?.noId ?? '',
-                                    ),
-                                    targetTabIndex: 0,
-                                  ); //Ubah idVendor agar sesuai dengan data yang ada
-                              // Navigasi ke profil atau lainnya bisa ditaruh di sini
-                            },
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 30,
-                                  backgroundColor: Colors.grey.shade300,
-                                  child: ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: vendor?.idMedia ?? '',
-                                      width: 60, // radius * 2
-                                      height: 60,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) =>
-                                          Shimmer.fromColors(
-                                        baseColor: Colors.grey.shade300,
-                                        highlightColor: Colors.grey.shade100,
-                                        child: Container(
-                                          width: 60,
-                                          height: 60,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) =>
-                                          Icon(
-                                        Icons.error,
-                                        size: 30,
-                                        color: Colors.red,
-                                      ),
+                  // Profile Card dengan Chat Button
+                  _buildProfileCard(),
+
+                  const SizedBox(height: 16),
+
+                  /// =======================
+                  /// 📍 LOKASI & JADWAL
+                  /// =======================
+                  _buildCardSection(
+                    title: "Lokasi & Jadwal",
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: "Tanggal",
+                          value: tanggal,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.access_time,
+                          label: "Waktu",
+                          value: waktu,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.location_city_outlined,
+                          label: "Kota",
+                          value: widget.pesananModel.namaKota ?? "-",
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Alamat Lengkap",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      vendor?.username ?? "Vendor",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.pesananModel.lokasi,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      vendor?.namaDisplay ?? "Nama Vendor",
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black87,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  /// =======================
+                  /// 📦 DETAIL PAKET (Expandable)
+                  /// =======================
+                  _buildExpandableCard(
+                    title: "Detail Paket",
+                    isExpanded: isPackageExpanded,
+                    onToggle: () {
+                      setState(() {
+                        isPackageExpanded = !isPackageExpanded;
+                      });
+                    },
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Constants.primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.card_giftcard,
+                                color: Constants.primaryColor,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    paket!.nama_paket,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    Helper.formatCurrency(
+                                        widget.pesananModel.harga),
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Constants.primaryColorVendor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (paket!.rincian.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 12),
+                          const Text(
+                            "Rincian Paket:",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            paket!.rincian,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  /// =======================
+                  /// 💳 INFORMASI & RINGKASAN PEMBAYARAN (Expandable)
+                  /// =======================
+                  _buildExpandableCard(
+                    title: "Pembayaran",
+                    isExpanded: isPaymentExpanded,
+                    onToggle: () {
+                      setState(() {
+                        isPaymentExpanded = !isPaymentExpanded;
+                      });
+                    },
+                    summaryWidget: !isPaymentExpanded
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            widget.pesananModel.statusBayar ==
+                                                    "settlement"
+                                                ? Colors.green.shade50
+                                                : Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color:
+                                              widget.pesananModel.statusBayar ==
+                                                      "settlement"
+                                                  ? Colors.green.shade200
+                                                  : Colors.orange.shade200,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        widget.pesananModel.statusBayar ==
+                                                "settlement"
+                                            ? "Sudah Bayar"
+                                            : "Belum Bayar",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color:
+                                              widget.pesananModel.statusBayar ==
+                                                      "settlement"
+                                                  ? Colors.green.shade700
+                                                  : Colors.orange.shade700,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          SizedBox(
-                            height: 44,
-                            width: 44,
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                    color: Constants.primaryColor),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                padding: EdgeInsets.zero,
-                              ),
-                              onPressed: () {
-                                context
-                                    .read<NavigationProvider>()
-                                    .navigateToPage(
-                                      context,
-                                      RoomChatPage(
-                                        partnerId: vendor?.noId,
-                                      ),
-                                      targetTabIndex: 1,
-                                    );
-                              },
-                              child: const Icon(
-                                Icons.chat_outlined,
-                                color: Constants.primaryColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      _buildCardSection(
-                        title: "Detail Pesanan",
-                        icon: Icons.receipt_long_rounded,
-                        content: Column(
-                          children: [
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                              "No. Tracking",
-                              widget.pesananModel.noTrackingPesanan ?? "",
-                              copyable: true,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                              "Paket",
-                              widget.pesananModel.namaPaket,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                              "Tanggal Realisasi",
-                              DateFormat("dd MMM yyyy", "id_ID")
-                                  .format(widget.pesananModel.tglRealisasi),
-                            ),
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                              "Lokasi",
-                              "${widget.pesananModel.lokasi}, ${widget.pesananModel.namaKota}",
-                            ),
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                                "Total (termasuk PPN)",
-                                Helper.formatCurrency(
-                                    widget.pesananModel.harga)),
-                            const SizedBox(height: 12),
-                            // Action Buttons
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () {
-                                      // Aksi Ajukan Banding
-                                    },
-                                    style: OutlinedButton.styleFrom(
-                                      side: BorderSide(
-                                          color: Constants.primaryColorVendor),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                    ),
-                                    child: Text(
-                                      'Ajukan Banding',
-                                      style: TextStyle(
-                                        color: Constants.primaryColorVendor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      // Aksi Pesanan Selesai
-
-                                      ConfirmDialog.showSelesaikanPesananDialog(
-                                        context: context,
-                                        onConfirm: () async {
-                                          final historySelesaikanPesanan =
-                                              HistoryOrderService.createSelesai(
-                                            noOrder:
-                                                widget.pesananModel.noBukti,
-                                            senderId:
-                                                widget.pesananModel.idCustomer,
-                                          );
-
-                                          await historyOrderService
-                                              .create(historySelesaikanPesanan);
-
-                                          if (!mounted) return;
-
-                                          Navigator.pop(context);
-                                        },
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          Constants.primaryColorVendor,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      elevation: 0,
-                                    ),
-                                    child: const Text(
-                                      'Selesaikan',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
+                                Text(
+                                  Helper.formatCurrency(
+                                      widget.pesananModel.grandTotal),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Constants.primaryColorVendor,
                                   ),
                                 ),
                               ],
                             ),
-                          ],
+                          )
+                        : null,
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Informasi Pembayaran
+                        const Text(
+                          "Informasi Pembayaran",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          label: "No. Tracking",
+                          value: widget.pesananModel.noTrackingPesanan ?? "-",
+                          icon: Icons.local_shipping_outlined,
+                          copyable: true,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          label: "Metode Pembayaran",
+                          value: widget.pesananModel.metodeBayar != null
+                              ? widget.pesananModel.metodeBayar!
+                              : "-",
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          label: "Status Pembayaran",
+                          icon: Icons.schedule_outlined,
+                          value: widget.pesananModel.statusBayar == "settlement"
+                              ? "Sudah Bayar"
+                              : "Belum Bayar",
+                          valueColor:
+                              widget.pesananModel.statusBayar == "settlement"
+                                  ? Colors.green
+                                  : Colors.orange,
+                        ),
 
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 20),
+                        const Divider(),
+                        const SizedBox(height: 16),
 
-                      _buildCardSection(
-                        title: "Progress Pesanan",
-                        icon: Icons.history_edu_rounded,
-                        content: historyOrder.isEmpty
-                            ? Column(
-                                children: [
-                                  Icon(
-                                    Icons.timeline_rounded,
-                                    size: 100,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  Center(
-                                    child: Text(
-                                      "Belum ada history progress pesanan",
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.grey,
+                        // Ringkasan Pembayaran
+                        const Text(
+                          "Ringkasan Pembayaran",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildPriceRow(
+                          "Subtotal",
+                          Helper.formatCurrency(widget.pesananModel.subtotal),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildPriceRow(
+                          "DPP (Dasar Pengenaan Pajak)",
+                          Helper.formatCurrency(
+                              widget.pesananModel.totDpp?.toInt() ?? 0),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildPriceRow(
+                          "PPN ${widget.pesananModel.ppn ?? 11}%",
+                          Helper.formatCurrency(
+                              widget.pesananModel.totPpn ?? 0),
+                        ),
+                        const Divider(height: 24),
+                        _buildPriceRow(
+                          "Total Pembayaran",
+                          Helper.formatCurrency(widget.pesananModel.grandTotal),
+                          isBold: true,
+                          valueColor: Constants.primaryColorVendor,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  /// =======================
+                  /// 📊 PROGRESS PESANAN (Expandable)
+                  /// =======================
+                  _buildExpandableCard(
+                    title: "Progress Pesanan",
+                    isExpanded: isProgressExpanded,
+                    onToggle: () {
+                      setState(() {
+                        isProgressExpanded = !isProgressExpanded;
+                      });
+                    },
+                    summaryWidget:
+                        !isProgressExpanded && historyOrder.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: Constants.primaryColorVendor,
+                                        shape: BoxShape.circle,
                                       ),
                                     ),
-                                  ),
-                                  SizedBox(height: 10),
-                                ],
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        historyOrder.first.deskripsi,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               )
-                            : Column(
-                                children: List.generate(
-                                  historyOrder.length,
-                                  (index) {
-                                    final history = historyOrder[index];
-
-                                    return buildTimelineItem(
-                                      DateFormat("dd MMM yyyy")
-                                          .format(history.tglProgress),
-                                      history.deskripsi,
-                                      index == 0,
-                                    );
-                                  },
+                            : null,
+                    content: historyOrder.isEmpty
+                        ? Column(
+                            children: [
+                              Icon(
+                                Icons.timeline_rounded,
+                                size: 100,
+                                color: Colors.grey.shade400,
+                              ),
+                              Center(
+                                child: Text(
+                                  "Belum ada history progress pesanan",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ),
-                      )
-                    ],
+                              const SizedBox(height: 10),
+                            ],
+                          )
+                        : Column(
+                            children: List.generate(
+                              historyOrder.length,
+                              (index) {
+                                final history = historyOrder[index];
+                                return buildTimelineItem(
+                                  DateFormat("dd MMM yyyy")
+                                      .format(history.tglProgress),
+                                  history.deskripsi,
+                                  index == 0,
+                                  isLast: index == historyOrder.length - 1,
+                                );
+                              },
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -377,20 +499,201 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     );
   }
 
-  Widget _buildCardSection({
+  Widget _buildExpandableCard({
     required String title,
-    required IconData icon,
+    required bool isExpanded,
+    required VoidCallback onToggle,
     required Widget content,
+    Widget? summaryWidget,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: const [
           BoxShadow(
             color: Colors.black12,
-            blurRadius: 8,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isExpanded && summaryWidget != null) summaryWidget,
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: content,
+                  ),
+                  crossFadeState: isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Constants.primaryColorVendor,
+                  Constants.primaryColorVendor.withOpacity(0.7),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                (widget.pesananModel.namaVendor!.isEmpty
+                        ? "V"
+                        : widget.pesananModel.namaVendor![0])
+                    .toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.pesananModel.namaVendor ?? "Vendor",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Constants.primaryColorVendor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    Helper.capitalizeFirst(
+                      widget.pesananModel.statusProgresPesanan ?? '',
+                    ),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Constants.primaryColorVendor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 44,
+            width: 44,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Constants.primaryColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: EdgeInsets.zero,
+              ),
+              onPressed: () {
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      RoomChatPage(partnerId: widget.pesananModel.idCustomer),
+                      targetTabIndex: 1,
+                    );
+              },
+              child: const Icon(
+                Icons.chat_outlined,
+                color: Constants.primaryColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardSection({
+    required String title,
+    required Widget content,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
             offset: Offset(0, 2),
           ),
         ],
@@ -398,65 +701,73 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 22, color: Constants.primaryColorVendor),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           content,
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {bool copyable = false}) {
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color valueColor = Colors.black,
+    bool copyable = false,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
-          ),
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.black54,
         ),
+        const SizedBox(width: 12),
         Expanded(
-          flex: 3,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (copyable)
-                InkWell(
-                  onTap: () => Helper.copyToClipboard(context, value, label),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.copy_rounded,
-                      size: 18,
-                      color: Constants.primaryColorVendor,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black54,
                     ),
                   ),
+                  if (copyable) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () =>
+                          Helper.copyToClipboard(context, value, label),
+                      child: Icon(
+                        Icons.copy_rounded,
+                        size: 20,
+                        color: Constants.primaryColorVendor,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: valueColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
+              ),
             ],
           ),
         ),
@@ -464,61 +775,114 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     );
   }
 
-  Widget buildTimelineItem(String time, String description, bool isActive,
-      {bool isLast = false}) {
+  Widget _buildPriceRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+  }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          children: [
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: isActive
-                    ? Constants.primaryColorVendor
-                    : Colors.grey.shade400,
-                shape: BoxShape.circle,
-              ),
-            ),
-            if (!isLast)
-              Container(
-                width: 2,
-                height: 50,
-                color: Colors.grey.shade400,
-              ),
-          ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isActive
-                        ? Constants.primaryColorVendor
-                        : Colors.black54,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: valueColor ?? Colors.black87,
           ),
         ),
       ],
+    );
+  }
+
+  Widget buildTimelineItem(
+    String time,
+    String description,
+    bool isActive, {
+    bool isLast = false,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? Constants.primaryColorVendor
+                        : Colors.grey.shade400,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                if (!isLast)
+                  Container(
+                    width: 2,
+                    height: 50,
+                    color: Colors.grey.shade400,
+                  ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            time,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        if (onTap != null)
+                          Icon(
+                            Icons.more_vert_rounded,
+                            size: 16,
+                            color: Colors.grey.shade400,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isActive
+                            ? Constants.primaryColorVendor
+                            : Colors.black54,
+                        fontWeight:
+                            isActive ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
