@@ -11,8 +11,9 @@ class PenawaranModel {
   final int harga;
   final String status;
   final String lokasi;
-  final String kota;
   final String namaKota;
+  final String kota;
+  final String deskripsi;
   final DateTime tglRealisasi;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -32,6 +33,7 @@ class PenawaranModel {
     required this.lokasi,
     required this.kota,
     required this.namaKota,
+    required this.deskripsi,
     required this.tglRealisasi,
     required this.createdAt,
     this.updatedAt,
@@ -54,6 +56,7 @@ class PenawaranModel {
       lokasi: json["Lokasi"] ?? "",
       kota: json["Kota"] ?? "",
       namaKota: json["Nama_Kota"] ?? "",
+      deskripsi: json["Deskripsi"] ?? "",
       tglRealisasi: DateTime.parse(json["Tgl_Realisasi"]),
       createdAt: DateTime.parse(json["Created_At"]),
       updatedAt: json["Updated_At"] != null
@@ -79,6 +82,7 @@ class PenawaranModel {
       "Lokasi": lokasi,
       "Kota": kota,
       "Nama_Kota": namaKota,
+      "Deskripsi": deskripsi,
       "Tgl_Realisasi": tglRealisasi.toIso8601String(),
       "Created_At": createdAt.toIso8601String(),
       "Updated_At": updatedAt?.toIso8601String(),
@@ -94,6 +98,7 @@ class PenawaranModel {
       "kota": kota,
       "harga": harga,
       "lokasi": lokasi,
+      "deskripsi": lokasi,
       "tgl_realisasi": tglRealisasi.toIso8601String(),
       "status": status,
     };
@@ -115,6 +120,7 @@ class PenawaranModel {
     String? lokasi,
     String? kota,
     String? namaKota,
+    String? deskripsi,
     DateTime? tglRealisasi,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -134,6 +140,7 @@ class PenawaranModel {
       lokasi: lokasi ?? this.lokasi,
       kota: kota ?? this.kota,
       namaKota: namaKota ?? this.namaKota,
+      deskripsi: deskripsi ?? this.deskripsi,
       tglRealisasi: tglRealisasi ?? this.tglRealisasi,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -40,7 +40,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   bool isLoading = false;
   String? errorMessage;
 
-  bool _isExpanded = false;
+  bool _isExpanded = true;
+  bool isPackageExpanded = true;
 
   PenawaranModel? penawaran;
   PaketModel? paket;
@@ -167,7 +168,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       context.read<NavigationProvider>().navigateToPage(
             context,
             targetTabIndex: 2,
-            WaitingPaymentPage(paymentData: pesanan.first),
+            WaitingPaymentPage(paymentData: pesanan.first,),
           );
     } catch (e) {
       errorMessage = e.toString();
@@ -291,15 +292,27 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                               label: "Vendor",
                               value: penawaran!.namaVendor,
                             ),
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              icon: Icons.notes_outlined,
+                              label: "Deskripsi",
+                              value: penawaran!.deskripsi,
+                            ),
                           ],
                         ),
                       ),
 
                       /// =======================
-                      /// 📦 DETAIL PAKET
+                      /// 📦 DETAIL PAKET (Expandable)
                       /// =======================
-                      _buildCardSection(
+                      _buildExpandableCard(
                         title: "Detail Paket",
+                        isExpanded: isPackageExpanded,
+                        onToggle: () {
+                          setState(() {
+                            isPackageExpanded = !isPackageExpanded;
+                          });
+                        },
                         content: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -655,6 +668,78 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildExpandableCard({
+    required String title,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+    required Widget content,
+    Widget? summaryWidget,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isExpanded && summaryWidget != null) summaryWidget,
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: content,
+                  ),
+                  crossFadeState: isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

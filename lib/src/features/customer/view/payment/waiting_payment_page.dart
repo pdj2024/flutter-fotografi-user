@@ -5,10 +5,13 @@ import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
@@ -36,6 +39,10 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Timer? _timer;
   bool _isExpiredHandled = false;
   Timer? _checkPaymentTimer;
+
+  PaketModel? paket;
+
+  bool isPackageExpanded = false;
 
   String? statusBayar;
   DateTime? _paymentStartTime;
@@ -137,6 +144,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         noBukti: widget.paymentData.noBukti,
         orderBy: "no_bukti",
       );
+      final pesananProvider = await context.read<PesananProvider>();
 
       statusBayar = pesanan.first.statusBayar;
 
@@ -154,6 +162,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
           senderId: pesanan.first.idCustomer,
         );
 
+        await pesananProvider.loadOrder(userId: pesanan.first.idCustomer);
         await historyOrderService.create(historyPersiapan);
 
         Navigator.of(context).pushReplacement(
@@ -202,8 +211,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    final String orderNumber = widget.paymentData.noBukti;
-    final String trackingNumber = widget.paymentData.noTrackingPesanan ?? '-';
     final int grandTotal = widget.paymentData.grandTotal;
     final int subtotal = widget.paymentData.subtotal;
     final int ppn = widget.paymentData.totPpn ?? 0;
@@ -280,38 +287,76 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
 
                   const SizedBox(height: 16),
 
-                  // Order Details
                   _buildCardSection(
                     title: "Detail Pesanan",
-                    icon: Icons.receipt_long_rounded,
                     content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildDetailRow(
-                          "No. Pesanan",
-                          orderNumber,
+                        _buildInfoRow(
+                          icon: Icons.timeline_outlined,
+                          label: "No. Tracking",
                           copyable: true,
+                          value: widget.paymentData.noTrackingPesanan ?? "-",
                         ),
                         const SizedBox(height: 12),
-                        _buildDetailRow(
-                          "No. Tracking",
-                          trackingNumber,
-                          copyable: true,
+                        _buildInfoRow(
+                          icon: Icons.inventory_2_outlined,
+                          label: "Paket",
+                          value: widget.paymentData.namaPaket,
                         ),
                         const SizedBox(height: 12),
-                        _buildDetailRow(
-                          "Paket",
-                          widget.paymentData.namaPaket,
+                        _buildInfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: "Tanggal",
+                          value: DateFormat("dd MMM yyyy", "id_ID")
+                              .format(widget.paymentData.tglRealisasi),
                         ),
                         const SizedBox(height: 12),
-                        _buildDetailRow(
-                          "Tanggal Realisasi",
-                          DateFormat("dd MMM yyyy", "id_ID")
-                              .format(DateTime.now()),
+                        _buildInfoRow(
+                          icon: Icons.access_time,
+                          label: "Waktu",
+                          value: Helper.toLocalTime(
+                              widget.paymentData.tglRealisasi),
                         ),
                         const SizedBox(height: 12),
-                        _buildDetailRow(
-                          "Lokasi",
-                          "${widget.paymentData.lokasi}, ${widget.paymentData.namaKota}",
+                        _buildInfoRow(
+                          icon: Icons.location_city_outlined,
+                          label: "Kota",
+                          value: widget.paymentData.namaKota ?? "",
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Alamat Lengkap",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.paymentData.lokasi,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -322,7 +367,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                   // Payment Summary
                   _buildCardSection(
                     title: "Ringkasan Pembayaran",
-                    icon: Icons.receipt_rounded,
                     content: Column(
                       children: [
                         _buildPriceRow("Subtotal (termasuk PPN)",
@@ -402,6 +446,16 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     }
 
     if (metodeBayar.contains('VA') || metodeBayar.contains('BANK')) {
+      if (metodeBayar.toLowerCase().contains("mandiri")) {
+        return VaPaymentCard(
+          bankName: metodeBayar,
+          vaNumber: "", // Bisa dikosongkan atau diisi bill key
+          amount: grandTotal,
+          billCode: paymentNumber1, // Kode perusahaan
+          billKey: paymentNumber2, // Nomor VA
+        );
+      }
+
       return VaPaymentCard(
           bankName: metodeBayar, vaNumber: paymentNumber1, amount: grandTotal);
     }
@@ -417,21 +471,26 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     return const SizedBox.shrink();
   }
 
+  /// =======================
+  /// 🎨 WIDGET BUILDERS
+  /// =======================
+
   Widget _buildCardSection({
     required String title,
-    required IconData icon,
     required Widget content,
+    bool isRequired = false,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
           BoxShadow(
-            color: Colors.black12,
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -440,8 +499,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 22, color: Constants.primaryColorVendor),
-              const SizedBox(width: 12),
               Text(
                 title,
                 style: const TextStyle(
@@ -449,6 +506,17 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              if (isRequired) ...[
+                const SizedBox(width: 4),
+                const Text(
+                  "*",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -458,45 +526,59 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {bool copyable = false}) {
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color valueColor = Colors.black,
+    bool copyable = false,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
-          ),
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.black54,
         ),
+        const SizedBox(width: 12),
         Expanded(
-          flex: 3,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (copyable)
-                InkWell(
-                  onTap: () => Helper.copyToClipboard(context, value, label),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.copy_rounded,
-                      size: 18,
-                      color: Constants.primaryColorVendor,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black54,
                     ),
                   ),
+                  if (copyable) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () =>
+                          Helper.copyToClipboard(context, value, label),
+                      child: Icon(
+                        Icons.copy_rounded,
+                        size: 20,
+                        color: Constants.primaryColorVendor,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: valueColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
+              ),
             ],
           ),
         ),

@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
 class PaymentSuccessSplashScreen extends StatefulWidget {
@@ -30,10 +28,6 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
   @override
   void initState() {
     super.initState();
-
-    final pesananProvider = context.read<PesananProvider>();
-    pesananProvider.loadOrder(
-        userId: context.read().read<UserProvider>().userId!);
 
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1500),

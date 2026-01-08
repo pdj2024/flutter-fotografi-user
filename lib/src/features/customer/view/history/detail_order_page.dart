@@ -728,7 +728,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                   onPressed: () {
                     context.read<NavigationProvider>().navigateToPage(
                           context,
-                          RoomChatPage(partnerId: pesanan!.idCustomer),
+                          RoomChatPage(partnerId: pesanan!.idVendor),
                           targetTabIndex: 1,
                         );
                   },
