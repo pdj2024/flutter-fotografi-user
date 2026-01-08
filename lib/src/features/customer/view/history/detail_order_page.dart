@@ -7,13 +7,18 @@ import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/revisi_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/selesaikan_dialog.dart';
 import 'package:provider/provider.dart';
 
 class DetailOrderPage extends StatefulWidget {
@@ -31,6 +36,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   List<HistoryOrderModel> historyOrder = [];
   VendorModel? vendor;
   PaketModel? paket;
+  PesananModel? pesanan;
 
   bool isLoading = false;
   String error = '';
@@ -47,6 +53,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
         isLoading = true;
         error = '';
       });
+
+      pesanan = widget.pesananModel;
 
       historyOrder = await historyOrderService.getAll(
         noOrder: widget.pesananModel.noBukti,
@@ -70,6 +78,61 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     }
   }
 
+  Future<void> fetchUpdatePesanan() async {
+    try {
+      setState(() {
+        isLoading = true;
+        error = '';
+      });
+
+      pesanan =
+          (await PesananService().getAll(noBukti: pesanan!.noBukti)).first;
+    } catch (e) {
+      print(e);
+      error = e.toString();
+      CustomSnackbar.showErrorSnackbar(context, e.toString());
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  // =====================================================
+  // 📝 SHOW REVISI DIALOG
+  // =====================================================
+  void _showRevisiDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => RevisiDialog(
+        pesanan: pesanan!,
+        onSuccess: () async {
+          await fetchData();
+          await fetchUpdatePesanan();
+        },
+      ),
+    );
+  }
+
+  // =====================================================
+  // ✅ SHOW SELESAIKAN DIALOG
+  // =====================================================
+  void _showSelesaikanDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => SelesaikanDialog(
+        pesanan: pesanan!,
+        onSuccess: () async {
+          await fetchData();
+          await context
+              .read<PesananProvider>()
+              .loadOrder(userId: context.read<UserProvider>().userId ?? '');
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,9 +141,9 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tanggal = DateFormat("dd MMM yyyy", "id_ID")
-        .format(widget.pesananModel.tglRealisasi);
-    final waktu = Helper.toLocalTime(widget.pesananModel.tglRealisasi);
+    final tanggal =
+        DateFormat("dd MMM yyyy", "id_ID").format(pesanan!.tglRealisasi);
+    final waktu = Helper.toLocalTime(pesanan!.tglRealisasi);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -103,7 +166,10 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           }
 
           return RefreshIndicator(
-            onRefresh: fetchData,
+            onRefresh: () async {
+              await fetchData();
+              await fetchUpdatePesanan();
+            },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -138,7 +204,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         _buildInfoRow(
                           icon: Icons.location_city_outlined,
                           label: "Kota",
-                          value: widget.pesananModel.namaKota ?? "-",
+                          value: pesanan!.namaKota ?? "-",
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -163,7 +229,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    widget.pesananModel.lokasi,
+                                    pesanan!.lokasi,
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
@@ -221,8 +287,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    Helper.formatCurrency(
-                                        widget.pesananModel.harga),
+                                    Helper.formatCurrency(pesanan!.harga),
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
@@ -285,40 +350,35 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                       ),
                                       decoration: BoxDecoration(
                                         color:
-                                            widget.pesananModel.statusBayar ==
-                                                    "settlement"
+                                            pesanan!.statusBayar == "settlement"
                                                 ? Colors.green.shade50
                                                 : Colors.orange.shade50,
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(
-                                          color:
-                                              widget.pesananModel.statusBayar ==
-                                                      "settlement"
-                                                  ? Colors.green.shade200
-                                                  : Colors.orange.shade200,
+                                          color: pesanan!.statusBayar ==
+                                                  "settlement"
+                                              ? Colors.green.shade200
+                                              : Colors.orange.shade200,
                                         ),
                                       ),
                                       child: Text(
-                                        widget.pesananModel.statusBayar ==
-                                                "settlement"
+                                        pesanan!.statusBayar == "settlement"
                                             ? "Sudah Bayar"
                                             : "Belum Bayar",
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
-                                          color:
-                                              widget.pesananModel.statusBayar ==
-                                                      "settlement"
-                                                  ? Colors.green.shade700
-                                                  : Colors.orange.shade700,
+                                          color: pesanan!.statusBayar ==
+                                                  "settlement"
+                                              ? Colors.green.shade700
+                                              : Colors.orange.shade700,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
                                 Text(
-                                  Helper.formatCurrency(
-                                      widget.pesananModel.grandTotal),
+                                  Helper.formatCurrency(pesanan!.grandTotal),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -344,15 +404,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         const SizedBox(height: 12),
                         _buildInfoRow(
                           label: "No. Tracking",
-                          value: widget.pesananModel.noTrackingPesanan ?? "-",
+                          value: pesanan!.noTrackingPesanan ?? "-",
                           icon: Icons.local_shipping_outlined,
                           copyable: true,
                         ),
                         const SizedBox(height: 8),
                         _buildInfoRow(
                           label: "Metode Pembayaran",
-                          value: widget.pesananModel.metodeBayar != null
-                              ? widget.pesananModel.metodeBayar!
+                          value: pesanan!.metodeBayar != null
+                              ? pesanan!.metodeBayar!
                               : "-",
                           icon: Icons.account_balance_wallet_outlined,
                         ),
@@ -360,13 +420,12 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         _buildInfoRow(
                           label: "Status Pembayaran",
                           icon: Icons.schedule_outlined,
-                          value: widget.pesananModel.statusBayar == "settlement"
+                          value: pesanan!.statusBayar == "settlement"
                               ? "Sudah Bayar"
                               : "Belum Bayar",
-                          valueColor:
-                              widget.pesananModel.statusBayar == "settlement"
-                                  ? Colors.green
-                                  : Colors.orange,
+                          valueColor: pesanan!.statusBayar == "settlement"
+                              ? Colors.green
+                              : Colors.orange,
                         ),
 
                         const SizedBox(height: 20),
@@ -385,24 +444,22 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         const SizedBox(height: 12),
                         _buildPriceRow(
                           "Subtotal",
-                          Helper.formatCurrency(widget.pesananModel.subtotal),
+                          Helper.formatCurrency(pesanan!.subtotal),
                         ),
                         const SizedBox(height: 8),
                         _buildPriceRow(
                           "DPP (Dasar Pengenaan Pajak)",
-                          Helper.formatCurrency(
-                              widget.pesananModel.totDpp?.toInt() ?? 0),
+                          Helper.formatCurrency(pesanan!.totDpp?.toInt() ?? 0),
                         ),
                         const SizedBox(height: 8),
                         _buildPriceRow(
-                          "PPN ${widget.pesananModel.ppn ?? 11}%",
-                          Helper.formatCurrency(
-                              widget.pesananModel.totPpn ?? 0),
+                          "PPN ${pesanan!.ppn ?? 11}%",
+                          Helper.formatCurrency(pesanan!.totPpn ?? 0),
                         ),
                         const Divider(height: 24),
                         _buildPriceRow(
                           "Total Pembayaran",
-                          Helper.formatCurrency(widget.pesananModel.grandTotal),
+                          Helper.formatCurrency(pesanan!.grandTotal),
                           isBold: true,
                           valueColor: Constants.primaryColorVendor,
                         ),
@@ -572,6 +629,10 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   Widget _buildProfileCard() {
+    final hasLinkUrl = pesanan!.linkUrl != null && pesanan!.linkUrl!.isNotEmpty;
+    final isReviewStatus =
+        pesanan!.statusProgresPesanan?.toLowerCase() == 'review';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -585,96 +646,331 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Constants.primaryColorVendor,
-                  Constants.primaryColorVendor.withOpacity(0.7),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                (widget.pesananModel.namaVendor!.isEmpty
-                        ? "V"
-                        : widget.pesananModel.namaVendor![0])
-                    .toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Constants.primaryColorVendor,
+                      Constants.primaryColorVendor.withOpacity(0.7),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.pesananModel.namaVendor ?? "Vendor",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Constants.primaryColorVendor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+                child: Center(
                   child: Text(
-                    Helper.capitalizeFirst(
-                      widget.pesananModel.statusProgresPesanan ?? '',
+                    (pesanan!.namaVendor!.isEmpty
+                            ? "V"
+                            : pesanan!.namaVendor![0])
+                        .toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Constants.primaryColorVendor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      pesanan!.namaVendor ?? "Vendor",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Constants.primaryColorVendor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        Helper.capitalizeFirst(
+                          pesanan!.statusProgresPesanan ?? '',
+                        ),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Constants.primaryColorVendor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 44,
+                width: 44,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Constants.primaryColor),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                  onPressed: () {
+                    context.read<NavigationProvider>().navigateToPage(
+                          context,
+                          RoomChatPage(partnerId: pesanan!.idCustomer),
+                          targetTabIndex: 1,
+                        );
+                  },
+                  child: const Icon(
+                    Icons.chat_outlined,
+                    color: Constants.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (hasLinkUrl) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Constants.primaryColorVendor.withOpacity(0.1),
+                    Constants.primaryColorVendor.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Constants.primaryColorVendor.withOpacity(0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Constants.primaryColorVendor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.link_rounded,
+                          size: 16,
+                          color: Constants.primaryColorVendor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Link Hasil Kerja',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pesanan!.linkUrl!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Constants.primaryColorVendor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Helper.copyToClipboard(
+                                    context,
+                                    pesanan!.linkUrl!,
+                                    'Link URL',
+                                  );
+                                },
+                                icon: Icon(
+                                  Icons.content_copy_rounded,
+                                  size: 16,
+                                  color: Constants.primaryColorVendor,
+                                ),
+                                label: const Text(
+                                  'Salin',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Constants.primaryColorVendor,
+                                  side: BorderSide(
+                                    color: Constants.primaryColorVendor,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                    horizontal: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Link hasil kerja yang telah Anda upload',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // ✅ TAMBAHAN: Review Actions
+          if (isReviewStatus && hasLinkUrl) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+
+            // Info Review
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.blue.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Silakan review hasil pekerjaan vendor',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Action Buttons
+            Row(
+              children: [
+                // Button Revisi
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showRevisiDialog(),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text(
+                      'Revisi',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Constants.primaryColorVendor,
+                      side: BorderSide(
+                          color: Constants.primaryColorVendor, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // Button Selesaikan
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showSelesaikanDialog(),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text(
+                      'Selesaikan',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Constants.primaryColorVendor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-          SizedBox(
-            height: 44,
-            width: 44,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Constants.primaryColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: EdgeInsets.zero,
-              ),
-              onPressed: () {
-                context.read<NavigationProvider>().navigateToPage(
-                      context,
-                      RoomChatPage(partnerId: widget.pesananModel.idCustomer),
-                      targetTabIndex: 1,
-                    );
-              },
-              child: const Icon(
-                Icons.chat_outlined,
-                color: Constants.primaryColor,
-              ),
-            ),
-          ),
+          ],
         ],
       ),
     );

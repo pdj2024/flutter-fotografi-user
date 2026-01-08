@@ -45,7 +45,7 @@ class PesananModel {
   final String? paymentNumber2;
 
   // =======================
-  // TIMESTAMP
+  // HASIL
   // =======================
   final String? linkUrl;
 
@@ -104,47 +104,59 @@ class PesananModel {
   // FROM JSON (RESPONSE API)
   // =======================
   factory PesananModel.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic v) =>
+        v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
+
+    double? parseDouble(dynamic v) =>
+        v == null ? null : double.tryParse(v.toString());
+
+    DateTime? parseDate(dynamic v) => (v == null || v.toString().isEmpty)
+        ? null
+        : DateTime.tryParse(v.toString());
+
+    bool? parseBool(dynamic v) {
+      if (v == null) return null;
+      if (v is bool) return v;
+      if (v is int) return v == 1;
+      if (v is String) return v.toLowerCase() == 'true';
+      return null;
+    }
+
     return PesananModel(
-      noBukti: json['No_Bukti'],
+      noBukti: json['No_Bukti'] ?? '',
       noTrackingPesanan: json['No_Tracking_Pesanan'],
       status: json['Status'],
       statusProgresPesanan: json['Status_Progress_Pesanan'],
       noPenawaran: json['No_Penawaran'],
-      idVendor: json['Id_Vendor'],
+      idVendor: json['Id_Vendor'] ?? '',
       namaVendor: json['Nama_Vendor'],
-      idCustomer: json['Id_Customer'],
+      idCustomer: json['Id_Customer'] ?? '',
       namaCustomer: json['Nama_Customer'],
-      idPaket: json['Id_Paket'],
-      namaPaket: json['Nama_Paket'],
-      harga: json['Harga'] ?? 0,
-      lokasi: json['Lokasi'],
-      kota: json['Kota'],
+      idPaket: json['Id_Paket'] ?? '',
+      namaPaket: json['Nama_Paket'] ?? '',
+      harga: parseInt(json['Harga']),
+      lokasi: json['Lokasi'] ?? '',
+      kota: json['Kota'] ?? '',
       namaKota: json['Nama_Kota'],
-      tglRealisasi: DateTime.parse(json['Tgl_Realisasi']),
+      tglRealisasi: parseDate(json['Tgl_Realisasi']) ?? DateTime.now(),
       metodeBayar: json['Metode_Bayar'],
       statusBayar: json['Status_Bayar'],
       idPaymentGateway: json['Id_Payment_Gateway'],
       orderIdMidtrans: json['Order_Id_Midtrans'],
-      expiryTime: json['Expiry_Time'] != null
-          ? DateTime.parse(json['Expiry_Time'])
-          : null,
+      expiryTime: parseDate(json['Expiry_Time']),
       paymentNumber1: json['Payment_Number_1'],
       paymentNumber2: json['Payment_Number_2'],
-      linkUrl: json['Link_Url'],
-      subtotal: json['Subtotal'] ?? 0,
-      totDpp: json['Tot_DPP'] != null
-          ? double.tryParse(json['Tot_DPP'].toString())
+      linkUrl: (json['Link_Url'] as String?)?.isNotEmpty == true
+          ? json['Link_Url']
           : null,
-      ppn: json['PPN'],
-      inclPpn: json['Incl_PPN'],
-      totPpn: json['Tot_PPN'],
-      grandTotal: json['Grand_Total'] ?? 0,
-      createdAt: json['Created_At'] != null
-          ? DateTime.parse(json['Created_At'])
-          : null,
-      updatedAt: json['Updated_At'] != null
-          ? DateTime.parse(json['Updated_At'])
-          : null,
+      subtotal: parseInt(json['Subtotal']),
+      totDpp: parseDouble(json['Tot_DPP']),
+      ppn: parseInt(json['PPN']),
+      inclPpn: parseBool(json['Incl_PPN']),
+      totPpn: parseInt(json['Tot_PPN']),
+      grandTotal: parseInt(json['Grand_Total']),
+      createdAt: parseDate(json['Created_At']),
+      updatedAt: parseDate(json['Updated_At']),
     );
   }
 

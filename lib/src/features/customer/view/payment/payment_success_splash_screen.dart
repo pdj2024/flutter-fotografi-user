@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
 class PaymentSuccessSplashScreen extends StatefulWidget {
@@ -18,8 +20,7 @@ class PaymentSuccessSplashScreen extends StatefulWidget {
       _PaymentSuccessSplashScreenState();
 }
 
-class _PaymentSuccessSplashScreenState
-    extends State<PaymentSuccessSplashScreen>
+class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
@@ -29,6 +30,10 @@ class _PaymentSuccessSplashScreenState
   @override
   void initState() {
     super.initState();
+
+    final pesananProvider = context.read<PesananProvider>();
+    pesananProvider.loadOrder(
+        userId: context.read().read<UserProvider>().userId!);
 
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1500),
@@ -286,7 +291,7 @@ class CheckmarkPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     final path = Path();
-    
+
     // Checkmark path
     final p1 = Offset(size.width * 0.25, size.height * 0.5);
     final p2 = Offset(size.width * 0.45, size.height * 0.68);
@@ -304,7 +309,7 @@ class CheckmarkPainter extends CustomPainter {
       // Draw complete first part
       path.moveTo(p1.dx, p1.dy);
       path.lineTo(p2.dx, p2.dy);
-      
+
       // Draw second part (middle to top right)
       final currentProgress = (progress - 0.5) / 0.5;
       path.lineTo(
