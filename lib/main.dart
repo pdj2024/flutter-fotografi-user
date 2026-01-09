@@ -46,16 +46,13 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => NavigationProvider()),
-
-        /// ✅ Semua service pake ApiClient, jadi token & baseUrl tersentralisasi
         ChangeNotifierProvider(
-          create: (_) => UserProvider(
-            customerService: CustomerService(),
-            vendorService: VendorService(),
-            authService: AuthService(),
-          ),
-        ),
+      create: (_) => UserProvider(
+        customerService: CustomerService(),
+        vendorService: VendorService(),
+      ),
+    ),
+    ChangeNotifierProvider(create: (_) => NavigationProvider()),
 
         // Provider untuk portofolio yang mengambil userProvider dari atasnya
         ChangeNotifierProvider(

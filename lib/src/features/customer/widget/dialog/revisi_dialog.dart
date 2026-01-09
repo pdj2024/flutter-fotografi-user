@@ -44,8 +44,7 @@ class _RevisiDialogState extends State<RevisiDialog> {
         noId: '',
         noOrder: widget.pesanan.noBukti,
         tglProgress: DateTime.now(),
-        deskripsi:
-            'Customer meminta revisi: ${_keteranganController.text.trim()}',
+        deskripsi: _keteranganController.text.trim(),
         senderId: widget.pesanan.idCustomer,
         tipeUser: 'Customer',
         namaSender: widget.pesanan.namaCustomer ?? '',

@@ -4,14 +4,12 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 
 class ApiClient {
-  final AuthService _authService;
+  final AuthService _authService = AuthService();
   static const String baseUrl = '${Constants.baseUrl}/api';
   String? _role;
 
   // 🔒 Lock untuk mencegah multiple refresh bersamaan
   bool _isRefreshing = false;
-
-  ApiClient(this._authService);
 
   void setRole(String role) => _role = role;
   void clearRole() => _role = null;

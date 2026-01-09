@@ -168,7 +168,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       context.read<NavigationProvider>().navigateToPage(
             context,
             targetTabIndex: 2,
-            WaitingPaymentPage(paymentData: pesanan.first,),
+            WaitingPaymentPage(
+              paymentData: pesanan.first,
+            ),
           );
     } catch (e) {
       errorMessage = e.toString();
@@ -786,14 +788,15 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 ),
                 Row(
                   children: [
-                    Text(
-                      Helper.formatCurrency(totalPembayaran),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Constants.primaryColorVendor,
+                    if (!_isExpanded)
+                      Text(
+                        Helper.formatCurrency(totalPembayaran),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Constants.primaryColorVendor,
+                        ),
                       ),
-                    ),
                     const SizedBox(width: 8),
                     AnimatedRotation(
                       duration: const Duration(milliseconds: 300),
@@ -820,7 +823,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
                 _buildPriceRow(
-                  "Harga Paket",
+                  "Harga Paket (Termasuk PPN)",
                   Helper.formatCurrency(hargaPaket),
                 ),
                 if (kodeMetode != null) ...[
@@ -830,11 +833,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                     Helper.formatCurrency(biayaPembayaran),
                   ),
                 ],
-                const SizedBox(height: 8),
-                _buildPriceRow(
-                  "PPN 11%",
-                  Helper.formatCurrency(biayaPPN),
-                ),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 12),

@@ -372,8 +372,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                         _buildPriceRow("Subtotal (termasuk PPN)",
                             Helper.formatCurrency(subtotal)),
                         const SizedBox(height: 12),
-                        _buildPriceRow("PPN (11%)", Helper.formatCurrency(ppn)),
-                        const SizedBox(height: 12),
                         const Divider(),
                         const SizedBox(height: 12),
                         _buildPriceRow(

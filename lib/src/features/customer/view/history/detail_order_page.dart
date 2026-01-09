@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
@@ -14,6 +15,7 @@ import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
+import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
@@ -540,6 +542,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                   DateFormat("dd MMM yyyy")
                                       .format(history.tglProgress),
                                   history.deskripsi,
+                                  history.statusProgressPesanan,
                                   index == 0,
                                   isLast: index == historyOrder.length - 1,
                                 );
@@ -633,6 +636,17 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     final isReviewStatus =
         pesanan!.statusProgresPesanan?.toLowerCase() == 'review';
 
+    final currentStatus = pesanan!.statusProgresPesanan?.toLowerCase() ?? '';
+    final statusData = StatusProgresConstant.statusOptions.firstWhere(
+      (s) => s['value'] == currentStatus,
+      orElse: () => {
+        'color': Constants.primaryColorVendor,
+        'icon': Icons.hourglass_empty_rounded,
+      },
+    );
+    final Color statusColor = statusData['color'] as Color;
+    final IconData statusIcon = statusData['icon'] as IconData;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -693,22 +707,34 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                        horizontal: 10,
+                        vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: Constants.primaryColorVendor.withOpacity(0.1),
+                        color: statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: statusColor, width: 1),
                       ),
-                      child: Text(
-                        Helper.capitalizeFirst(
-                          pesanan!.statusProgresPesanan ?? '',
-                        ),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Constants.primaryColorVendor,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            statusIcon,
+                            size: 14,
+                            color: statusColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            Helper.capitalizeFirst(
+                              pesanan!.statusProgresPesanan ?? '',
+                            ),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -728,7 +754,9 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                   onPressed: () {
                     context.read<NavigationProvider>().navigateToPage(
                           context,
-                          RoomChatPage(partnerId: pesanan!.idVendor),
+                          RoomChatPage(
+                            partnerId: pesanan!.idVendor,
+                          ),
                           targetTabIndex: 1,
                         );
                   },
@@ -799,15 +827,27 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          pesanan!.linkUrl!,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Constants.primaryColorVendor,
-                            fontWeight: FontWeight.w500,
+                        InkWell(
+                          onTap: () {
+                            context.read<NavigationProvider>().navigateToPage(
+                                  context,
+                                  targetTabIndex: 2,
+                                  WebviewPage(
+                                    url: pesanan!.linkUrl!,
+                                  ),
+                                );
+                          },
+                          child: Text(
+                            pesanan!.linkUrl!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Constants.primaryColorVendor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -1102,6 +1142,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   Widget buildTimelineItem(
     String time,
     String description,
+    String status,
     bool isActive, {
     bool isLast = false,
     VoidCallback? onTap,
@@ -1109,11 +1150,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 4),
+      child: IntrinsicHeight(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Timeline indicator
             Column(
               children: [
                 Container(
@@ -1127,20 +1168,24 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                   ),
                 ),
                 if (!isLast)
-                  Container(
-                    width: 2,
-                    height: 50,
-                    color: Colors.grey.shade400,
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      color: Colors.grey.shade300,
+                    ),
                   ),
               ],
             ),
             const SizedBox(width: 12),
+            // Content
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 16),
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Header
                     Row(
                       children: [
                         Expanded(
@@ -1161,17 +1206,21 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isActive
-                            ? Constants.primaryColorVendor
-                            : Colors.black54,
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.normal,
+                    // Content
+                    if (status.toLowerCase() == "revisi")
+                      _buildRevisionCard(description)
+                    else
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isActive
+                              ? Constants.primaryColorVendor
+                              : Colors.black54,
+                          fontWeight:
+                              isActive ? FontWeight.bold : FontWeight.normal,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1179,6 +1228,58 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           ],
         ),
       ),
+    );
+  }
+
+// ✅ Revision card - clean & simple
+  Widget _buildRevisionCard(String description) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label
+        Row(
+          children: [
+            Icon(
+              Icons.edit_outlined,
+              size: 14,
+              color: Colors.orange.shade600,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              "Catatan revisi anda:",
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.orange.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Content box
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border(
+              left: BorderSide(
+                color: Colors.orange.shade400,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Text(
+            description,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade800,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

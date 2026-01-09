@@ -64,13 +64,14 @@ dependencies:
   signalr_netcore: null
   sqflite: null
   syncfusion_flutter_datepicker: ^31.2.10
+  url_launcher: ^6.1.14
   uuid: ^4.2.1
   video_editor: ^3.0.0
   video_player: ^2.8.1
+  webview_flutter: ^4.13.1
   workmanager: ^0.9.0+3
 
 dev_dependencies:
-
   flutter_lints: ^5.0.0
   flutter_test:
     sdk: flutter
