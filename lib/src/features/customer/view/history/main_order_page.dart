@@ -27,6 +27,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
   @override
   Widget build(BuildContext context) {
     final pesananProvider = context.watch<PesananProvider>();
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -41,52 +42,84 @@ class _MainOrderPageState extends State<MainOrderPage> {
             ),
           ),
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(58),
-            child: Container(
-              alignment: Alignment.centerLeft,
-              child: const TabBar(
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Constants.primaryColor,
-                indicatorWeight: 2.5,
-                isScrollable: false,
-                indicatorSize: TabBarIndicatorSize.label,
-                indicatorPadding: EdgeInsets.zero,
-                tabs: [
-                  Tab(
-                    child: Text("Belum bayar",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                  Tab(
-                    child: Text("Progress",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                  Tab(
-                    child: Text("Selesai",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ],
-                overlayColor: WidgetStatePropertyAll(Colors.transparent),
-                dividerColor: Color(0xFFDDDDDD),
-              ),
+            preferredSize: const Size.fromHeight(48),
+            child: TabBar(
+              labelColor: Colors.black,
+              unselectedLabelColor: Colors.grey,
+
+              indicatorColor: Constants.primaryColor,
+              indicatorWeight: 2.5,
+              isScrollable: false, // ✅ False agar tab membagi rata layar
+              indicatorSize: TabBarIndicatorSize.label,
+              tabs: [
+                _buildTab("Belum bayar", pesananProvider.pesananUnpaid.length),
+                _buildTab("Progress", 0),
+                _buildTab("Selesai", 0),
+              ],
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              dividerColor: Colors.grey.shade300,
             ),
           ),
         ),
         body: TabBarView(
           children: [
-            (pesananProvider.isLoading)
-                ? MainOrderShimmer()
-                : UnpaidOrderSection(),
-            (pesananProvider.isLoading)
-                ? MainOrderShimmer()
-                : ProgressOrderSection(),
-            (pesananProvider.isLoading)
-                ? MainOrderShimmer()
-                : FinishOrderSection(),
+            pesananProvider.isLoading
+                ? const MainOrderShimmer()
+                : const UnpaidOrderSection(),
+            pesananProvider.isLoading
+                ? const MainOrderShimmer()
+                : const ProgressOrderSection(),
+            pesananProvider.isLoading
+                ? const MainOrderShimmer()
+                : const FinishOrderSection(),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ Widget tab dengan auto-resize text
+  Widget _buildTab(String label, int count) {
+    return Tab(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: 60, // Lebar minimum tab
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                ),
+                if (count > 0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      count.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

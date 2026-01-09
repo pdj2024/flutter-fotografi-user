@@ -63,6 +63,8 @@ class _MainMenuState extends State<MainMenu> {
               onTap: (index) async {
                 navigationProvider.onItemTapped(index, context);
 
+                print(user ?? "user kosong");
+
                 if (index == 1 && user != null) {
                   final roomProvider = context.read<RoomChatProvider>();
                   final chatProvider = context.read<ChatProvider>();
@@ -80,12 +82,11 @@ class _MainMenuState extends State<MainMenu> {
                   }
                 }
 
-                if (index == 2) {
-                  context.read<PesananProvider>().loadOrder(
-                      userId: user!.noId);
+                if (index == 2 && user != null) {
+                  context.read<PesananProvider>().loadOrder(userId: user.noId);
                 }
 
-                if (index == 3) {
+                if (index == 3 && user != null) {
                   await context
                       .read<UserProvider>()
                       .checkLoginGoogle(role: 'customer');

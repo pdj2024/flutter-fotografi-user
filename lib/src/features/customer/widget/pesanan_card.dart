@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
 
 class PaymentTimerStatus {
   final bool isExpired;
@@ -16,7 +17,10 @@ class PesananCard extends StatelessWidget {
   final String clientName;
   final String kategori;
   final String dateValue;
+  final String timeValue;
   final String location;
+  final String statusProgress;
+  final String deskripsiProgress;
   final VoidCallback onTap;
   final VoidCallback? onChatTap;
   final PaymentTimerStatus? paymentTimerStatus;
@@ -28,7 +32,10 @@ class PesananCard extends StatelessWidget {
     required this.clientName,
     required this.kategori,
     required this.dateValue,
+    required this.timeValue,
     required this.location,
+    required this.statusProgress,
+    required this.deskripsiProgress,
     required this.onTap,
     this.onChatTap,
     this.paymentTimerStatus,
@@ -114,10 +121,14 @@ class PesananCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  Constants.primaryColorVendor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                                color: Constants.primaryColorVendor
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: Constants.primaryColorVendor
+                                      .withOpacity(0.5),
+                                  width: 1,
+                                )),
                             child: Text(
                               kategori,
                               maxLines: 2,
@@ -158,11 +169,15 @@ class PesananCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
+                if (statusProgress != "menunggu bayar")
+                  _buildProgressStatusBanner(),
+
                 // Payment Timer Status Banner (jika ada)
                 if (paymentTimerStatus != null) ...[
                   _buildPaymentStatusBanner(),
-                  const SizedBox(height: 12),
                 ],
+
+                const SizedBox(height: 12),
 
                 // Divider
                 Container(
@@ -173,6 +188,7 @@ class PesananCard extends StatelessWidget {
 
                 // Info section
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Column(
@@ -181,7 +197,12 @@ class PesananCard extends StatelessWidget {
                             Icons.calendar_today_rounded,
                             dateValue,
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 5),
+                          _buildInfoItem(
+                            Icons.access_time,
+                            timeValue,
+                          ),
+                          const SizedBox(height: 5),
                           _buildInfoItem(
                             Icons.location_on_rounded,
                             location,
@@ -386,6 +407,67 @@ class PesananCard extends StatelessWidget {
     );
   }
 
+  Widget _buildProgressStatusBanner() {
+    final currentStatus = statusProgress.toLowerCase();
+    final statusData = StatusProgresConstant.statusOptions.firstWhere(
+      (s) => s['value'] == currentStatus,
+      orElse: () => {
+        'color': Constants.primaryColorVendor,
+        'icon': Icons.hourglass_empty_rounded,
+      },
+    );
+    final Color statusColor = statusData['color'] as Color;
+    final IconData statusIcon = statusData['icon'] as IconData;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              statusIcon,
+              size: 16,
+              color: statusColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  Helper.capitalizeFirst(statusProgress),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+                Text(
+                  deskripsiProgress,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: statusColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButton(BuildContext context) {
     // Jika ada payment status, customize button
     if (paymentTimerStatus != null) {
@@ -415,25 +497,18 @@ class PesananCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: const Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 20,
+                  vertical: 8,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.refresh,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    SizedBox(width: 6),
                     Text(
-                      'Coba Lagi',
+                      'Pembayaran',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
                       ),
                     ),
                   ],
@@ -468,8 +543,8 @@ class PesananCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: const Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
+                  horizontal: 20,
+                  vertical: 8,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -521,8 +596,8 @@ class PesananCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: const Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 20,
+                  vertical: 8,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -579,7 +654,7 @@ class PesananCard extends StatelessWidget {
           child: const Padding(
             padding: EdgeInsets.symmetric(
               horizontal: 20,
-              vertical: 12,
+              vertical: 8,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -631,8 +706,6 @@ class PesananCard extends StatelessWidget {
               color: Colors.grey.shade700,
               fontWeight: FontWeight.w500,
             ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
           ),
         ),
       ],

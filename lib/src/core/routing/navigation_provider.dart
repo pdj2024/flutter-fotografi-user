@@ -6,16 +6,16 @@ import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
-import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class NavigationProvider with ChangeNotifier {
   DeviceTokenService deviceTokenService = DeviceTokenService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  
+  // ✅ Gunakan singleton AuthService
+  final AuthService _authService = AuthService();
 
   // ─────────────── State
   int _selectedIndex = 0;
@@ -28,15 +28,13 @@ class NavigationProvider with ChangeNotifier {
   static const String _keyStatusUser = 'status_user';
   static const String _keyRole = 'user_role';
 
-//  bool get _isLoggedIn => FirebaseAuth.instance.currentUser != null;
-
-  void clearSelectedIndex() async {
+  void clearSelectedIndex() {
     _selectedIndex = 0;
     notifyListeners();
   }
 
   // =========================================================
-  // 💾 SIMPAN & AMBIL STATUS USER (gunakan secure storage)
+  // 💾 SIMPAN & AMBIL STATUS USER
   // =========================================================
   Future<void> saveStatusUser(String status) async {
     await _storage.write(key: _keyStatusUser, value: status);
@@ -55,7 +53,7 @@ class NavigationProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 💾 SIMPAN & AMBIL ROLE (gunakan secure storage)
+  // 💾 SIMPAN & AMBIL ROLE
   // =========================================================
   Future<void> saveRole(String role) async {
     await _storage.write(key: _keyRole, value: role);
@@ -92,8 +90,7 @@ class NavigationProvider with ChangeNotifier {
         return;
       }
 
-      // Simpan status dan role
-      _statusUser = status.name; // enum -> string
+      _statusUser = status.name;
       await saveStatusUser(_statusUser!);
       await saveRole(role);
 
@@ -106,50 +103,32 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-// =========================================================
-  // 🚪 HANDLE LOGOUT - HAPUS SEMUA DATA
+  // =========================================================
+  // 🚪 HANDLE LOGOUT
   // =========================================================
   Future<void> handleLogout(BuildContext context) async {
     print("===== [handleLogout] start");
 
     try {
-      // 1️⃣ Remove device token jika ada
       final userProv = context.read<UserProvider>();
-      if (userProv.customer != null) {
-        try {
-          await deviceTokenService.removeDeviceToken(userProv.customer!.noId);
-        } catch (e) {
-          print("⚠️ Error remove device token: $e");
-        }
-      }
 
-      // 2️⃣ Logout dari Google & hapus data di AuthService
-      await authService.logout();
+      await userProv.logout();
 
-      // 3️⃣ Hapus data lokal di NavigationProvider
       await clearStatusUser();
       await clearRole();
       clearSelectedIndex();
-
-      // 4️⃣ Clear UserProvider
-      userProv.clear();
+      resetNavigationHistory();
 
       print("✅ Semua data berhasil dihapus");
 
-      // 5️⃣ Redirect ke login
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainMenu()),
-          (_) => false,
-        );
-      }
+      // Redirect ke login
+      popAllToRoot();
 
       print("===== [handleLogout] selesai");
     } catch (e, s) {
       print("❌ Error saat handleLogout: $e");
       print(s);
 
-      // Fallback: tetap redirect ke login meskipun ada error
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const UserLogin()),
@@ -163,7 +142,9 @@ class NavigationProvider with ChangeNotifier {
   // 🔍 CHECK AUTHENTICATION STATUS
   // =========================================================
   Future<bool> isAuthenticated() async {
-    return await apiClient.isAuthenticated();
+    // ✅ Gunakan AuthService singleton
+    final token = await _authService.getIdToken(forceRefresh: false);
+    return token != null && token.isNotEmpty;
   }
 
   // =========================================================
@@ -189,9 +170,9 @@ class NavigationProvider with ChangeNotifier {
   }
 
   void onItemTapped(int index, BuildContext context) async {
-    // Cek auth untuk tab yang membutuhkan login (kecuali tab 0)
     final isAuth = await isAuthenticated();
 
+    // ✅ Tab 0 (Home) bisa diakses tanpa login
     if (!isAuth && index != 0) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
@@ -233,7 +214,6 @@ class NavigationProvider with ChangeNotifier {
 
     if (currentNavigator == null) return true;
 
-    // 1. Coba pop halaman di tab saat ini
     bool didPop = await currentNavigator.maybePop();
 
     if (didPop) {
@@ -248,7 +228,6 @@ class NavigationProvider with ChangeNotifier {
       return false;
     }
 
-    // 2. Tidak bisa pop → cek apakah kita bisa kembali ke tab sebelumnya
     if (_navigationHistory.length >= 2) {
       _navigationHistory.removeLast();
       final previousIndex = _navigationHistory.last;
@@ -261,7 +240,6 @@ class NavigationProvider with ChangeNotifier {
       return false;
     }
 
-    // 3. Izinkan keluar app
     return true;
   }
 
@@ -305,12 +283,10 @@ class NavigationProvider with ChangeNotifier {
 
     print("====================== TARGET: $targetPage");
 
-    // ✅ Cek login dari AuthService, bukan dari _isLoggedIn yang tidak akurat
-    final idToken =
-        await AuthService().getIdToken(); // atau authKeGoogle(silent: true)
-    final sudahLogin = idToken != null;
+    // ✅ Gunakan singleton AuthService
+    final isAuth = await isAuthenticated();
 
-    if (!sudahLogin && hrsLogin) {
+    if (!isAuth && hrsLogin) {
       print("🔒 BELUM LOGIN, redirect ke UserLogin");
       Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
@@ -328,12 +304,8 @@ class NavigationProvider with ChangeNotifier {
     }
 
     print("✅ SUDAH LOGIN");
-    print("==== HISTORY: $_navigationHistory");
 
     int targetIndex = targetTabIndex;
-
-    print(
-        "🔑 navigatorKeys[targetIndex].currentState: ${navigatorKeys[targetIndex].currentState}");
 
     navigatorKeys[targetIndex].currentState?.push(
           MaterialPageRoute(builder: (_) => page),

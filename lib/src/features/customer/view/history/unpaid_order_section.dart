@@ -122,11 +122,12 @@ class _UnpaidOrderSectionState extends State<UnpaidOrderSection> {
           child: PesananCard(
             clientName: item.namaVendor ?? "Vendor",
             kategori: item.namaPaket,
-            dateValue:
-                "${DateFormat("dd/MM/yyyy").format(item.tglRealisasi)} - ${Helper.toLocalTime(item.tglRealisasi)}",
-            location: "${item.lokasi}, ${item.namaKota}",
-            // Payment timer status
+            dateValue: DateFormat("dd MMMM yyyy").format(item.tglRealisasi),
+            timeValue: Helper.toLocalTime(item.tglRealisasi),
+            location: item.lokasi,
             paymentTimerStatus: status,
+            statusProgress: item.statusProgresPesanan ?? "proses",
+            deskripsiProgress: item.deskripsiProgresPesanan ?? "",
             onTap: () {
               context.read<NavigationProvider>().navigateToPage(
                     context,

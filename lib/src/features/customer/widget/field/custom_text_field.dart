@@ -11,6 +11,7 @@ class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType keyboardType;
   final bool readOnly;
+  final FocusNode? focusNode;
   final VoidCallback? onTap;
   final Widget? suffixIcon;
   final Widget? prefixIcon;
@@ -28,6 +29,7 @@ class CustomTextField extends StatelessWidget {
     this.onTap,
     this.suffixIcon,
     this.prefixIcon,
+    this.focusNode,
   });
 
   @override
@@ -49,14 +51,21 @@ class CustomTextField extends StatelessWidget {
           maxLines: maxLines,
           readOnly: readOnly,
           onTap: onTap,
-          style: const TextStyle(fontSize: 14),
+          focusNode: focusNode,
+          style: TextStyle(
+            fontSize: 14,
+            color: readOnly ? Colors.grey.shade600 : Colors.black,
+          ),
           inputFormatters: inputFormatters,
-          cursorColor: Constants.primaryColor,
+          cursorColor: Constants.primaryColorVendor,
           decoration: InputDecoration(
             hintText: placeholder,
             hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+
             filled: true,
-            fillColor: Colors.white,
+            fillColor: readOnly // ✅ UBAH BACKGROUND JIKA READONLY
+                ? Colors.grey.shade100
+                : Colors.white,
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
             contentPadding:
@@ -65,13 +74,18 @@ class CustomTextField extends StatelessWidget {
             /// Border Style
             enabledBorder: _border(Colors.grey.shade300),
             border: _border(Colors.grey.shade300),
-            focusedBorder: _border(Constants.primaryColor, 2),
+            focusedBorder: _border(
+              readOnly
+                  ? Colors.grey.shade400
+                  : Constants.primaryColorVendor, // ✅ UPDATE
+              2,
+            ),
             errorBorder: _border(Colors.red, 1.6),
             focusedErrorBorder: _border(Colors.red, 2),
           ),
         ),
 
-        /// Error Text (Better Spacing + Style)
+        /// Error Text
         if (errorMessage != null) ...[
           const SizedBox(height: 4),
           Padding(
@@ -88,7 +102,7 @@ class CustomTextField extends StatelessWidget {
     );
   }
 
-  /// Border builder agar lebih clean
+  /// Border builder
   OutlineInputBorder _border(Color color, [double width = 1]) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),

@@ -25,12 +25,14 @@ class _EditAccountPageState extends State<EditAccountPage> {
   final _formKey = GlobalKey<FormState>();
   TextEditingController nameController = TextEditingController();
   TextEditingController usernameController = TextEditingController();
+  TextEditingController emailController = TextEditingController();
   KotaModel? selectedKota;
 
   // Error Message
   String? nameError;
   String? usernameError;
   String? kotaError;
+  String? emailError;
 
   Future<void> update(BuildContext context) async {
     final userProvider = context.read<UserProvider>();
@@ -44,6 +46,9 @@ class _EditAccountPageState extends State<EditAccountPage> {
         userName: usernameController.text.trim().isNotEmpty
             ? usernameController.text.trim()
             : customer.userName,
+        email: emailController.text.trim().isNotEmpty
+            ? emailController.text.trim()
+            : customer.email,
         kota: kotaId,
       );
 
@@ -66,6 +71,7 @@ class _EditAccountPageState extends State<EditAccountPage> {
     setState(() {
       nameController.text = customer.namaDisplay;
       usernameController.text = customer.userName;
+      emailController.text = customer.email;
       selectedKota = KotaModel(
         noId: customer.kota,
         namaKota: customer.namaKota,
@@ -199,6 +205,14 @@ class _EditAccountPageState extends State<EditAccountPage> {
                 placeholder: "Username",
                 keyboardType: TextInputType.text,
                 errorMessage: usernameError,
+              ),
+              CustomTextField(
+                label: "Email",
+                controller: emailController,
+                readOnly: true,
+                placeholder: "Email",
+                keyboardType: TextInputType.text,
+                errorMessage: emailError,
               ),
               SingleSelectDropdown<KotaModel>(
                 config: KotaDropdownConfig(

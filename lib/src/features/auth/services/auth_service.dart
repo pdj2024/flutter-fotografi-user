@@ -3,14 +3,22 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
+  // ✅ SINGLETON PATTERN
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email'],
   );
-  
+
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   GoogleSignInAccount? _currentUser;
   String? _cachedIdToken;
+  
+  // ✅ Gunakan storage untuk persist flag
+  static const String _keyJustLoggedOut = 'just_logged_out';
 
   // Storage Keys
   static const String _keyIdToken = 'id_token';
@@ -20,219 +28,334 @@ class AuthService {
   static const String _keyUserId = 'user_id';
   static const String _keyTokenExpiry = 'token_expiry';
 
-  /// 🔹 Status login
-  bool get isLoggedIn => _currentUser != null;
-
+  // ✅ Getter untuk status login yang akurat
+  bool get isLoggedIn => _currentUser != null && _cachedIdToken != null;
   String? get email => _currentUser?.email;
   String? get displayName => _currentUser?.displayName;
   String? get photoUrl => _currentUser?.photoUrl;
   String? get userId => _currentUser?.id;
+  String? get cachedToken => _cachedIdToken;
 
   // =========================================================
-  // 🔄 RESTORE SESSION DARI STORAGE
+  // 🔄 CHECK JUST LOGGED OUT (dari storage)
   // =========================================================
-  Future<bool>  restoreSession() async {
+  Future<bool> _isJustLoggedOut() async {
+    final value = await _storage.read(key: _keyJustLoggedOut);
+    return value == 'true';
+  }
+
+  Future<void> _setJustLoggedOut(bool value) async {
+    if (value) {
+      await _storage.write(key: _keyJustLoggedOut, value: 'true');
+    } else {
+      await _storage.delete(key: _keyJustLoggedOut);
+    }
+  }
+
+  // =========================================================
+  // 🔄 RESTORE SESSION
+  // =========================================================
+  Future<bool> restoreSession() async {
     try {
-      print("🔄 Mencoba restore session...");
-      
-      final savedToken = await _storage.read(key: _keyIdToken);
-      final savedEmail = await _storage.read(key: _keyEmail);
-      
-      if (savedToken == null || savedEmail == null) {
-        print("⚠️ Tidak ada session tersimpan");
+      print("🔄 [AuthService] Mencoba restore session...");
+
+      // Cek apakah baru logout
+      if (await _isJustLoggedOut()) {
+        print("⚠️ [AuthService] Baru logout, skip restore");
         return false;
       }
 
-      // Cek apakah token expired
+      final savedToken = await _storage.read(key: _keyIdToken);
+      final savedEmail = await _storage.read(key: _keyEmail);
+
+      if (savedToken == null || savedEmail == null) {
+        print("⚠️ [AuthService] Tidak ada session tersimpan");
+        _clearMemoryState();
+        return false;
+      }
+
+      // Cek expiry
       final expiryStr = await _storage.read(key: _keyTokenExpiry);
       if (expiryStr != null) {
         final expiry = DateTime.parse(expiryStr);
         if (DateTime.now().isAfter(expiry)) {
-          print("⚠️ Token expired, perlu login ulang");
-          return await login(silent: true) != null;
+          print("⚠️ [AuthService] Token expired");
+          await _clearAllData();
+          return false;
         }
       }
 
-      // Coba silent sign in
-      _currentUser = await _googleSignIn.signInSilently(
-        reAuthenticate: false,
-      );
+      // Silent sign in
+      _currentUser = await _googleSignIn.signInSilently();
 
       if (_currentUser != null) {
         _cachedIdToken = savedToken;
-        print("✅ Session restored: $savedEmail");
+        print("✅ [AuthService] Session restored: $savedEmail");
         return true;
       }
 
-      print("⚠️ Silent sign in gagal");
+      print("⚠️ [AuthService] Silent sign in gagal");
+      await _clearAllData();
       return false;
     } catch (e) {
-      print("❌ Restore session error: $e");
+      print("❌ [AuthService] Restore session error: $e");
+      await _clearAllData();
       return false;
     }
   }
 
   // =========================================================
-  // 💾 SIMPAN DATA USER KE STORAGE
+  // 💾 SIMPAN DATA USER
   // =========================================================
   Future<void> _saveUserData(String idToken) async {
     try {
       if (_currentUser == null) return;
 
-      // Simpan token dan data user
       await _storage.write(key: _keyIdToken, value: idToken);
       await _storage.write(key: _keyEmail, value: _currentUser!.email);
-      await _storage.write(key: _keyDisplayName, value: _currentUser!.displayName ?? '');
-      await _storage.write(key: _keyPhotoUrl, value: _currentUser!.photoUrl ?? '');
+      await _storage.write(
+          key: _keyDisplayName, value: _currentUser!.displayName ?? '');
+      await _storage.write(
+          key: _keyPhotoUrl, value: _currentUser!.photoUrl ?? '');
       await _storage.write(key: _keyUserId, value: _currentUser!.id);
 
-      // Simpan waktu expired (JWT biasanya 1 jam)
       final expiry = DateTime.now().add(const Duration(minutes: 55));
-      await _storage.write(key: _keyTokenExpiry, value: expiry.toIso8601String());
+      await _storage.write(
+          key: _keyTokenExpiry, value: expiry.toIso8601String());
 
-      print("💾 User data tersimpan");
+      // Clear flag just logged out
+      await _setJustLoggedOut(false);
+
+      print("💾 [AuthService] User data tersimpan");
     } catch (e) {
-      print("❌ Gagal simpan user data: $e");
+      print("❌ [AuthService] Gagal simpan user data: $e");
     }
   }
 
   // =========================================================
-  // 🗑️ HAPUS DATA USER DARI STORAGE
+  // 🗑️ CLEAR DATA
   // =========================================================
-  Future<void> _clearUserData() async {
+  void _clearMemoryState() {
+    _currentUser = null;
+    _cachedIdToken = null;
+  }
+
+  Future<void> _clearAllData() async {
     try {
+      _clearMemoryState();
+      
       await _storage.delete(key: _keyIdToken);
       await _storage.delete(key: _keyEmail);
       await _storage.delete(key: _keyDisplayName);
       await _storage.delete(key: _keyPhotoUrl);
       await _storage.delete(key: _keyUserId);
       await _storage.delete(key: _keyTokenExpiry);
-
-      print("🗑️ User data terhapus");
+      
+      print("🗑️ [AuthService] Semua data terhapus");
     } catch (e) {
-      print("❌ Gagal hapus user data: $e");
+      print("❌ [AuthService] Gagal hapus data: $e");
     }
   }
 
   // =========================================================
-  // 🔐 LOGIN → SELALU TOKEN BARU
+  // 🔐 LOGIN
   // =========================================================
   Future<String?> login({bool silent = false}) async {
     try {
-      print("🔑 Login ${silent ? 'SILENT' : 'INTERACTIVE'}");
+      print("🔑 [AuthService] Login ${silent ? 'SILENT' : 'INTERACTIVE'}");
 
-      // ❗ PAKSA BUANG TOKEN LAMA
       _cachedIdToken = null;
 
-      // ambil account
-      _currentUser = silent
-          ? await _googleSignIn.signInSilently(reAuthenticate: true)
-          : await _googleSignIn.signIn();
+      // Cek flag just logged out untuk silent login
+      if (silent && await _isJustLoggedOut()) {
+        print("⚠️ [AuthService] Skip silent login setelah logout");
+        return null;
+      }
+
+      if (silent) {
+        _currentUser = await _googleSignIn.signInSilently();
+      } else {
+        // Clear flag sebelum interactive login
+        await _setJustLoggedOut(false);
+        _currentUser = await _googleSignIn.signIn();
+      }
 
       if (_currentUser == null) {
-        print("⚠️ Login dibatalkan / gagal");
-        await _clearUserData(); // Hapus data jika login gagal
+        print("⚠️ [AuthService] Login dibatalkan / gagal");
         return null;
       }
 
-      // ❗ PAKSA REFRESH TOKEN
-      final auth = await _currentUser!.authentication;
+      // Get token dengan error handling
+      String? idToken;
+      try {
+        final auth = await _currentUser!.authentication;
+        idToken = auth.idToken;
+      } catch (authError) {
+        print("⚠️ [AuthService] Auth error: $authError");
 
-      if (auth.idToken == null) {
-        print("❌ ID Token null");
-        await _clearUserData();
+        if (authError.toString().contains('NEED_REMOTE_CONSENT') ||
+            authError.toString().contains('SIGN_IN_REQUIRED')) {
+          print("🔄 [AuthService] Mencoba ulang setelah clear cache...");
+
+          await _googleSignIn.signOut();
+          _currentUser = await _googleSignIn.signIn();
+
+          if (_currentUser != null) {
+            final retryAuth = await _currentUser!.authentication;
+            idToken = retryAuth.idToken;
+          }
+        } else {
+          rethrow;
+        }
+      }
+
+      if (idToken == null) {
+        print("❌ [AuthService] ID Token null");
+        await _clearAllData();
         return null;
       }
 
-      _cachedIdToken = auth.idToken;
-
-      // 💾 SIMPAN DATA USER
+      _cachedIdToken = idToken;
       await _saveUserData(_cachedIdToken!);
 
-      print("✅ Login sukses: ${_currentUser!.email}");
+      print("✅ [AuthService] Login sukses: ${_currentUser!.email}");
       _debugJwt(_cachedIdToken!);
 
       return _cachedIdToken;
     } catch (e) {
-      print("❌ Login error: $e");
-      await _clearUserData();
+      print("❌ [AuthService] Login error: $e");
+      await _clearAllData();
       return null;
     }
   }
 
   // =========================================================
-  // 🔄 AMBIL TOKEN → SELALU FRESH
+  // 🔄 GET ID TOKEN
   // =========================================================
-  Future<String?> getIdToken({bool forceRefresh = true}) async {
+  Future<String?> getIdToken({bool forceRefresh = false}) async {
     try {
-      // Cek apakah token di storage masih valid
+      // Cek flag just logged out
+      if (await _isJustLoggedOut()) {
+        print("⚠️ [AuthService] Baru logout, perlu login manual");
+        return null;
+      }
+
+      // Cek cached token
       if (!forceRefresh && _cachedIdToken != null) {
         final expiryStr = await _storage.read(key: _keyTokenExpiry);
         if (expiryStr != null) {
           final expiry = DateTime.parse(expiryStr);
-          if (DateTime.now().isBefore(expiry)) {
-            print("✅ Menggunakan cached token");
+          final bufferTime = DateTime.now().add(const Duration(minutes: 5));
+          if (bufferTime.isBefore(expiry)) {
+            print("✅ [AuthService] Menggunakan cached token");
             return _cachedIdToken;
           }
         }
       }
 
-      if (_currentUser == null) {
-        _currentUser = await _googleSignIn.signInSilently(
-          reAuthenticate: true,
-        );
-      }
+      // Refresh token
+      _currentUser ??= await _googleSignIn.signInSilently();
 
       if (_currentUser == null) {
-        await _clearUserData();
+        print("⚠️ [AuthService] Tidak ada user, perlu login");
+        await _clearAllData();
         return null;
       }
 
-      final auth = await _currentUser!.authentication;
-      _cachedIdToken = auth.idToken;
+      try {
+        final auth = await _currentUser!.authentication;
+        _cachedIdToken = auth.idToken;
 
-      // 💾 UPDATE TOKEN DI STORAGE
-      if (_cachedIdToken != null) {
-        await _saveUserData(_cachedIdToken!);
+        if (_cachedIdToken != null) {
+          await _saveUserData(_cachedIdToken!);
+        }
+
+        return _cachedIdToken;
+      } catch (authError) {
+        print("⚠️ [AuthService] getIdToken auth error: $authError");
+        _clearMemoryState();
+        return null;
       }
-
-      return _cachedIdToken;
     } catch (e) {
-      print("❌ getIdToken error: $e");
+      print("❌ [AuthService] getIdToken error: $e");
       return null;
     }
   }
 
   // =========================================================
-  // 🚪 LOGOUT TOTAL
+  // 🚪 LOGOUT
   // =========================================================
   Future<void> logout() async {
     try {
-      await _googleSignIn.disconnect(); // ⬅️ penting
-      await _googleSignIn.signOut();
+      print("🚪 [AuthService] Memulai logout...");
 
-      _currentUser = null;
-      _cachedIdToken = null;
+      // Set flag SEBELUM clear data
+      await _setJustLoggedOut(true);
 
-      // 🗑️ HAPUS SEMUA DATA USER
-      await _clearUserData();
+      try {
+        await _googleSignIn.signOut();
+        print("✅ [AuthService] Google signOut berhasil");
+      } catch (e) {
+        print("⚠️ [AuthService] SignOut error (diabaikan): $e");
+      }
 
-      print("✅ Logout total berhasil");
+      await _clearAllData();
+      
+      // Set flag lagi setelah clear (untuk memastikan)
+      await _setJustLoggedOut(true);
+
+      print("✅ [AuthService] Logout berhasil");
     } catch (e) {
-      print("❌ Logout error: $e");
+      print("❌ [AuthService] Logout error: $e");
+      _clearMemoryState();
+      await _setJustLoggedOut(true);
     }
   }
 
   // =========================================================
-  // 📖 AMBIL DATA USER DARI STORAGE (optional helper)
+  // 🔄 LOGOUT DAN REVOKE (untuk ganti akun)
   // =========================================================
-  Future<Map<String, String?>> getSavedUserData() async {
-    return {
-      'email': await _storage.read(key: _keyEmail),
-      'displayName': await _storage.read(key: _keyDisplayName),
-      'photoUrl': await _storage.read(key: _keyPhotoUrl),
-      'userId': await _storage.read(key: _keyUserId),
-    };
+  Future<void> logoutAndRevoke() async {
+    try {
+      print("🚪 [AuthService] Logout dengan revoke...");
+
+      await _setJustLoggedOut(true);
+
+      try {
+        await _googleSignIn.disconnect();
+        print("✅ [AuthService] Google disconnect berhasil");
+      } catch (e) {
+        print("⚠️ [AuthService] Disconnect error: $e");
+        await _googleSignIn.signOut();
+      }
+
+      await _clearAllData();
+      await _setJustLoggedOut(true);
+
+      print("✅ [AuthService] Logout dan revoke berhasil");
+    } catch (e) {
+      print("❌ [AuthService] logoutAndRevoke error: $e");
+      _clearMemoryState();
+      await _setJustLoggedOut(true);
+    }
+  }
+
+  // =========================================================
+  // 🔄 LOGIN DENGAN AKUN BERBEDA
+  // =========================================================
+  Future<String?> loginWithDifferentAccount() async {
+    try {
+      print("🔄 [AuthService] Login dengan akun berbeda...");
+
+      await logoutAndRevoke();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _setJustLoggedOut(false);
+
+      return await login(silent: false);
+    } catch (e) {
+      print("❌ [AuthService] loginWithDifferentAccount error: $e");
+      return null;
+    }
   }
 
   // =========================================================
@@ -243,10 +366,9 @@ class AuthService {
       final parts = token.split('.');
       final payloadBase64 = base64Url.normalize(parts[1]);
       final payloadString = utf8.decode(base64Url.decode(payloadBase64));
-      print("📦 JWT PAYLOAD:");
-      print(payloadString);
+      print("📦 [AuthService] JWT PAYLOAD: $payloadString");
     } catch (e) {
-      print("❌ Decode JWT gagal: $e");
+      print("❌ [AuthService] Decode JWT gagal: $e");
     }
   }
 }
