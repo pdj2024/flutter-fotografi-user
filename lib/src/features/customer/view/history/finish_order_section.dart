@@ -21,6 +21,7 @@ class FinishOrderSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: PesananCard(
             clientName: item.namaVendor ?? "Vendor",
+            imgUrl: item.idMediaVendor ?? "",
             kategori: item.namaPaket,
             dateValue: DateFormat("dd MMMM yyyy").format(item.tglRealisasi),
             timeValue: Helper.toLocalTime(item.tglRealisasi),

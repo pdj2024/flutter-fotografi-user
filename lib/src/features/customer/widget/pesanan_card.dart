@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
+import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 
 class PaymentTimerStatus {
   final bool isExpired;
@@ -15,6 +17,7 @@ class PaymentTimerStatus {
 
 class PesananCard extends StatelessWidget {
   final String clientName;
+  final String imgUrl;
   final String kategori;
   final String dateValue;
   final String timeValue;
@@ -30,6 +33,7 @@ class PesananCard extends StatelessWidget {
   const PesananCard({
     super.key,
     required this.clientName,
+    required this.imgUrl,
     required this.kategori,
     required this.dateValue,
     required this.timeValue,
@@ -73,32 +77,55 @@ class PesananCard extends StatelessWidget {
                 Row(
                   children: [
                     // Avatar circle
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Constants.primaryColorVendor,
-                            Constants.primaryColorVendor.withOpacity(0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          (clientName.isEmpty ? "C" : clientName[0])
-                              .toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                    imgUrl != ""
+                        ? CircleAvatar(
+                            radius: 32,
+                            backgroundColor: Colors.grey.shade300,
+                            child: CachedNetworkImage(
+                              imageUrl: imgUrl,
+                              imageBuilder: (context, imageProvider) =>
+                                  CircleAvatar(
+                                radius: 32,
+                                backgroundImage: imageProvider,
+                              ),
+                              placeholder: (context, url) => ShimmerPlaceholder(
+                                radius: 32,
+                              ),
+                              errorWidget: (context, url, error) =>
+                                  const CircleAvatar(
+                                radius: 32,
+                                backgroundColor: Colors.grey,
+                                child: Icon(Icons.person,
+                                    color: Colors.white, size: 18),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Constants.primaryColorVendor,
+                                  Constants.primaryColorVendor.withOpacity(0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                (clientName.isEmpty ? "C" : clientName[0])
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
                     const SizedBox(width: 12),
                     // Client name
                     Expanded(

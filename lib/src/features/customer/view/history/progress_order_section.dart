@@ -139,6 +139,7 @@ class _ProgressOrderSectionState extends State<ProgressOrderSection> {
                             ),
                             child: PesananCard(
                               clientName: item.namaVendor ?? "Vendor",
+                              imgUrl: item.idMediaVendor ?? "",
                               kategori: item.namaPaket,
                               dateValue: DateFormat("dd MMMM yyyy")
                                   .format(item.tglRealisasi),

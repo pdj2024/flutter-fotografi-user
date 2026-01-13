@@ -122,7 +122,7 @@ class ApiClient {
   Future<http.Response> _handleWithAuthRetry(
     Future<http.Response> Function() request, {
     int retryCount = 0,
-    int maxRetries = 1,
+    int maxRetries = 5,
   }) async {
     try {
       final response = await request();
