@@ -16,6 +16,7 @@ class NavigationProvider with ChangeNotifier {
   
   // ✅ Gunakan singleton AuthService
   final AuthService _authService = AuthService();
+  AuthService get authService => _authService;
 
   // ─────────────── State
   int _selectedIndex = 0;

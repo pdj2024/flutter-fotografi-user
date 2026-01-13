@@ -1,239 +1,252 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 
-class RoomChatProvider with ChangeNotifier {
-  PaketProvider paketProv;
-  PenawaranProvider penawaranProv;
+// Import providers yang sudah ada di project
+// import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+// import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
+
+/// Provider untuk mengelola single chat room
+///
+/// Kompatibel dengan struktur yang sudah ada
+class RoomChatProvider extends ChangeNotifier {
+  // Dependencies - gunakan dynamic untuk fleksibilitas
+  dynamic paketProv;
+  dynamic penawaranProv;
   ChatProvider chatProv;
 
   RoomChatProvider({
     required this.paketProv,
     required this.penawaranProv,
     required this.chatProv,
-  });
+  }) {
+    // ✅ Setup callback listener saat initialization
+    _setupCallbacks();
+  }
 
-  final messageController = TextEditingController();
+  // Controllers
+  final TextEditingController messageController = TextEditingController();
 
+  // Current room state
   String? vendorId;
   String? activeRoomId;
   RoomChatModel? roomInfo;
 
+  // Related data lists
   List<PaketModel> paketList = [];
   List<PenawaranModel> penawaranList = [];
 
+  // Attachment
   PaketModel? tawaranPaket;
   PenawaranModel? tawaranPenawaran;
+
+  // Loading states
   bool isLoading = false;
   bool isSending = false;
+  bool isLoadingOfferData = false;
 
-  //=============================
-  // ✅ GETTER - Realtime messages dari ChatProvider
-  //=============================
+  /// Setup callbacks dari ChatProvider
+  void _setupCallbacks() {
+    debugPrint('[RoomChatProvider] Setting up callbacks');
+
+    // ✅ Listen untuk offer data needed
+    chatProv.onOfferDataNeeded = (roomId) {
+      debugPrint(
+          '[RoomChatProvider] 🔔 onOfferDataNeeded triggered for room: $roomId');
+
+      // Hanya load jika ini adalah active room kita
+      if (activeRoomId == roomId) {
+        debugPrint('[RoomChatProvider] → Loading offer data for active room');
+        _autoLoadOfferData();
+      } else {
+        debugPrint('[RoomChatProvider] → Room $roomId is not active, skipping');
+      }
+    };
+  }
+
+  // Auto load offer data (dipanggil dari callback)
+
+  Future<void> _autoLoadOfferData() async {
+    // Prevent multiple simultaneous loads
+    if (isLoadingOfferData) {
+      debugPrint('[RoomChatProvider] ⚠️ Already loading offer data, skipping');
+      return;
+    }
+
+    try {
+      isLoadingOfferData = true;
+      await loadOfferData();
+    } finally {
+      isLoadingOfferData = false;
+    }
+  }
+
+  // =========================================
+  // UPDATE DEPENDENCIES
+  // =========================================
+
+  void updateDependencies({
+    required dynamic paketProv,
+    required dynamic penawaranProv,
+    required ChatProvider chatProv,
+  }) {
+    this.paketProv = paketProv;
+    this.penawaranProv = penawaranProv;
+    this.chatProv = chatProv;
+
+    // ✅ Re-setup callbacks saat dependencies di-update
+    _setupCallbacks();
+  }
+
+  // =========================================
+  // GETTERS
+  // =========================================
+
+  /// Get messages dari ChatProvider (reactive)
   List<ChatModel> get messages {
     if (activeRoomId == null) return [];
     return chatProv.getMessages(activeRoomId!);
   }
 
-  //=============================
-  // ✅ INIT CHAT - DENGAN LISTENER DATA REAL-TIME
-  //=============================
+  // =========================================
+  // INITIALIZATION
+  // =========================================
+
+  /// Initialize chat room
   Future<void> initChat({
     required String? roomId,
     required String? partnerId,
   }) async {
+    if (isLoading) return;
+
     isLoading = true;
     notifyListeners();
 
     try {
-      debugPrint("=== INIT CHAT START ===");
-      debugPrint("📍 Input roomId: $roomId");
-      debugPrint("👤 Input partnerId: $partnerId");
+      debugPrint('=== INIT ROOM CHAT ===');
+      debugPrint('RoomId: $roomId');
+      debugPrint('PartnerId: $partnerId');
 
       // Reset state
       vendorId = partnerId;
       tawaranPaket = null;
       tawaranPenawaran = null;
       activeRoomId = null;
+      chatProv.setActiveRoom(null);
+
       roomInfo = null;
 
-      // Setup listener untuk data paket/penawaran real-time
-      _setupRealTimeDataListeners();
-
-      // =============================================
-      // SCENARIO 1: Room ID sudah ada
-      // =============================================
+      // ================================
+      // CASE 1: Room ID sudah ada
+      // ================================
       if (roomId != null && roomId.isNotEmpty) {
-        debugPrint("➡️ Using existing roomId: $roomId");
+        debugPrint('→ Using existing roomId: $roomId');
         activeRoomId = roomId;
+        // ✅ Set active room silently dulu
+        chatProv.setActiveRoomSilently(activeRoomId);
 
-        // Fetch detail room
+        // Fetch room info
         final rooms = await chatProv.fetchRooms(roomId: roomId);
         if (rooms.isNotEmpty) {
           roomInfo = rooms.first;
-          vendorId = roomInfo!.userIds
-              .firstWhere(
-                (id) => id != chatProv.currentUserId,
-                orElse: () => partnerId ?? '',
-              )
-              .toString();
-
-          debugPrint("✅ Room info loaded");
+          vendorId = roomInfo!.idLawan;
         }
 
         // Load messages
-        debugPrint("➡️ Loading messages for room: $activeRoomId");
-        await chatProv.fetchMessages(activeRoomId!);
+        await chatProv.fetchMessages(roomId);
 
-        // Load offer data dari semua pesan yang ada
+        // Load related data
         await loadOfferData();
 
-        // Load data khusus untuk pesan yang memiliki idPaket/noInvoice
-        await _loadSpecificOfferData();
+        // ✅ Set active room dengan notify (untuk mark as read)
+        chatProv.setActiveRoom(activeRoomId);
       }
-      // =============================================
-      // SCENARIO 2: Cari/buat room berdasarkan partnerId
-      // =============================================
+      // ================================
+      // CASE 2: Cari room by partnerId
+      // ================================
       else if (partnerId != null && partnerId.isNotEmpty) {
-        debugPrint("➡️ Looking for room with partnerId: $partnerId");
+        debugPrint('→ Finding room for partner: $partnerId');
 
         final rooms = await chatProv.fetchRooms(idLawan: partnerId);
 
         if (rooms.isNotEmpty) {
-          // Room sudah ada
           activeRoomId = rooms.first.roomId;
-          roomInfo = rooms.first;
+          chatProv.setActiveRoom(activeRoomId);
 
-          debugPrint("✅ Found existing room: $activeRoomId");
+          roomInfo = rooms.first;
 
           // Load messages
           await chatProv.fetchMessages(activeRoomId!);
 
-          // Load offer data
+          // Load related data
           await loadOfferData();
-          await _loadSpecificOfferData();
+
+          // ✅ Set active room dengan notify
+          chatProv.setActiveRoom(activeRoomId);
         } else {
-          debugPrint("ℹ️ No existing room found");
+          debugPrint('→ No room found, will create on first message');
         }
       }
 
-      debugPrint("=== INIT CHAT SUCCESS ===");
+      debugPrint('=== INIT COMPLETE ===');
+      debugPrint('ActiveRoomId: $activeRoomId');
+      debugPrint('Messages: ${messages.length}');
     } catch (e, st) {
-      debugPrint("❌ Init chat error: $e\n$st");
+      debugPrint('❌ initChat error: $e\n$st');
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
-  //=============================
-  // ✅ SETUP REAL-TIME DATA LISTENERS
-  //=============================
-  void _setupRealTimeDataListeners() {
-    // Reset listeners
-    chatProv.onPaketDataReceived = null;
-    chatProv.onPenawaranDataReceived = null;
-
-    // Setup listener untuk paket data
-    chatProv.onPaketDataReceived = (PaketModel paket) {
-      debugPrint(
-          "ROOM_CHAT_PROVIDER :: Paket data received real-time: ${paket.nama_paket}");
-
-      // Tambahkan ke list jika belum ada
-      final exists = paketList.any((p) => p.no_id == paket.no_id);
-      if (!exists) {
-        paketList.add(paket);
-      }
-
-      // Jika ini adalah tawaran paket yang sedang aktif, update
-      if (tawaranPaket?.no_id == paket.no_id) {
-        tawaranPaket = paket;
-      }
-
-      notifyListeners();
-    };
-
-    // Setup listener untuk penawaran data
-    chatProv.onPenawaranDataReceived = (PenawaranModel penawaran) {
-      debugPrint(
-          "ROOM_CHAT_PROVIDER :: Penawaran data received real-time: ${penawaran.noTrackingPenawaran}");
-
-      // Tambahkan ke list jika belum ada
-      final exists = penawaranList.any((p) => p.noId == penawaran.noId);
-      if (!exists) {
-        penawaranList.add(penawaran);
-      }
-
-      // Jika ini adalah tawaran penawaran yang sedang aktif, update
-      if (tawaranPenawaran?.noId == penawaran.noId) {
-        tawaranPenawaran = penawaran;
-      }
-
-      notifyListeners();
-    };
-  }
-
-  //=============================
-  // ✅ LOAD SPECIFIC OFFER DATA
-  //=============================
-  Future<void> _loadSpecificOfferData() async {
-    debugPrint("=== LOAD SPECIFIC OFFER DATA START ===");
-
-    final msgs = messages;
-
-    for (final msg in msgs) {
-      // Jika pesan memiliki idPaket, fetch data paket
-      if (msg.idPaket != null && msg.idPaket!.isNotEmpty) {
-        debugPrint("➡️ Fetching paket for id: ${msg.idPaket}");
-
-        final paket = await chatProv.fetchPaket(msg.idPaket!);
-        if (paket != null) {
-          final exists = paketList.any((p) => p.no_id == paket.no_id);
-          if (!exists) {
-            paketList.add(paket);
-            debugPrint("✅ Paket added: ${paket.nama_paket}");
-          }
-        }
-      }
-
-      // Jika pesan memiliki noInvoice, fetch data penawaran
-      if (msg.noInvoice != null && msg.noInvoice!.isNotEmpty) {
-        debugPrint("➡️ Fetching penawaran for no: ${msg.noInvoice}");
-
-        final penawaran = await chatProv.fetchPenawaran(msg.noInvoice!);
-        if (penawaran != null) {
-          final exists =
-              penawaranList.any((p) => p.noPesanan == penawaran.noPesanan);
-          if (!exists) {
-            penawaranList.add(penawaran);
-            debugPrint("✅ Penawaran added: ${penawaran.noPesanan}");
-          }
-        }
-      }
+  RoomChatModel? _findRoomByUserId({
+    required String currentUserId,
+    required String targetUserId,
+  }) {
+    // ✅ Null checks
+    if (currentUserId.isEmpty || targetUserId.isEmpty) {
+      debugPrint('⚠️ _findRoomByUserId: Invalid user IDs');
+      return null;
     }
 
-    debugPrint("=== LOAD SPECIFIC OFFER DATA SUCCESS ===");
-    debugPrint("   - Paket count: ${paketList.length}");
-    debugPrint("   - Penawaran count: ${penawaranList.length}");
+    try {
+      // ✅ Pastikan chatProv dan rooms tidak null
+      if (chatProv.rooms.isEmpty) {
+        debugPrint('⚠️ _findRoomByUserId: No rooms available');
+        return null;
+      }
 
-    notifyListeners();
+      final room = chatProv.rooms.firstWhere(
+        (room) =>
+            room.userIds.contains(currentUserId) &&
+            room.userIds.contains(targetUserId),
+      );
+
+      debugPrint('✅ Found room: ${room.roomId}');
+      return room;
+    } catch (e) {
+      debugPrint('⚠️ _findRoomByUserId: Room not found');
+      return null;
+    }
   }
 
-  //=============================
-  // ✅ LOAD OFFER DATA (existing method)
-  //=============================
+  // =========================================
+  // LOAD RELATED DATA
+  // =========================================
+
+  /// Load paket & penawaran untuk semua messages
+  /// Load paket & penawaran untuk semua messages
   Future<void> loadOfferData() async {
-    debugPrint("=== LOAD OFFER DATA START ===");
+    debugPrint('=== LOAD OFFER DATA ===');
 
     try {
-      // Jika room belum ada, skip loading offer data
-      if (activeRoomId == null) {
-        debugPrint("⚠️ No activeRoomId, skip loading offer data");
+      // ✅ Early return jika activeRoomId null
+      if (activeRoomId == null || activeRoomId!.isEmpty) {
+        debugPrint('⚠️ No activeRoomId, skipping loadOfferData');
         paketList = [];
         penawaranList = [];
         return;
@@ -241,17 +254,93 @@ class RoomChatProvider with ChangeNotifier {
 
       final msgs = messages;
 
-      debugPrint("➡️ Loading paket from ${msgs.length} messages");
-      paketList = await paketProv.fetchPaketFromRoom(msgs);
+      // ✅ Early return jika tidak ada messages
+      if (msgs.isEmpty) {
+        debugPrint('⚠️ No messages, skipping loadOfferData');
+        paketList = [];
+        penawaranList = [];
+        return;
+      }
 
-      debugPrint("➡️ Loading penawaran from ${msgs.length} messages");
-      penawaranList = await penawaranProv.fetchPenawaranFromRoom(msgs);
+      // Collect unique IDs
+      final paketIds = <String>{};
+      final penawaranNos = <String>{};
 
-      debugPrint("=== LOAD OFFER DATA SUCCESS ===");
-      debugPrint("   - Paket count: ${paketList.length}");
-      debugPrint("   - Penawaran count: ${penawaranList.length}");
+      for (final msg in msgs) {
+        // ✅ Null safe checks
+        if (msg.hasPaket && msg.idPaket != null && msg.idPaket!.isNotEmpty) {
+          paketIds.add(msg.idPaket!);
+        }
+        if (msg.hasPenawaran &&
+            msg.noPenawaran != null &&
+            msg.noPenawaran!.isNotEmpty) {
+          penawaranNos.add(msg.noPenawaran!);
+        }
+      }
+
+      debugPrint('Paket IDs to fetch: $paketIds');
+      debugPrint('Penawaran Nos to fetch: $penawaranNos');
+
+      // Fetch paket
+      if (paketIds.isNotEmpty && paketProv != null) {
+        try {
+          debugPrint('Fetching paket from room...');
+          final result = await paketProv.fetchPaketFromRoom(msgs);
+          paketList = result ?? [];
+          debugPrint('✅ Fetched ${paketList.length} paket');
+        } catch (e, st) {
+          debugPrint('❌ Error fetching paket: $e\n$st');
+          paketList = [];
+        }
+      } else {
+        debugPrint('⚠️ No paket to fetch or paketProv is null');
+        paketList = [];
+      }
+
+      // Fetch penawaran
+      if (penawaranNos.isNotEmpty && penawaranProv != null) {
+        try {
+          debugPrint('Fetching penawaran from room...');
+          final result = await penawaranProv.fetchPenawaranFromRoom(msgs);
+          penawaranList = result ?? [];
+          debugPrint('✅ Fetched ${penawaranList.length} penawaran');
+        } catch (e, st) {
+          debugPrint('❌ Error fetching penawaran: $e\n$st');
+          penawaranList = [];
+        }
+      } else {
+        debugPrint('⚠️ No penawaran to fetch or penawaranProv is null');
+        penawaranList = [];
+      }
+
+      // Cek apakah ada penawaran yang sudah jadi pesanan dan update cache
+      if (penawaranList.isNotEmpty && activeRoomId != null) {
+        for (final penawaran in penawaranList) {
+          // ✅ Null safe checks
+          if (penawaran.noPesanan != null &&
+              penawaran.noPesanan!.isNotEmpty &&
+              penawaran.noTrackingPenawaran != null &&
+              penawaran.noTrackingPenawaran.isNotEmpty) {
+            try {
+              // Update message di cache
+              chatProv.updatePenawaranToPesanan(
+                activeRoomId!,
+                penawaran.noTrackingPenawaran,
+                penawaran.noPesanan!,
+              );
+              debugPrint(
+                  '✅ Updated penawaran ${penawaran.noTrackingPenawaran} -> pesanan ${penawaran.noPesanan}');
+            } catch (e) {
+              debugPrint('❌ Error updating penawaran to pesanan: $e');
+            }
+          }
+        }
+      }
+
+      debugPrint(
+          '✅ Load offer data complete: ${paketList.length} paket, ${penawaranList.length} penawaran');
     } catch (e, st) {
-      debugPrint("❌ loadOfferData error: $e\n$st");
+      debugPrint('❌ loadOfferData error: $e\n$st');
       paketList = [];
       penawaranList = [];
     } finally {
@@ -259,215 +348,233 @@ class RoomChatProvider with ChangeNotifier {
     }
   }
 
-  //=============================
-  // ✅ CLEANUP LISTENERS SAAT DISPOSE
-  //=============================
-  @override
-  void dispose() {
-    // Cleanup listeners
-    chatProv.onPaketDataReceived = null;
-    chatProv.onPenawaranDataReceived = null;
-
-    messageController.dispose();
-    super.dispose();
+  /// Get paket by ID
+  PaketModel? getPaket(String? idPaket) {
+    if (idPaket == null) return null;
+    try {
+      return paketList.firstWhere(
+        (p) => p.no_id == idPaket && p.status == 'aktif',
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
-  //=============================
-  // ✅ SEND MESSAGE - FULLY UPDATED
-  //=============================
+  /// Get penawaran by No
+  PenawaranModel? getPenawaran(String? noPenawaran) {
+    if (noPenawaran == null) return null;
+    try {
+      return penawaranList.firstWhere(
+        (p) => p.noId == noPenawaran && p.status == 'aktif',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // =========================================
+// SEND MESSAGE - IMPROVED VERSION
+// =========================================
+
+  /// Send message dengan smart room detection
   Future<void> sendMessage({
     required String currentUserId,
   }) async {
     final text = messageController.text.trim();
 
-    // Validation
-    if (text.isEmpty) {
-      debugPrint("⚠️ sendMessage: text is empty");
-      return;
-    }
-
-    if (isSending) {
-      debugPrint("⚠️ sendMessage: already sending, please wait");
-      return;
-    }
+    if (text.isEmpty && tawaranPaket == null) return;
+    if (isSending) return;
 
     isSending = true;
     notifyListeners();
 
-    debugPrint("=== SEND MESSAGE START ===");
-    debugPrint("📝 Message: $text");
-    debugPrint("🏠 Current roomId: $activeRoomId");
-    debugPrint("👤 Current userId: $currentUserId");
-    debugPrint("👥 Partner ID: $vendorId");
-    debugPrint("📦 Offer paket: ${tawaranPaket?.no_id}");
-
     try {
-      // =============================================
-      // STEP 1: Pastikan ada roomId atau partnerId
-      // =============================================
-      if (activeRoomId == null && vendorId == null) {
-        throw Exception("Cannot send message: no roomId or partnerId");
+      debugPrint('=== SEND MESSAGE ===');
+      debugPrint('CurrentUserId: $currentUserId');
+      debugPrint('VendorId: $vendorId');
+      debugPrint('ActiveRoomId: $activeRoomId');
+
+      if (vendorId == null) {
+        throw Exception('vendorId is null');
       }
 
-      // =============================================
-      // STEP 2: Jika belum ada room, coba cari dulu
-      // =============================================
-      if (activeRoomId == null || activeRoomId!.isEmpty) {
-        debugPrint("➡️ No active room, looking for existing room...");
+      // 1️⃣ Tentukan room yang akan digunakan
+      String resolvedRoomId;
+      List<String> resolvedUserIds;
 
-        if (vendorId == null || vendorId!.isEmpty) {
-          throw Exception("Cannot find/create room: no customerId");
-        }
-
-        final rooms = await chatProv.fetchRooms(idLawan: vendorId);
-
-        if (rooms.isNotEmpty) {
-          // Room ditemukan
-          activeRoomId = rooms.first.roomId;
-          roomInfo = rooms.first;
-          debugPrint("✅ Found existing room: $activeRoomId");
-
-          // Load messages untuk room ini
-          await chatProv.fetchMessages(activeRoomId!);
-        } else {
-          // Room belum ada
-          debugPrint("ℹ️ No room found, will create on send");
-          // activeRoomId tetap null, backend akan create
-        }
-      }
-
-      // =============================================
-      // STEP 3: Prepare userIds
-      // =============================================
-      List<String> userIds = [];
-
-      if (roomInfo != null) {
-        // Room sudah ada, ambil dari roomInfo
-        userIds = roomInfo!.userIds.map((e) => e.toString()).toList();
-        debugPrint("➡️ Using userIds from roomInfo: $userIds");
-      } else if (vendorId != null) {
-        // Room baru, set manual
-        userIds = [currentUserId, vendorId!];
-        debugPrint("➡️ Creating new userIds: $userIds");
+      if (activeRoomId != null && activeRoomId!.isNotEmpty) {
+        // Case A: Ada activeRoomId (sedang di dalam room chat)
+        debugPrint('→ Using activeRoomId: $activeRoomId');
+        resolvedRoomId = activeRoomId!;
+        resolvedUserIds = roomInfo?.userIds ?? [currentUserId, vendorId!];
       } else {
-        throw Exception("Cannot determine userIds");
+        // Case B: Tidak ada activeRoomId (kirim dari luar room, misal dari OfferCard)
+        debugPrint('→ No activeRoomId, finding room...');
+
+        final existingRoom = _findRoomByUserId(
+          currentUserId: currentUserId,
+          targetUserId: vendorId!,
+        );
+
+        if (existingRoom != null) {
+          debugPrint('→ Found existing room: ${existingRoom.roomId}');
+          resolvedRoomId = existingRoom.roomId;
+          resolvedUserIds = existingRoom.userIds;
+
+          // Update local state
+          activeRoomId = existingRoom.roomId;
+          roomInfo = existingRoom;
+          chatProv.setActiveRoomSilently(
+              activeRoomId); // ✅ Set tapi jangan mark as read
+        } else {
+          debugPrint('→ No existing room, will create new');
+          resolvedRoomId = '';
+          resolvedUserIds = [currentUserId, vendorId!];
+        }
       }
 
-      // =============================================
-      // STEP 4: Prepare message data
-      // =============================================
-      final isOfferPaket = tawaranPaket != null;
-      final idPaket = isOfferPaket ? tawaranPaket!.no_id : null;
+      debugPrint('ResolvedRoomId: $resolvedRoomId');
+      debugPrint('ResolvedUserIds: $resolvedUserIds');
 
-      debugPrint("➡️ Sending to ChatProvider.sendMessage");
-      debugPrint("   - roomId: ${activeRoomId ?? 'null (will create)'}");
-      debugPrint("   - userIds: $userIds");
-      debugPrint("   - idPaket: $idPaket");
-
-      // =============================================
-      // STEP 5: Kirim message via ChatProvider
-      // =============================================
-      await chatProv.sendMessage(
-        activeRoomId ?? "", // Jika null, backend akan create room
-        text,
-        idPaket,
-        null, // noInvoice
-        userIds,
+      // 2️⃣ Send message
+      final success = await chatProv.sendMessage(
+        roomId: resolvedRoomId,
+        message: text,
+        idPaket: tawaranPaket?.no_id,
+        noPenawaran: null,
+        userIds: resolvedUserIds,
       );
 
-      debugPrint("✅ Message sent successfully");
+      if (success) {
+        messageController.clear();
+        tawaranPaket = null;
 
-      // =============================================
-      // STEP 6: Update local state setelah kirim
-      // =============================================
+        // 3️⃣ Jika room baru dibuat, fetch room info
+        if (resolvedRoomId.isEmpty) {
+          debugPrint('→ Fetching newly created room...');
+          await Future.delayed(const Duration(milliseconds: 400));
 
-      // Jika sebelumnya room belum ada, fetch ulang untuk dapat roomId
-      if (activeRoomId == null) {
-        debugPrint("➡️ Fetching new room info after send...");
-
-        // Tunggu sebentar untuk backend create room
-        await Future.delayed(Duration(milliseconds: 500));
-
-        final rooms = await chatProv.fetchRooms(idLawan: vendorId);
-
-        if (rooms.isNotEmpty) {
-          activeRoomId = rooms.first.roomId;
-          roomInfo = rooms.first;
-
-          debugPrint("✅ Room created with ID: $activeRoomId");
-
-          // Load messages untuk room baru
-          await chatProv.fetchMessages(activeRoomId!);
+          final rooms = await chatProv.fetchRooms(idLawan: vendorId);
+          if (rooms.isNotEmpty) {
+            activeRoomId = rooms.first.roomId;
+            roomInfo = rooms.first;
+            chatProv.setActiveRoomSilently(activeRoomId);
+            await chatProv.fetchMessages(activeRoomId!);
+          }
         } else {
-          debugPrint("⚠️ Room tidak ditemukan setelah send");
+          // Room sudah ada, refresh messages
+          await chatProv.fetchMessages(resolvedRoomId);
         }
-      }
 
-      // =============================================
-      // STEP 7: Cleanup UI
-      // =============================================
-      messageController.clear();
-      tawaranPaket = null;
-
-      // Reload offer data jika ada perubahan
-      if (isOfferPaket) {
         await loadOfferData();
+
+        debugPrint('✅ Message sent successfully');
+      } else {
+        debugPrint('❌ Failed to send message');
       }
-
-      notifyListeners();
-
-      debugPrint("=== SEND MESSAGE END ===");
     } catch (e, st) {
-      debugPrint("❌ sendMessage error: $e\n$st");
-
-      // Show error to user
-      // Bisa gunakan SnackBar atau Dialog
-      rethrow;
+      debugPrint('❌ sendMessage error: $e\n$st');
     } finally {
       isSending = false;
       notifyListeners();
     }
   }
 
-  //=============================
-  // ✅ REFRESH ROOM DATA
-  //=============================
+  /// Send message dengan explicit partnerId (untuk kirim dari luar room)
+  Future<void> sendMessageToPartner({
+    required String currentUserId,
+    required String partnerId,
+    String? message,
+    PaketModel? paket,
+  }) async {
+    // Set vendor ID dulu
+    vendorId = partnerId;
+
+    // Set message dan paket jika ada
+    if (message != null && message.isNotEmpty) {
+      messageController.text = message;
+    }
+    if (paket != null) {
+      tawaranPaket = paket;
+    }
+
+    // Kirim message
+    await sendMessage(currentUserId: currentUserId);
+  }
+
+  // =========================================
+  // ATTACHMENT
+  // =========================================
+
+  /// Set paket attachment
+  void attachPaket(String idPaket, PaketModel paket) {
+    tawaranPaket = paket;
+    notifyListeners();
+  }
+
+  /// Alias untuk setTawaranPaket (kompatibilitas)
+  void setTawaranPaket(PaketModel? value) {
+    tawaranPaket = value;
+    notifyListeners();
+  }
+
+  /// Clear attachment
+  void clearAttachment() {
+    tawaranPaket = null;
+    tawaranPenawaran = null;
+    notifyListeners();
+  }
+
+  // =========================================
+  // REFRESH
+  // =========================================
+
+  /// Refresh room
   Future<void> refreshRoom() async {
     if (activeRoomId == null) {
-      debugPrint("⚠️ Cannot refresh: no activeRoomId");
+      debugPrint('⚠️ Cannot refresh: no activeRoomId');
       return;
     }
 
-    debugPrint("🔄 Refreshing room: $activeRoomId");
+    debugPrint('🔄 Refreshing room: $activeRoomId');
 
     try {
-      // Refresh messages
       await chatProv.fetchMessages(activeRoomId!);
-
-      // Refresh offer data
       await loadOfferData();
-
-      debugPrint("✅ Room refreshed successfully");
+      debugPrint('✅ Room refreshed');
     } catch (e) {
-      debugPrint("❌ Refresh room error: $e");
+      debugPrint('❌ Refresh error: $e');
     }
   }
 
-  //=============================
-  // ✅ MARK AS READ (opsional)
-  //=============================
-  // Future<void> markAsRead() async {
-  //   if (activeRoomId == null) return;
+  // =========================================
+  // CLEANUP
+  // =========================================
 
-  //   await chatProv.markRoomAsRead(activeRoomId!);
-  // }
-
-  //=============================
-  // ✅ CLEANUP
-  //=============================
+  /// Reset state
   void reset() {
-    debugPrint("🧹 Resetting RoomChatProvider");
+    debugPrint('🧹 Resetting RoomChatProvider');
 
+    messageController.clear();
+    vendorId = null;
+    activeRoomId = null;
+
+    roomInfo = null;
+    paketList = [];
+    penawaranList = [];
+    tawaranPaket = null;
+    tawaranPenawaran = null;
+    isLoading = false;
+    isSending = false;
+    isLoadingOfferData = false;
+
+    // ✅ Clear callbacks
+    chatProv.onOfferDataNeeded = null;
+
+    notifyListeners();
+  }
+
+  void resetSilently() {
     messageController.clear();
     vendorId = null;
     activeRoomId = null;
@@ -475,24 +582,20 @@ class RoomChatProvider with ChangeNotifier {
     paketList = [];
     penawaranList = [];
     tawaranPaket = null;
+    tawaranPenawaran = null;
     isLoading = false;
     isSending = false;
+    isLoadingOfferData = false;
 
-    notifyListeners();
+    // ✅ Clear callbacks
+    chatProv.onOfferDataNeeded = null;
   }
 
-  void setTawaranPaket(PaketModel? value) {
-    tawaranPaket = value;
-    notifyListeners();
-  }
-
-  void updateDependencies({
-    required PaketProvider paketProv,
-    required PenawaranProvider penawaranProv,
-    required ChatProvider chatProv,
-  }) {
-    this.paketProv = paketProv;
-    this.penawaranProv = penawaranProv;
-    this.chatProv = chatProv;
+  @override
+  void dispose() {
+    // ✅ Clear callbacks sebelum dispose
+    chatProv.onOfferDataNeeded = null;
+    messageController.dispose();
+    super.dispose();
   }
 }

@@ -66,20 +66,20 @@ class _MainMenuState extends State<MainMenu> {
                 print(user ?? "user kosong");
 
                 if (index == 1 && user != null) {
-                  final roomProvider = context.read<RoomChatProvider>();
-                  final chatProvider = context.read<ChatProvider>();
+                  // final roomProvider = context.read<RoomChatProvider>();
+                  // final chatProvider = context.read<ChatProvider>();
 
-                  if (roomProvider.activeRoomId != null &&
-                      roomProvider.roomInfo != null) {
-                    await roomProvider.initChat(
-                      roomId: roomProvider.activeRoomId,
-                      partnerId: roomProvider.roomInfo!.idLawan,
-                    );
-                    await roomProvider.loadOfferData();
-                  } else {
-                    chatProvider.isReady = false;
-                    await chatProvider.init(user.noId);
-                  }
+                  // if (roomProvider.activeRoomId != null &&
+                  //     roomProvider.roomInfo != null) {
+                  //   await roomProvider.initChat(
+                  //     roomId: roomProvider.activeRoomId,
+                  //     partnerId: roomProvider.roomInfo!.idLawan,
+                  //   );
+                  //   await roomProvider.loadOfferData();
+                  // } else {
+                  //   chatProvider.isReady = false;
+                  //   await chatProvider.init(user.noId);
+                  // }
                 }
 
                 if (index == 2 && user != null) {

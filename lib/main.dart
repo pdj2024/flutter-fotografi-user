@@ -25,7 +25,6 @@ import 'package:provider/provider.dart';
 
 import 'src/features/auth/services/user_provider.dart';
 import 'src/features/customer/services/customer_service.dart';
-import 'src/features/auth/services/auth_service.dart';
 import 'src/core/routing/navigation_provider.dart';
 import 'src/features/customer/services/portofolio_service.dart';
 
@@ -177,8 +176,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       print("=== 🚀 APLIKASI DIMULAI ===");
 
       // 1️⃣ Cek apakah ada session tersimpan
-      final authService = AuthService();
-      bool sessionRestored = await authService.restoreSession();
+      bool sessionRestored = await nav.authService.restoreSession();
 
       if (sessionRestored) {
         print("✅ Session ditemukan, mencoba restore user data...");
@@ -200,7 +198,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           // 5️⃣ Refresh token (silent login) untuk mendapatkan token terbaru
           try {
             print("🔄 Melakukan silent login untuk refresh token...");
-            final newToken = await authService.getIdToken(forceRefresh: true);
+            final newToken = await nav.authService.getIdToken(forceRefresh: true);
             
             if (newToken != null) {
               print("✅ Token berhasil di-refresh");
@@ -210,7 +208,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
               
               // 7️⃣ Initialize chat provider jika sudah login
               final chatProv = Provider.of<ChatProvider>(context, listen: false);
-              await chatProv.init(userProv.userId ?? '');
+              await chatProv.initWithApiClient(userId: userProv.customer!.noId, userType: Constants.customer, hubUrl: "${Constants.baseUrlHub}/api/chathub", getToken: () async => await nav.authService.getIdToken(forceRefresh: true),);
               
               print("✅ User sudah login, langsung ke MainMenu");
             } else {
