@@ -305,6 +305,89 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                       ),
 
                       /// =======================
+                      /// 💳 METODE PEMBAYARAN
+                      /// =======================
+                      if (penawaran!.noPesanan.isEmpty)
+                        _buildCardSection(
+                          title: "Metode Pembayaran",
+                          isRequired: true,
+                          content: GestureDetector(
+                            onTap: () => CustomDialog.showPaymentMethodDialog(
+                              context: context,
+                              metodePembayaran: metodePembayaran,
+                              currentKodeMetode: kodeMetode,
+                              onSelected: (kode, text, fee) {
+                                setState(() {
+                                  kodeMetode = kode;
+                                  textMetode = text;
+                                  biayaPembayaran = fee;
+                                });
+                                setHarga();
+                              },
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: kodeMetode == null
+                                    ? Colors.grey.shade50
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: kodeMetode == null
+                                      ? Colors.grey.shade300
+                                      : Constants.primaryColor,
+                                  width: kodeMetode == null ? 1 : 2,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade200
+                                              : Constants.primaryColor
+                                                  .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          CustomIcons.getMetodeIcon(
+                                              kodeMetode ?? ""),
+                                          size: 24,
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade600
+                                              : Constants.primaryColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        textMetode ?? "Pilih Metode Pembayaran",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: kodeMetode == null
+                                              ? Colors.grey.shade600
+                                              : Colors.black87,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      /// =======================
                       /// 📦 DETAIL PAKET (Expandable)
                       /// =======================
                       _buildExpandableCard(
@@ -449,89 +532,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-
-                      /// =======================
-                      /// 💳 METODE PEMBAYARAN
-                      /// =======================
-                      if (penawaran!.noPesanan.isEmpty)
-                        _buildCardSection(
-                          title: "Metode Pembayaran",
-                          isRequired: true,
-                          content: GestureDetector(
-                            onTap: () => CustomDialog.showPaymentMethodDialog(
-                              context: context,
-                              metodePembayaran: metodePembayaran,
-                              currentKodeMetode: kodeMetode,
-                              onSelected: (kode, text, fee) {
-                                setState(() {
-                                  kodeMetode = kode;
-                                  textMetode = text;
-                                  biayaPembayaran = fee;
-                                });
-                                setHarga();
-                              },
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: kodeMetode == null
-                                    ? Colors.grey.shade50
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: kodeMetode == null
-                                      ? Colors.grey.shade300
-                                      : Constants.primaryColor,
-                                  width: kodeMetode == null ? 1 : 2,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade200
-                                              : Constants.primaryColor
-                                                  .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(
-                                          CustomIcons.getMetodeIcon(
-                                              kodeMetode ?? ""),
-                                          size: 24,
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade600
-                                              : Constants.primaryColor,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        textMetode ?? "Pilih Metode Pembayaran",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade600
-                                              : Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),

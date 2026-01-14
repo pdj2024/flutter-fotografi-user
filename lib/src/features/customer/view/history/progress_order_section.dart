@@ -272,18 +272,20 @@ class _ProgressOrderSectionState extends State<ProgressOrderSection> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.inbox_rounded,
-            size: 64,
-            color: Colors.grey.shade300,
+            Icons.shopping_bag_outlined,
+            size: 100,
+            color: Colors.grey.shade400,
           ),
           const SizedBox(height: 16),
           Text(
             _selectedFilter == 'all'
                 ? 'Belum ada pesanan'
                 : 'Tidak ada pesanan ${_statusLabel(_selectedFilter).toLowerCase()}',
+            textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 15,
-              color: Colors.grey.shade500,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
             ),
           ),
           if (_selectedFilter != 'all') ...[

@@ -1,3 +1,4 @@
+import 'package:date_format/date_format.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
@@ -19,9 +20,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
   @override
   void initState() {
     super.initState();
-    context
-        .read<PesananProvider>()
-        .loadOrder(userId: context.read<UserProvider>().userId ?? '');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context
+          .read<PesananProvider>()
+          .loadOrder(userId: context.read<UserProvider>().userId ?? '');
+    });
   }
 
   @override
@@ -35,7 +38,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
           backgroundColor: const Color(0xFFF9F9F9),
           elevation: 1,
           title: const Text(
-            "Semua Pesan",
+            "Pesanan",
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,

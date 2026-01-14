@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
 class PaymentSuccessSplashScreen extends StatefulWidget {
@@ -25,10 +27,19 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _checkmarkAnimation;
 
+  Future<void> _fetchPesanan() {
+    final pesananProvider = context.read<PesananProvider>();
+    final userId = context.read<UserProvider>().customer!.noId;
+    return pesananProvider.loadOrder(userId: userId);
+  }
+
   @override
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchPesanan();
+    });
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,

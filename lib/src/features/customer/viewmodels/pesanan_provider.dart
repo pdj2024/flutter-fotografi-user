@@ -35,6 +35,7 @@ class PesananProvider with ChangeNotifier {
     _isLoading = true;
     _errorPesanan = null;
     notifyListeners();
+    print("📦 Memuat pesanan...");
 
     try {
       /// 🔥 FETCH SEKALI SAJA

@@ -16,7 +16,7 @@ class AuthService {
 
   GoogleSignInAccount? _currentUser;
   String? _cachedIdToken;
-  
+
   // ✅ Gunakan storage untuk persist flag
   static const String _keyJustLoggedOut = 'just_logged_out';
 
@@ -50,6 +50,20 @@ class AuthService {
     } else {
       await _storage.delete(key: _keyJustLoggedOut);
     }
+  }
+
+  /// Get current Google user
+  GoogleSignInAccount? getCurrentUser() {
+    return _currentUser;
+  }
+
+  /// Async version untuk consistency
+  Future<GoogleSignInAccount?> getCurrentUserAsync() async {
+    if (_currentUser != null) return _currentUser;
+
+    // Try silent sign in if no current user
+    _currentUser = await _googleSignIn.signInSilently();
+    return _currentUser;
   }
 
   // =========================================================
@@ -143,14 +157,14 @@ class AuthService {
   Future<void> _clearAllData() async {
     try {
       _clearMemoryState();
-      
+
       await _storage.delete(key: _keyIdToken);
       await _storage.delete(key: _keyEmail);
       await _storage.delete(key: _keyDisplayName);
       await _storage.delete(key: _keyPhotoUrl);
       await _storage.delete(key: _keyUserId);
       await _storage.delete(key: _keyTokenExpiry);
-      
+
       print("🗑️ [AuthService] Semua data terhapus");
     } catch (e) {
       print("❌ [AuthService] Gagal hapus data: $e");
@@ -300,7 +314,7 @@ class AuthService {
       }
 
       await _clearAllData();
-      
+
       // Set flag lagi setelah clear (untuk memastikan)
       await _setJustLoggedOut(true);
 

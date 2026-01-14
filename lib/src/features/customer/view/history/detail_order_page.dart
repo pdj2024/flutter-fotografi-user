@@ -6,18 +6,15 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
-import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
@@ -39,10 +36,6 @@ class DetailOrderPage extends StatefulWidget {
 }
 
 class _DetailOrderPageState extends State<DetailOrderPage> {
-  HistoryOrderService historyOrderService = HistoryOrderService();
-  VendorService vendorService = VendorService();
-
-  List<HistoryOrderModel> historyOrder = [];
   UlasanModel? ulasan;
   PaketModel? paket;
   PesananModel? pesanan;
@@ -55,6 +48,81 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   bool isPaymentExpanded = false;
   bool isPackageExpanded = false;
   bool isProgressExpanded = true;
+
+  int _previousHistoryCount = 0;
+
+  // =========================================
+  // 🆕 CALLBACK SAAT HISTORY BERUBAH
+  // =========================================
+  void _onHistoryChanged() {
+    if (!mounted) return;
+    final historyProvider = context.read<HistoryOrderProvider>();
+    final currentHistory =
+        historyProvider.getHistoryForOrder(widget.pesananModel.noBukti);
+
+    debugPrint(
+        '[DetailOrderPage] 🔔 History count changed: $_previousHistoryCount → ${currentHistory.length}');
+
+    // 🔥 FETCH ULANG DATA
+    debugPrint('[DetailOrderPage] 🔄 Fetching updated data...');
+    _fetchUpdatedData();
+
+    // Optional: Show notification to user
+    if (currentHistory.isNotEmpty) {
+      final latestProgress = currentHistory.first;
+
+      // Use WidgetsBinding to ensure we're not in build phase
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          CustomSnackbar.showSuccessSnackbar(
+              context, 'Progress baru: ${latestProgress.deskripsi}');
+        }
+      });
+    }
+  }
+
+  // 🆕 Separate method untuk fetch updated data
+  Future<void> _fetchUpdatedData() async {
+    if (!mounted) return;
+
+    try {
+      debugPrint('[DetailOrderPage] 📥 Fetching updated pesanan...');
+
+      final updatedPesanan =
+          await PesananService().getAll(noBukti: pesanan!.noBukti);
+
+      if (updatedPesanan.isNotEmpty && mounted) {
+        setState(() {
+          pesanan = updatedPesanan.first;
+        });
+
+        debugPrint(
+            '[DetailOrderPage] ✅ Pesanan updated: ${pesanan!.statusProgresPesanan}');
+
+        // Jika status selesai, fetch ulasan baru
+        if (pesanan!.statusProgresPesanan?.toLowerCase() == 'selesai') {
+          debugPrint('[DetailOrderPage] 📝 Fetching ulasan...');
+          final ulasanList =
+              await UlasanService().getAll(noOrder: pesanan!.noBukti);
+
+          if (mounted) {
+            setState(() {
+              ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
+            });
+
+            if (ulasan != null) {
+              debugPrint('[DetailOrderPage] ✅ Ulasan loaded');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DetailOrderPage] ❌ Error fetching updated data: $e');
+      if (mounted) {
+        CustomSnackbar.showErrorSnackbar(context, 'Gagal memuat data terbaru');
+      }
+    }
+  }
 
   // Fetch data histori order
   Future<void> fetchData() async {
@@ -148,15 +216,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   // ✅ SHOW SELESAIKAN DIALOG
   // =====================================================
   void _showSelesaikanDialog() {
+    final pesananProvider = context.read<PesananProvider>();
     showDialog(
       context: context,
       builder: (context) => SelesaikanDialog(
         pesanan: pesanan!,
         onSuccess: () async {
           await fetchData();
-          await context
-              .read<PesananProvider>()
-              .loadOrder(userId: context.read<UserProvider>().userId ?? '');
+          await pesananProvider.loadOrder(
+              userId: context.read<UserProvider>().userId ?? '');
           Navigator.pop(context);
         },
       ),
@@ -175,6 +243,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           final ulasanList =
               await UlasanService().getAll(noOrder: pesanan!.noBukti);
           ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
+          fetchUpdatePesanan();
           setState(() {});
         },
       ),
@@ -554,6 +623,17 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
         final isLoadingHistory =
             historyProvider.isLoadingOrder(pesanan!.noBukti);
         final error = historyProvider.getErrorForOrder(pesanan!.noBukti);
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (historyOrder.length != _previousHistoryCount) {
+            debugPrint('[DetailOrderPage] 🔔 History changed in Consumer');
+            _previousHistoryCount = historyOrder.length;
+
+            if (historyOrder.isNotEmpty) {
+              _onHistoryChanged();
+            }
+          }
+        });
 
         // Show shimmer while loading initial data
         if (isLoadingHistory && historyOrder.isEmpty) {
@@ -1113,26 +1193,29 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        InkWell(
-                          onTap: () {
-                            context.read<NavigationProvider>().navigateToPage(
-                                  context,
-                                  targetTabIndex: 2,
-                                  WebviewPage(
-                                    url: pesanan!.linkUrl!,
-                                  ),
-                                );
-                          },
-                          child: Text(
-                            pesanan!.linkUrl!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Constants.primaryColorVendor,
-                              fontWeight: FontWeight.w500,
+                        SizedBox(
+                          width: double.infinity,
+                          child: InkWell(
+                            onTap: () {
+                              context.read<NavigationProvider>().navigateToPage(
+                                    context,
+                                    targetTabIndex: 2,
+                                    WebviewPage(
+                                      url: pesanan!.linkUrl!,
+                                    ),
+                                  );
+                            },
+                            child: Text(
+                              pesanan!.linkUrl!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Constants.primaryColorVendor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(height: 10),
