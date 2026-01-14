@@ -111,6 +111,35 @@ class _UnpaidOrderSectionState extends State<UnpaidOrderSection> {
   Widget build(BuildContext context) {
     final progressOrder = context.watch<PesananProvider>().pesananUnpaid;
 
+    // ✅ Cek data kosong SEBELUM ListView
+    if (progressOrder.isEmpty) {
+      return Container(
+        height: 500,
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, // ✅ Tambahkan ini
+          children: [
+            Icon(
+              Icons.shopping_bag_outlined,
+              size: 100,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Belum ada pesanan yang belum dibayar",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ✅ Jika ada data, tampilkan ListView
     return ListView.builder(
       itemCount: progressOrder.length,
       itemBuilder: (context, index) {
@@ -138,7 +167,6 @@ class _UnpaidOrderSectionState extends State<UnpaidOrderSection> {
                     ),
                   );
             },
-            // Action untuk retry payment
             onRetryPayment: status?.isExpired == true
                 ? () async {
                     await _retryPayment(item.noBukti);
@@ -153,7 +181,6 @@ class _UnpaidOrderSectionState extends State<UnpaidOrderSection> {
                         );
                   }
                 : null,
-            // Action untuk start payment pertama kali
             onStartPayment:
                 status?.remainingTime == null && status?.isExpired == false
                     ? () async {

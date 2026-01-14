@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
@@ -13,6 +14,34 @@ class FinishOrderSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progressOrder = context.watch<PesananProvider>().pesananSelesai;
+
+    if (progressOrder.isEmpty) {
+      return Container(
+        height: 500,
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, 
+          children: [
+            Icon(
+              Icons.shopping_bag_outlined,
+              size: 100,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Belum ada pesanan yang belum dibayar",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       itemCount: progressOrder.length,
       itemBuilder: (context, index) {

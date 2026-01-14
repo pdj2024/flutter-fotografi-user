@@ -63,20 +63,6 @@ class ChatBubble extends StatelessWidget {
                 children: [
                   // Message text
                   Text(
-                    message.messageId,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  Text(
-                    message.sendStatus,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  Text(
                     message.message,
                     style: TextStyle(
                       fontSize: 15,

@@ -7,7 +7,6 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
@@ -168,7 +167,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => PaymentSuccessSplashScreen(
-              orderNumber: widget.paymentData.noBukti,
+              orderNumber: widget.paymentData.noTrackingPesanan ?? "",
               amount: widget.paymentData.grandTotal,
             ),
           ),

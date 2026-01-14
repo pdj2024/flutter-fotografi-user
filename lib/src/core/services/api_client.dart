@@ -10,6 +10,9 @@ class ApiClient {
 
   // 🔒 Lock untuk mencegah multiple refresh bersamaan
   bool _isRefreshing = false;
+  
+  // 🔔 Callback untuk logout (akan di-set dari luar)
+  Function()? onSessionExpired;
 
   void setRole(String role) => _role = role;
   void clearRole() => _role = null;
@@ -122,24 +125,19 @@ class ApiClient {
   Future<http.Response> _handleWithAuthRetry(
     Future<http.Response> Function() request, {
     int retryCount = 0,
-    int maxRetries = 5,
+    int maxRetries = 3, // ✅ Reduce dari 5 ke 3 untuk lebih cepat
   }) async {
     try {
       final response = await request();
 
       print("📊 Status Code: ${response.statusCode}");
-      print("📊 Body: ${response.body}");
-
+      
       // ✅ Request berhasil
       if (response.statusCode != 401) {
         return response;
       }
 
-      // ❌ Token invalid dan sudah mencoba retry
-      if (retryCount >= maxRetries) {
-        print("❌ Max retry tercapai, kembalikan response 401");
-        return response;
-      }
+      print("📊 Body: ${response.body}");
 
       // 🔍 Cek apakah error karena token invalid
       final isTokenError = response.body.contains("Invalid Token") ||
@@ -152,19 +150,42 @@ class ApiClient {
         return response;
       }
 
+      // ❌ Sudah mencoba retry maksimal
+      if (retryCount >= maxRetries) {
+        print("❌ Max retry tercapai ($maxRetries), session expired");
+        
+        // 🚪 Trigger logout callback
+        if (onSessionExpired != null) {
+          print("🚪 Calling onSessionExpired callback...");
+          onSessionExpired!();
+        }
+        
+        throw Exception('Session expired. Please login again.');
+      }
+
       // 🔄 Refresh token
-      print("🔄 Token invalid, mencoba refresh token...");
+      print("🔄 Token invalid, mencoba refresh token (retry: ${retryCount + 1}/$maxRetries)...");
 
       final refreshed = await _refreshToken();
 
       if (!refreshed) {
-        print("❌ Refresh token gagal, user perlu login ulang");
-        // Optional: trigger logout atau navigasi ke login
-        // await _authService.logout();
+        print("❌ Refresh token gagal pada retry ${retryCount + 1}");
+        
+        // Jika sudah retry terakhir, trigger logout
+        if (retryCount >= maxRetries - 1) {
+          print("🚪 Logout karena refresh gagal setelah $maxRetries kali");
+          
+          if (onSessionExpired != null) {
+            onSessionExpired!();
+          }
+          
+          throw Exception('Session expired. Please login again.');
+        }
+        
         return response;
       }
 
-      print("✅ Token berhasil di-refresh, retry request...");
+      print("✅ Token berhasil di-refresh, retry request (${retryCount + 1}/$maxRetries)...");
 
       // Retry request dengan token baru
       return _handleWithAuthRetry(
@@ -178,18 +199,17 @@ class ApiClient {
     }
   }
 
-  /// 🔄 Refresh token menggunakan silent login
+  /// 🔄 Refresh token dengan strategi bertingkat
   Future<bool> _refreshToken() async {
     // 🔒 Cegah multiple refresh bersamaan
     if (_isRefreshing) {
       print("⏳ Sedang refresh token, tunggu...");
-      // Tunggu sampai refresh selesai (max 5 detik)
       int waitCount = 0;
-      while (_isRefreshing && waitCount < 50) {
+      while (_isRefreshing && waitCount < 100) { // Max 10 detik
         await Future.delayed(const Duration(milliseconds: 100));
         waitCount++;
       }
-      return !_isRefreshing; // Return true jika refresh sudah selesai
+      return !_isRefreshing;
     }
 
     _isRefreshing = true;
@@ -197,18 +217,40 @@ class ApiClient {
     try {
       print("🔄 Mulai refresh token...");
 
-      // Coba silent login untuk mendapat token baru
-      final newToken = await _authService.login(silent: true);
-
-      if (newToken == null || newToken.isEmpty) {
-        print("❌ Silent login gagal, tidak dapat token baru");
+      // 🆕 STRATEGI 1: Cek current user dulu
+      final currentUser = await _authService.getCurrentUser();
+      if (currentUser == null) {
+        print("❌ User tidak ada, tidak bisa refresh token");
         return false;
       }
+      
+      print("👤 Current user: ${currentUser.email}");
 
-      print("✅ Token baru berhasil didapat");
-      return true;
-    } catch (e) {
+      // 🆕 STRATEGI 2: Force refresh dari Firebase langsung
+      print("🔄 Mencoba force refresh dari Firebase...");
+      final forceRefreshToken = await _authService.getIdToken(forceRefresh: true);
+      
+      if (forceRefreshToken != null && forceRefreshToken.isNotEmpty) {
+        print("✅ Force refresh berhasil");
+        return true;
+      }
+
+      print("⚠️ Force refresh gagal, coba silent login...");
+
+      // 🆕 STRATEGI 3: Silent login sebagai backup
+      final silentToken = await _authService.login(silent: true);
+
+      if (silentToken != null && silentToken.isNotEmpty) {
+        print("✅ Silent login berhasil");
+        return true;
+      }
+
+      print("❌ Semua strategi refresh gagal");
+      return false;
+      
+    } catch (e, stackTrace) {
       print("❌ Error saat refresh token: $e");
+      print("📍 Stack trace: $stackTrace");
       return false;
     } finally {
       _isRefreshing = false;

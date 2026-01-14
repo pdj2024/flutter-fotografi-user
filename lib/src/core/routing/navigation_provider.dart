@@ -179,10 +179,14 @@ class NavigationProvider with ChangeNotifier {
   }
 
   void onItemTapped(int index, BuildContext context) async {
+    print("🔘 [NavigationProvider] Tab tapped: $index");
+
     final isAuth = await isAuthenticated();
 
-    // ✅ Tab 0 (Home) bisa diakses tanpa login
+    // ✅ Tab 0 (Home/Jelajah) bisa diakses tanpa login
     if (!isAuth && index != 0) {
+      print("🔒 [NavigationProvider] Belum login, redirect ke UserLogin");
+
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(
@@ -197,9 +201,11 @@ class NavigationProvider with ChangeNotifier {
       return;
     }
 
+    // ✅ Jika sudah login atau index 0, lanjutkan navigation
     if (_selectedIndex != index) {
       _selectedIndex = index;
       _navigationHistory.add(index);
+      print("✅ [NavigationProvider] Navigasi ke tab $index");
       notifyListeners();
     }
   }

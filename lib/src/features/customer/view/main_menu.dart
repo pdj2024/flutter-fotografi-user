@@ -6,6 +6,7 @@ import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
@@ -18,22 +19,15 @@ class MainMenu extends StatefulWidget {
 }
 
 class _MainMenuState extends State<MainMenu> {
-  String getValidImage(String? url) {
-    if (url == null || url.isEmpty || !url.startsWith('http')) {
-      return "https://cdn-icons-png.flaticon.com/512/3276/3276535.png";
-    }
-    return url;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context);
-    final user = userProvider.customer;
+    final chatProvider = context.watch<ChatProvider>();
+
     return WillPopScope(
       onWillPop: () async {
-        final provider =
+        final navProvider =
             Provider.of<NavigationProvider>(context, listen: false);
-        return await provider.onWillPop();
+        return await navProvider.onWillPop();
       },
       child: Scaffold(
         key: const PageStorageKey('MainMenu'),
@@ -58,36 +52,68 @@ class _MainMenuState extends State<MainMenu> {
               selectedItemColor: Constants.primaryColor,
               unselectedItemColor: Colors.grey,
               type: BottomNavigationBarType.fixed,
-              onTap: (index) async {
-                navigationProvider.onItemTapped(index, context);
-
-                print(user ?? "user kosong");
-
-
-                if (index == 2 && user != null) {
-                  context.read<PesananProvider>().loadOrder(userId: user.noId);
-                }
-
-                if (index == 3 && user != null) {
-                  await context
-                      .read<UserProvider>()
-                      .checkLoginGoogle(role: 'customer');
-                  await context
-                      .read<PortofolioProvider>()
-                      .loadPortofolio(context);
-                }
-              },
+              onTap: (index) => _handleTabTap(index, context, selectedIndex),
               items: [
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.explore),
+                  icon: Icon(selectedIndex == 0
+                      ? Icons.explore
+                      : Icons.explore_outlined),
                   label: 'Jelajah',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.chat_outlined),
+                  icon: SizedBox(
+                    width: 40, // ✅ Berikan ukuran eksplisit
+                    child: Stack(
+                      clipBehavior: Clip.none, // ✅ Izinkan overflow
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          selectedIndex == 1 ? Icons.chat : Icons.chat_outlined,
+                        ),
+                        if (chatProvider.totalUnreadCount > 0)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.shade200,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  // ✅ Optional: border putih agar lebih jelas
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  chatProvider.totalUnreadCount > 99
+                                      ? '99+'
+                                      : chatProvider.totalUnreadCount
+                                          .toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   label: 'Pesan',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.assignment_outlined),
+                  icon: Icon(selectedIndex == 2
+                      ? Icons.assignment
+                      : Icons.assignment_outlined),
                   label: 'Order',
                 ),
                 BottomNavigationBarItem(
@@ -114,10 +140,57 @@ class _MainMenuState extends State<MainMenu> {
     );
   }
 
+  // 🆕 Pisahkan logic tap handling
+  Future<void> _handleTabTap(
+      int index, BuildContext context, int currentIndex) async {
+    final navigationProvider = context.read<NavigationProvider>();
+    final userProvider = context.read<UserProvider>();
+    final user = userProvider.customer;
+
+    print("🔘 [MainMenu] Tab $index tapped, current: $currentIndex");
+    print("👤 [MainMenu] User: ${user?.namaDisplay ?? 'Not logged in'}");
+
+    // ✅ Navigation check dilakukan di onItemTapped
+    navigationProvider.onItemTapped(index, context);
+
+    // ✅ Hanya jalankan refresh logic jika user sudah login DAN tap tab yang sama
+    if (user != null && currentIndex == index) {
+      await _handleTabRefresh(index, context, user);
+    }
+  }
+
+  // 🆕 Handle refresh saat tap tab yang sama
+  Future<void> _handleTabRefresh(
+      int index, BuildContext context, dynamic user) async {
+    print("🔄 [MainMenu] Refreshing tab $index");
+
+    switch (index) {
+      case 1: // Chat
+        final chatProv = context.read<ChatProvider>();
+        final navProvider = context.read<NavigationProvider>();
+        await chatProv.initWithApiClient(
+          userId: user.noId,
+          userType: Constants.customer,
+          hubUrl: "${Constants.baseUrlHub}/api/chathub",
+          getToken: () async =>
+              await navProvider.authService.getIdToken(forceRefresh: true),
+        );
+        break;
+
+      case 2: // Order
+        context.read<PesananProvider>().loadOrder(userId: user.noId);
+        break;
+
+      case 3: // Profile
+        await context.read<UserProvider>().checkLoginGoogle(role: 'customer');
+        await context.read<PortofolioProvider>().loadPortofolio(context);
+        break;
+    }
+  }
+
   Widget _buildOffstageNavigator(int index, Widget page) {
     return Consumer<NavigationProvider>(
       builder: (context, provider, _) {
-        print("testing");
         return Offstage(
           offstage: provider.selectedIndex != index,
           child: Navigator(

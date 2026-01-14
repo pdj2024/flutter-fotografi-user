@@ -69,7 +69,6 @@ class _RevisiDialogState extends State<RevisiDialog> {
       );
 
       widget.onSuccess();
-      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       CustomSnackbar.showErrorSnackbar(
@@ -78,6 +77,7 @@ class _RevisiDialogState extends State<RevisiDialog> {
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      Navigator.pop(context);
     }
   }
 
