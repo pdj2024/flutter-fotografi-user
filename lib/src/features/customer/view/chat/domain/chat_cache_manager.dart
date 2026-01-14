@@ -4,7 +4,7 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
 /// Manager untuk caching data chat di memory
-/// 
+///
 /// Features:
 /// - In-memory cache untuk rooms dan messages
 /// - Smart sync dengan timestamp tracking
@@ -28,11 +28,13 @@ class ChatCacheManager {
 
   // Stream controllers
   final _roomsController = StreamController<List<RoomChatModel>>.broadcast();
-  final _messagesController = StreamController<MapEntry<String, List<ChatModel>>>.broadcast();
+  final _messagesController =
+      StreamController<MapEntry<String, List<ChatModel>>>.broadcast();
 
   // Streams
   Stream<List<RoomChatModel>> get roomsStream => _roomsController.stream;
-  Stream<MapEntry<String, List<ChatModel>>> get messagesStream => _messagesController.stream;
+  Stream<MapEntry<String, List<ChatModel>>> get messagesStream =>
+      _messagesController.stream;
 
   // =========================================
   // ROOMS CACHE
@@ -72,10 +74,12 @@ class ChatCacheManager {
   }
 
   /// Update room dengan pesan baru
-  void updateRoomWithMessage(String roomId, ChatModel message, {bool incrementUnread = false}) {
+  void updateRoomWithMessage(String roomId, ChatModel message,
+      {bool incrementUnread = false}) {
     final room = _roomsCache[roomId];
     if (room != null) {
-      _roomsCache[roomId] = room.withNewMessage(message, incrementUnread: incrementUnread);
+      _roomsCache[roomId] =
+          room.withNewMessage(message, incrementUnread: incrementUnread);
       _notifyRoomsUpdate();
     }
   }
@@ -137,31 +141,35 @@ class ChatCacheManager {
   void mergeMessages(String roomId, List<ChatModel> newMessages) {
     final existing = _messagesCache[roomId] ?? [];
     final existingIds = existing.map((m) => m.messageId).toSet();
-    
-    final toAdd = newMessages.where((m) => !existingIds.contains(m.messageId)).toList();
-    
+
+    final toAdd =
+        newMessages.where((m) => !existingIds.contains(m.messageId)).toList();
+
     if (toAdd.isNotEmpty) {
       _messagesCache[roomId] = [...existing, ...toAdd]
         ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
       _trimMessages(roomId);
       _notifyMessagesUpdate(roomId);
-      debugPrint('[ChatCache] Merged ${toAdd.length} new messages for room $roomId');
+      debugPrint(
+          '[ChatCache] Merged ${toAdd.length} new messages for room $roomId');
     }
   }
 
   /// Add single message
   void addMessage(String roomId, ChatModel message) {
     final messages = _messagesCache[roomId] ?? [];
-    
+
     // Check duplicate
-    final existingIndex = messages.indexWhere((m) => m.messageId == message.messageId);
+    final existingIndex =
+        messages.indexWhere((m) => m.messageId == message.messageId);
     if (existingIndex != -1) {
       messages[existingIndex] = message;
     } else {
       messages.add(message);
     }
-    
-    _messagesCache[roomId] = messages..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+    _messagesCache[roomId] = messages
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
     _trimMessages(roomId);
     _notifyMessagesUpdate(roomId);
   }
@@ -176,44 +184,186 @@ class ChatCacheManager {
   }
 
   /// Replace local echo dengan server message
+  // =========================================
+// IMPROVED LOCAL ECHO REPLACEMENT - ChatCacheManager
+// =========================================
+
+  /// Replace local echo dengan server message
   bool replaceLocalEcho(String roomId, ChatModel serverMessage) {
     final messages = _messagesCache[roomId];
     if (messages == null) return false;
 
-    // Cari by localId atau by content match
-    final index = messages.indexWhere((m) =>
-        m.isLocalEcho &&
-        m.senderId == serverMessage.senderId &&
-        m.message == serverMessage.message &&
-        m.sentAt.difference(serverMessage.sentAt).inSeconds.abs() < 10);
+    debugPrint('[ChatCache] 🔍 Looking for local echo to replace...');
+    debugPrint('  - Server messageId: ${serverMessage.messageId}');
+    debugPrint('  - Server senderId: ${serverMessage.senderId}');
+    debugPrint('  - Server message: ${serverMessage.message}');
+    debugPrint('  - Server sentAt: ${serverMessage.sentAt}');
+
+    // Strategy 1: Cari by localId yang sama dengan messageId dari server
+    // (jika server mengembalikan localId dalam response)
+    int index = messages.indexWhere(
+      (m) => m.localId != null && m.localId == serverMessage.messageId,
+    );
 
     if (index != -1) {
-      final oldLocalId = messages[index].localId;
+      debugPrint('  ✅ Found by localId match');
+      final oldMessage = messages[index];
       messages[index] = serverMessage;
       _messagesCache[roomId] = messages;
       _notifyMessagesUpdate(roomId);
-      debugPrint('[ChatCache] Replaced local echo $oldLocalId with ${serverMessage.messageId}');
+      debugPrint(
+          '  ✅ Replaced ${oldMessage.localId} with ${serverMessage.messageId}');
       return true;
     }
+
+    // Strategy 2: Cari local echo dengan content matching
+    index = messages.indexWhere((m) {
+      // Harus local echo (punya localId atau messageId starts with 'local-')
+      final isLocal = m.localId != null || m.messageId.startsWith('local-');
+      if (!isLocal) return false;
+
+      // Same sender
+      if (m.senderId != serverMessage.senderId) return false;
+
+      // Same message content
+      if (m.message != serverMessage.message) return false;
+
+      // Same room
+      if (m.roomId != serverMessage.roomId) return false;
+
+      // Time difference less than 10 seconds
+      final timeDiff =
+          m.sentAt.difference(serverMessage.sentAt).inSeconds.abs();
+      if (timeDiff > 10) return false;
+
+      // Same paket/penawaran if any
+      if (m.idPaket != serverMessage.idPaket) return false;
+      if (m.noPenawaran != serverMessage.noPenawaran) return false;
+
+      return true;
+    });
+
+    if (index != -1) {
+      debugPrint('  ✅ Found by content matching');
+      final oldMessage = messages[index];
+      messages[index] = serverMessage;
+      _messagesCache[roomId] = messages;
+      _notifyMessagesUpdate(roomId);
+      debugPrint(
+          '  ✅ Replaced ${oldMessage.messageId} with ${serverMessage.messageId}');
+      return true;
+    }
+
+    debugPrint('  ⚠️ No local echo found to replace');
     return false;
   }
 
-  /// Update message status
+  /// Update message by messageId - IMPROVED
+  void updateMessage(String roomId, ChatModel updatedMessage) {
+    final messages = _messagesCache[roomId];
+    if (messages == null) return;
+
+    debugPrint('[ChatCache] 🔄 Updating message...');
+    debugPrint('  - MessageId: ${updatedMessage.messageId}');
+    debugPrint('  - Status: ${updatedMessage.sendStatus}');
+
+    // Cari message yang akan di-update
+    final index = messages.indexWhere(
+      (m) => m.messageId == updatedMessage.messageId,
+    );
+
+    if (index != -1) {
+      final oldStatus = messages[index].sendStatus;
+      messages[index] = updatedMessage;
+      _messagesCache[roomId] = messages;
+      _notifyMessagesUpdate(roomId);
+      debugPrint('  ✅ Updated: $oldStatus → ${updatedMessage.sendStatus}');
+    } else {
+      debugPrint('  ⚠️ Message not found, adding as new');
+      addMessage(roomId, updatedMessage);
+    }
+  }
+
+  /// Update message status - IMPROVED
   void updateMessageStatus(String roomId, String messageId, String newStatus) {
     final messages = _messagesCache[roomId];
     if (messages == null) return;
 
-    final index = messages.indexWhere((m) => 
-        m.messageId == messageId || m.localId == messageId);
+    debugPrint('[ChatCache] 📝 Updating message status...');
+    debugPrint('  - RoomId: $roomId');
+    debugPrint('  - MessageId: $messageId');
+    debugPrint('  - New Status: $newStatus');
+
+    bool updated = false;
+
+    // Try to find by messageId
+    int index = messages.indexWhere((m) => m.messageId == messageId);
+
     if (index != -1) {
-      messages[index] = messages[index].copyWith(sendStatus: newStatus);
+      final oldStatus = messages[index].sendStatus;
+      messages[index] = messages[index].copyWith(
+        sendStatus: newStatus,
+        readAt: newStatus == 'read' ? DateTime.now() : null,
+      );
+      updated = true;
+      debugPrint('  ✅ Updated by messageId: $oldStatus → $newStatus');
+    } else {
+      // Try to find by localId
+      index = messages.indexWhere((m) => m.localId == messageId);
+
+      if (index != -1) {
+        final oldStatus = messages[index].sendStatus;
+        messages[index] = messages[index].copyWith(
+          sendStatus: newStatus,
+          readAt: newStatus == 'read' ? DateTime.now() : null,
+        );
+        updated = true;
+        debugPrint('  ✅ Updated by localId: $oldStatus → $newStatus');
+      }
+    }
+
+    if (updated) {
       _messagesCache[roomId] = messages;
       _notifyMessagesUpdate(roomId);
+    } else {
+      debugPrint('  ⚠️ Message not found for status update');
     }
   }
 
+  /// Add or update message - untuk handle duplicate
+  void addOrUpdateMessage(String roomId, ChatModel message) {
+    final messages = _messagesCache[roomId] ?? [];
+
+    debugPrint('[ChatCache] ➕ Add or update message...');
+    debugPrint('  - MessageId: ${message.messageId}');
+    debugPrint('  - Status: ${message.sendStatus}');
+
+    // Check if message exists by messageId
+    final existingIndex = messages.indexWhere(
+      (m) => m.messageId == message.messageId,
+    );
+
+    if (existingIndex != -1) {
+      // Update existing
+      debugPrint('  🔄 Message exists, updating...');
+      final oldStatus = messages[existingIndex].sendStatus;
+      messages[existingIndex] = message;
+      debugPrint('  ✅ Updated: $oldStatus → ${message.sendStatus}');
+    } else {
+      // Add new
+      debugPrint('  ➕ Adding new message');
+      messages.add(message);
+    }
+
+    _messagesCache[roomId] = messages
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    _trimMessages(roomId);
+    _notifyMessagesUpdate(roomId);
+  }
+
   /// Update message dengan noPesanan (penawaran -> pesanan)
-  void updateMessageWithPesanan(String roomId, String noPenawaran, String noPesanan) {
+  void updateMessageWithPesanan(
+      String roomId, String noPenawaran, String noPesanan) {
     final messages = _messagesCache[roomId];
     if (messages == null) return;
 
@@ -228,7 +378,8 @@ class ChatCacheManager {
     if (updated) {
       _messagesCache[roomId] = messages;
       _notifyMessagesUpdate(roomId);
-      debugPrint('[ChatCache] Updated penawaran $noPenawaran with pesanan $noPesanan');
+      debugPrint(
+          '[ChatCache] Updated penawaran $noPenawaran with pesanan $noPesanan');
     }
   }
 
@@ -237,7 +388,7 @@ class ChatCacheManager {
     final messages = _messagesCache[roomId];
     if (messages == null) return;
 
-    messages.removeWhere((m) => 
+    messages.removeWhere((m) =>
         m.messageId == messageIdOrLocalId || m.localId == messageIdOrLocalId);
     _messagesCache[roomId] = messages;
     _notifyMessagesUpdate(roomId);
@@ -250,7 +401,7 @@ class ChatCacheManager {
 
     bool updated = false;
     for (int i = 0; i < messages.length; i++) {
-      if (messages[i].senderId != currentUserId && 
+      if (messages[i].senderId != currentUserId &&
           !messages[i].sendStatusEnum.isRead) {
         messages[i] = messages[i].copyWith(
           sendStatus: 'read',
@@ -278,7 +429,8 @@ class ChatCacheManager {
   void _trimMessages(String roomId) {
     final messages = _messagesCache[roomId];
     if (messages != null && messages.length > _maxMessagesPerRoom) {
-      _messagesCache[roomId] = messages.sublist(messages.length - _maxMessagesPerRoom);
+      _messagesCache[roomId] =
+          messages.sublist(messages.length - _maxMessagesPerRoom);
     }
   }
 

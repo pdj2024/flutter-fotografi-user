@@ -307,32 +307,6 @@ class _RoomChatPageState extends State<RoomChatPage>
                               }
                             }
 
-                            if (message.idPaket != null) {
-                              return Column(
-                                crossAxisAlignment: isMe
-                                    ? CrossAxisAlignment.end
-                                    : CrossAxisAlignment.start,
-                                children: [
-                                  if (paket == null)
-                                    ShimmerPlaceholder(
-                                      width: 300,
-                                      height: 100,
-                                      radius: 10,
-                                    ),
-                                  if (paket != null)
-                                    ChatPackageCard(
-                                      paket: paket,
-                                      isMe: isMe,
-                                    ),
-                                  if (message.message.isNotEmpty)
-                                    ChatBubble(
-                                      message: message,
-                                      isMe: isMe,
-                                    ),
-                                ],
-                              );
-                            }
-
                             if (message.noPenawaran != null &&
                                 message.noPenawaran!.isNotEmpty) {
                               if (offer == null) {
@@ -363,6 +337,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                               return ChatPaymentCard(
                                 penawaran: offer,
+                                isPesanan: offer.noPesanan != "",
                                 roomId: widget.roomId ?? "",
                                 customerId: userProv.customer?.noId ?? "",
                                 onTap: () async {
@@ -405,6 +380,32 @@ class _RoomChatPageState extends State<RoomChatPage>
                                         );
                                   }
                                 },
+                              );
+                            }
+
+                            if (message.idPaket != null) {
+                              return Column(
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  if (paket == null)
+                                    ShimmerPlaceholder(
+                                      width: 300,
+                                      height: 100,
+                                      radius: 10,
+                                    ),
+                                  if (paket != null)
+                                    ChatPackageCard(
+                                      paket: paket,
+                                      isMe: isMe,
+                                    ),
+                                  if (message.message.isNotEmpty)
+                                    ChatBubble(
+                                      message: message,
+                                      isMe: isMe,
+                                    ),
+                                ],
                               );
                             }
 

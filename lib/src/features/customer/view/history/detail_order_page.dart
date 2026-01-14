@@ -11,7 +11,6 @@ import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/data/models/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
-import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
@@ -22,6 +21,7 @@ import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
@@ -66,11 +66,25 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
 
       pesanan = widget.pesananModel;
 
-      historyOrder = await historyOrderService.getAll(
-        noOrder: widget.pesananModel.noBukti,
-        orderBy: 'Tgl_Progress',
-        orderDir: 'desc',
-      );
+      // ✅ Fetch dari provider (sudah real-time)
+      final historyProvider = context.read<HistoryOrderProvider>();
+
+      // 🆕 JOIN ORDER DULU - ini yang kurang!
+      debugPrint(
+          '[DetailOrderPage] 🔄 Joining order: ${widget.pesananModel.noBukti}');
+      final joined =
+          await historyProvider.joinOrder(widget.pesananModel.noBukti);
+
+      if (joined) {
+        debugPrint('[DetailOrderPage] ✅ Successfully joined order group');
+      } else {
+        debugPrint(
+            '[DetailOrderPage] ⚠️ Failed to join order group, but continuing...');
+      }
+
+      // Fetch history (ini akan otomatis dipanggil setelah join berhasil di provider,
+      // tapi kita tetap panggil untuk memastikan)
+      await historyProvider.fetchHistoryForOrder(widget.pesananModel.noBukti);
 
       paket = (await PaketService().getAll(noId: widget.pesananModel.idPaket))
           .first;
@@ -171,6 +185,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   void initState() {
     super.initState();
     fetchData();
+  }
+
+  @override
+  void dispose() {
+    // Leave order group when leaving detail page
+    if (pesanan != null) {
+      context.read<HistoryOrderProvider>().leaveOrder(pesanan!.noBukti);
+    }
+    super.dispose();
   }
 
   @override
@@ -508,91 +531,292 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                   ),
 
                   /// =======================
-                  /// 📊 PROGRESS PESANAN (Expandable)
+                  /// 📊 PROGRESS PESANAN (Expandable) - 🆕 REAL-TIME
                   /// =======================
-                  _buildExpandableCard(
-                    title: "Progress Pesanan",
-                    isExpanded: isProgressExpanded,
-                    onToggle: () {
-                      setState(() {
-                        isProgressExpanded = !isProgressExpanded;
-                      });
-                    },
-                    summaryWidget:
-                        !isProgressExpanded && historyOrder.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: Constants.primaryColorVendor,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        historyOrder.first.deskripsi,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : null,
-                    content: historyOrder.isEmpty
-                        ? Column(
-                            children: [
-                              Icon(
-                                Icons.timeline_rounded,
-                                size: 100,
-                                color: Colors.grey.shade400,
-                              ),
-                              Center(
-                                child: Text(
-                                  "Belum ada history progress pesanan",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                          )
-                        : Column(
-                            children: List.generate(
-                              historyOrder.length,
-                              (index) {
-                                final history = historyOrder[index];
-                                return buildTimelineItem(
-                                  DateFormat("dd MMM yyyy")
-                                      .format(history.tglProgress),
-                                  history.deskripsi,
-                                  history.statusProgressPesanan,
-                                  index == 0,
-                                  isLast: index == historyOrder.length - 1,
-                                );
-                              },
-                            ),
-                          ),
-                  ),
+                  _buildProgressSection(),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  // =========================================
+  // 🆕 REAL-TIME PROGRESS SECTION
+  // =========================================
+  Widget _buildProgressSection() {
+    return Consumer<HistoryOrderProvider>(
+      builder: (context, historyProvider, child) {
+        final historyOrder =
+            historyProvider.getHistoryForOrder(pesanan!.noBukti);
+        final isLoadingHistory =
+            historyProvider.isLoadingOrder(pesanan!.noBukti);
+        final error = historyProvider.getErrorForOrder(pesanan!.noBukti);
+
+        // Show shimmer while loading initial data
+        if (isLoadingHistory && historyOrder.isEmpty) {
+          return _buildProgressShimmer();
+        }
+
+        // Show error if any
+        if (error != null && historyOrder.isEmpty) {
+          return _buildProgressError(error);
+        }
+
+        return _buildExpandableCard(
+          title: "Progress Pesanan",
+          isExpanded: isProgressExpanded,
+          onToggle: () {
+            setState(() {
+              isProgressExpanded = !isProgressExpanded;
+            });
+          },
+          summaryWidget: !isProgressExpanded && historyOrder.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Constants.primaryColorVendor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          historyOrder.first.deskripsi,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // 🆕 Real-time indicator
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.green.shade200,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Live',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : null,
+          content: historyOrder.isEmpty
+              ? Column(
+                  children: [
+                    Icon(
+                      Icons.timeline_rounded,
+                      size: 100,
+                      color: Colors.grey.shade400,
+                    ),
+                    Center(
+                      child: Text(
+                        "Belum ada history progress pesanan",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                )
+              : Column(
+                  children: List.generate(
+                    historyOrder.length,
+                    (index) {
+                      final history = historyOrder[index];
+                      return buildTimelineItem(
+                        DateFormat("dd MMM yyyy").format(history.tglProgress),
+                        history.deskripsi,
+                        history.statusProgressPesanan,
+                        index == 0,
+                        isLast: index == historyOrder.length - 1,
+                      );
+                    },
+                  ),
+                ),
+        );
+      },
+    );
+  }
+
+  // =========================================
+  // 🆕 PROGRESS SHIMMER
+  // =========================================
+  Widget _buildProgressShimmer() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 20,
+            width: 150,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...List.generate(3, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 12,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // =========================================
+  // 🆕 PROGRESS ERROR
+  // =========================================
+  Widget _buildProgressError(String errorMessage) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 60,
+            color: Colors.red.shade400,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Gagal memuat progress",
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            errorMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.read<HistoryOrderProvider>().fetchHistoryForOrder(
+                    pesanan!.noBukti,
+                  );
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Coba Lagi'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Constants.primaryColorVendor,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }

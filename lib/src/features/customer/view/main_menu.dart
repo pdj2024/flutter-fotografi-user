@@ -6,10 +6,8 @@ import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:provider/provider.dart';
 
 class MainMenu extends StatefulWidget {
@@ -65,22 +63,6 @@ class _MainMenuState extends State<MainMenu> {
 
                 print(user ?? "user kosong");
 
-                if (index == 1 && user != null) {
-                  // final roomProvider = context.read<RoomChatProvider>();
-                  // final chatProvider = context.read<ChatProvider>();
-
-                  // if (roomProvider.activeRoomId != null &&
-                  //     roomProvider.roomInfo != null) {
-                  //   await roomProvider.initChat(
-                  //     roomId: roomProvider.activeRoomId,
-                  //     partnerId: roomProvider.roomInfo!.idLawan,
-                  //   );
-                  //   await roomProvider.loadOfferData();
-                  // } else {
-                  //   chatProvider.isReady = false;
-                  //   await chatProvider.init(user.noId);
-                  // }
-                }
 
                 if (index == 2 && user != null) {
                   context.read<PesananProvider>().loadOrder(userId: user.noId);

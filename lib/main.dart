@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
@@ -40,18 +42,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
-  /// ✅ Buat API Client sekali aja
-
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-      create: (_) => UserProvider(
-        customerService: CustomerService(),
-        vendorService: VendorService(),
-      ),
-    ),
-    ChangeNotifierProvider(create: (_) => NavigationProvider()),
+          create: (_) => UserProvider(
+            customerService: CustomerService(),
+            vendorService: VendorService(),
+          ),
+        ),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
 
         // Provider untuk portofolio yang mengambil userProvider dari atasnya
         ChangeNotifierProvider(
@@ -88,9 +88,14 @@ void main() async {
           create: (_) => PesananProvider(pesananService: PesananService()),
         ),
 
-        /// ✅ ChatProvider tetap ada di root, tapi connect nanti saat login / buka chat
+        /// ✅ ChatProvider tetap ada di root
         ChangeNotifierProvider(
           create: (_) => ChatProvider(),
+        ),
+
+        /// ✅ HistoryOrderProvider di root (untuk standalone connection)
+        ChangeNotifierProvider(
+          create: (_) => HistoryOrderProvider(),
         ),
 
         ChangeNotifierProxyProvider3<PaketProvider, PenawaranProvider,
@@ -186,7 +191,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
         // 3️⃣ Validasi apakah data user berhasil di-load
         if (userProv.customer != null) {
-          print("✅ User data berhasil di-load: ${userProv.customer!.namaDisplay}");
+          print(
+              "✅ User data berhasil di-load: ${userProv.customer!.namaDisplay}");
 
           // 4️⃣ Load role dari storage
           String? role = await nav.getRole();
@@ -198,18 +204,49 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           // 5️⃣ Refresh token (silent login) untuk mendapatkan token terbaru
           try {
             print("🔄 Melakukan silent login untuk refresh token...");
-            final newToken = await nav.authService.getIdToken(forceRefresh: true);
-            
+            final newToken =
+                await nav.authService.getIdToken(forceRefresh: true);
+
             if (newToken != null) {
               print("✅ Token berhasil di-refresh");
-              
+
               // 6️⃣ Register device token
-              await userProv.deviceTokenService.addDeviceToken(userProv.customer!.noId);
-              
-              // 7️⃣ Initialize chat provider jika sudah login
-              final chatProv = Provider.of<ChatProvider>(context, listen: false);
-              await chatProv.initWithApiClient(userId: userProv.customer!.noId, userType: Constants.customer, hubUrl: "${Constants.baseUrlHub}/api/chathub", getToken: () async => await nav.authService.getIdToken(forceRefresh: true),);
-              
+              await userProv.deviceTokenService
+                  .addDeviceToken(userProv.customer!.noId);
+
+              // ==========================================
+              // 7️⃣ Initialize ChatProvider (Connection 1)
+              // ==========================================
+              final chatProv = context.read<ChatProvider>();
+              await chatProv.initWithApiClient(
+                userId: userProv.customer!.noId,
+                userType: Constants.customer,
+                hubUrl: "${Constants.baseUrlHub}/api/chathub",
+                getToken: () async =>
+                    await nav.authService.getIdToken(forceRefresh: true),
+              );
+              print("[Main] ✅ ChatProvider initialized");
+
+              // ==========================================
+              // 8️⃣ Initialize HistoryOrderProvider (Connection 2 - Standalone)
+              // ==========================================
+              final historyOrderProvider = context.read<HistoryOrderProvider>();
+              final historyConnected = await historyOrderProvider.initialize(
+                config: HistoryOrderServiceConfig(
+                  hubUrl: "${Constants.baseUrlHub}/api/chathub",
+                  role: Constants.customer,
+                  getToken: () async =>
+                      await nav.authService.getIdToken(forceRefresh: true),
+                ),
+                userId: userProv.customer!.noId,
+              );
+
+              if (historyConnected) {
+                print("[Main] ✅ HistoryOrderProvider initialized with standalone connection");
+              } else {
+                print("[Main] ⚠️ HistoryOrderProvider connection failed");
+              }
+
               print("✅ User sudah login, langsung ke MainMenu");
             } else {
               print("⚠️ Gagal refresh token, perlu login ulang");
@@ -220,7 +257,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
             await nav.handleLogout(context);
           }
         } else {
-          print("⚠️ Session ada tapi user data tidak lengkap, perlu login ulang");
+          print(
+              "⚠️ Session ada tapi user data tidak lengkap, perlu login ulang");
           await nav.handleLogout(context);
         }
       } else {
@@ -229,13 +267,12 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         await nav.saveRole(Constants.customer);
       }
 
-      // 8️⃣ Selalu arahkan ke MainMenu (user bisa explore tanpa login)
+      // 9️⃣ Selalu arahkan ke MainMenu (user bisa explore tanpa login)
       _startPage = const MainMenu();
-
     } catch (e, s) {
       print("❌ Error saat init: $e");
       print(s);
-      
+
       // Jika ada error, tetap arahkan ke MainMenu
       _startPage = const MainMenu();
     } finally {
@@ -255,7 +292,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Constants.primaryColor),
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(Constants.primaryColor),
               ),
               SizedBox(height: 16),
               Text(

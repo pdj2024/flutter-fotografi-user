@@ -22,7 +22,6 @@ class ChatProvider extends ChangeNotifier {
 
   // API Service akan di-set saat init
   ChatApiService? _apiService;
-  final ApiClient _apiClient = apiClient;
 
   String? _currentUserId;
   String? _userType; // 'customer' atau 'vendor'
@@ -624,84 +623,321 @@ class ChatProvider extends ChangeNotifier {
   }
 
 // =========================================
-// REALTIME HANDLERS - IMPROVED
-// =========================================
+  // REALTIME HANDLERS - IMPROVED
+  // =========================================
 
   void _handleIncomingMessage(ChatModel message) {
+    debugPrint('');
+    debugPrint('═══════════════════════════════════════');
+    debugPrint('[ChatProvider] 📨 INCOMING MESSAGE');
+    debugPrint('═══════════════════════════════════════');
+    debugPrint('MessageId: ${message.messageId}');
+    debugPrint('RoomId: ${message.roomId}');
+    debugPrint('SenderId: ${message.senderId}');
+    debugPrint('CurrentUserId: $_currentUserId');
+    debugPrint('Message: ${message.message}');
+    debugPrint('InitialStatus: ${message.sendStatus}');
+    debugPrint('ActiveRoomId: $_activeRoomId');
+    debugPrint('═══════════════════════════════════════');
+
     final isFromMe = message.senderId == _currentUserId;
     final isActiveRoom = _activeRoomId == message.roomId;
 
-    debugPrint('[ChatProvider] 📨 Incoming: ${message.messageId}');
-    debugPrint('  - From: ${message.senderId} (isFromMe: $isFromMe)');
-    debugPrint('  - Room: ${message.roomId} (isActive: $isActiveRoom)');
-
     if (isFromMe) {
-      // Pesan dari kita sendiri (echo dari server)
-      final replaced = _cache.replaceLocalEcho(message.roomId, message);
-
-      if (!replaced) {
-        _cache.addMessage(message.roomId, message);
-      }
-
-      _cache.updateMessageStatus(message.roomId, message.messageId, 'sent');
-      _cache.updateRoomWithMessage(message.roomId, message,
-          incrementUnread: false);
-
-      _checkAndTriggerOfferDataLoad(message);
+      // ════════════════════════════════════════════════════════
+      // CASE 1: PESAN DARI DIRI SENDIRI (Echo dari server)
+      // ════════════════════════════════════════════════════════
+      debugPrint('→ [CASE 1] Pesan dari diri sendiri');
+      _handleOwnMessage(message);
     } else {
-      // Pesan dari orang lain
-      _cache.addMessage(message.roomId, message);
+      // ════════════════════════════════════════════════════════
+      // CASE 2: PESAN DARI ORANG LAIN
+      // ════════════════════════════════════════════════════════
+      debugPrint('→ [CASE 2] Pesan dari orang lain');
+      _handleMessageFromOthers(message, isActiveRoom);
+    }
 
-      // Update status berdasarkan active room
-      String newStatus;
+    // Trigger callback untuk load offer data jika diperlukan
+    _checkAndTriggerOfferDataLoad(message);
 
-      // final localMessage =
-      //     _cache.getSingleMessage(message.roomId, message.messageId);
+    notifyListeners();
+    debugPrint('═══════════════════════════════════════\n');
+  }
 
-      if (isActiveRoom) {
-        // Jika room sedang dibuka, langsung mark as read
-        newStatus = 'read';
-        _cache.clearRoomUnread(message.roomId);
-        _cache.markMessagesAsRead(message.roomId, _currentUserId!);
-        _checkAndTriggerOfferDataLoad(message);
-      } else {
-        // Jika room tidak dibuka, mark as delivered
+  /// Handle pesan dari diri sendiri (echo dari server) - IMPROVED
+  void _handleOwnMessage(ChatModel message) {
+    debugPrint('  ├─ Handling own message (echo from server)');
+    debugPrint('  ├─ MessageId from server: ${message.messageId}');
+    debugPrint('  ├─ Status from server: ${message.sendStatus}');
 
-        newStatus = 'delivered';
+    // ════════════════════════════════════════════════════════
+    // STEP 1: Try to replace local echo
+    // ════════════════════════════════════════════════════════
+    final replaced = _cache.replaceLocalEcho(message.roomId, message);
+
+    if (replaced) {
+      debugPrint('  ├─ ✅ Local echo replaced successfully');
+
+      // Update status to 'sent' if still 'sending'
+      if (message.sendStatus == 'sending' || message.sendStatus == '') {
+        debugPrint('  ├─ 🔄 Updating status to "sent"');
+        _cache.updateMessageStatus(message.roomId, message.messageId, 'sent');
 
         // Update via API
-        if (message.sendStatus != newStatus) {
-          _cache.updateRoomWithMessage(
+        _apiService?.updateMessageStatus(
+          messageId: message.messageId,
+          status: 'sent',
+        );
+      } else {
+        debugPrint('  ├─ ℹ️ Status from server: ${message.sendStatus}');
+        // Update dengan status dari server
+        _cache.updateMessageStatus(
+          message.roomId,
+          message.messageId,
+          message.sendStatus,
+        );
+      }
+    } else {
+      // ════════════════════════════════════════════════════════
+      // STEP 2: No local echo found - might be from another device
+      // ════════════════════════════════════════════════════════
+      debugPrint('  ├─ ⚠️ No local echo found');
+      debugPrint('  ├─ Checking if message already exists...');
+
+      final existingMessages = _cache.getMessages(message.roomId);
+      final exists =
+          existingMessages.any((m) => m.messageId == message.messageId);
+
+      if (exists) {
+        debugPrint('  ├─ ℹ️ Message already exists in cache');
+
+        // Update status jika berbeda
+        final existing = existingMessages.firstWhere(
+          (m) => m.messageId == message.messageId,
+        );
+
+        if (existing.sendStatus != message.sendStatus) {
+          debugPrint(
+              '  ├─ 🔄 Updating status: ${existing.sendStatus} → ${message.sendStatus}');
+          _cache.updateMessageStatus(
             message.roomId,
-            message,
-            incrementUnread: true, // ✅ Key logic here
-          );
-          _apiService?.updateMessageStatus(
-            messageId: message.messageId,
-            status: newStatus,
+            message.messageId,
+            message.sendStatus,
           );
         }
+      } else {
+        debugPrint('  ├─ ➕ Adding message from another device');
 
-        // Notify callback
-        onNewMessageFromOther?.call(message);
+        // Tambahkan dengan status 'sent'
+        final messageToAdd =
+            message.sendStatus == 'sending' || message.sendStatus == ''
+                ? message.copyWith(sendStatus: 'sent')
+                : message;
+
+        _cache.addMessage(message.roomId, messageToAdd);
+
+        debugPrint(
+            '  ├─ ✅ Message added with status: ${messageToAdd.sendStatus}');
       }
     }
 
-    notifyListeners();
+    // ════════════════════════════════════════════════════════
+    // STEP 3: Update room preview
+    // ════════════════════════════════════════════════════════
+    _cache.updateRoomWithMessage(message.roomId, message,
+        incrementUnread: false);
+
+    debugPrint('  └─ ✅ Own message handled');
+  }
+
+  /// Handle pesan dari orang lain - IMPROVED WITH REAL-TIME STATUS UPDATES
+  void _handleMessageFromOthers(ChatModel message, bool isActiveRoom) {
+    debugPrint('  ├─ Handling message from others');
+    debugPrint('  ├─ IsActiveRoom: $isActiveRoom');
+    debugPrint('  ├─ MessageId: ${message.messageId}');
+    debugPrint('  ├─ Initial status from server: ${message.sendStatus}');
+
+    // ════════════════════════════════════════════════════════
+    // STEP 1: Check if message already exists
+    // ════════════════════════════════════════════════════════
+    final existingMessages = _cache.getMessages(message.roomId);
+    final existingIndex = existingMessages.indexWhere(
+      (m) => m.messageId == message.messageId,
+    );
+
+    if (existingIndex != -1) {
+      // Message sudah ada - update status jika berbeda
+      final existingMessage = existingMessages[existingIndex];
+      debugPrint('  ├─ ℹ️ Message already exists');
+      debugPrint('  ├─ Existing status: ${existingMessage.sendStatus}');
+      debugPrint('  ├─ New status from server: ${message.sendStatus}');
+
+      // Cek apakah status berubah
+      if (existingMessage.sendStatus != message.sendStatus) {
+        debugPrint('  ├─ 🔄 Status changed, updating...');
+
+        // Determine final status based on active room
+        String finalStatus;
+        bool shouldIncrementUnread;
+
+        if (isActiveRoom) {
+          // If in active room, mark as read
+          finalStatus = 'read';
+          shouldIncrementUnread = false;
+
+          // Clear unread
+          _cache.clearRoomUnread(message.roomId);
+          _cache.markMessagesAsRead(message.roomId, _currentUserId!);
+
+          debugPrint('  ├─ 👁️ In active room → status: "read"');
+        } else {
+          // If not in active room
+          if (message.sendStatus == 'sending' || message.sendStatus == 'sent') {
+            finalStatus = 'delivered';
+            shouldIncrementUnread = existingMessage.sendStatus != 'delivered' &&
+                existingMessage.sendStatus != 'read';
+          } else if (message.sendStatus == 'delivered' ||
+              message.sendStatus == 'read') {
+            finalStatus = message.sendStatus;
+            shouldIncrementUnread = existingMessage.sendStatus != 'delivered' &&
+                existingMessage.sendStatus != 'read' &&
+                message.sendStatus == 'delivered';
+          } else {
+            finalStatus = 'delivered';
+            shouldIncrementUnread = true;
+          }
+
+          debugPrint('  ├─ 📱 Not in active room → status: "$finalStatus"');
+        }
+
+        // Update message status in cache
+        _cache.updateMessageStatus(
+            message.roomId, message.messageId, finalStatus);
+
+        // Update room dengan message (increment unread jika perlu)
+        if (shouldIncrementUnread) {
+          _cache.updateRoomWithMessage(
+            message.roomId,
+            message.copyWith(sendStatus: finalStatus),
+            incrementUnread: true,
+          );
+        }
+
+        // Update via API jika status berbeda dari server
+        if (message.sendStatus != finalStatus) {
+          debugPrint(
+              '  ├─ 📡 Updating status via API: ${message.sendStatus} → $finalStatus');
+          _apiService?.updateMessageStatus(
+            messageId: message.messageId,
+            status: finalStatus,
+          );
+        }
+
+        debugPrint(
+            '  └─ ✅ Status updated: ${existingMessage.sendStatus} → $finalStatus');
+      } else {
+        debugPrint('  └─ ℹ️ Status unchanged, no update needed');
+      }
+
+      return; // Exit early - message already processed
+    }
+
+    // ════════════════════════════════════════════════════════
+    // STEP 2: New message - add to cache
+    // ════════════════════════════════════════════════════════
+    debugPrint('  ├─ ➕ New message, adding to cache');
+
+    String finalStatus;
+    bool shouldIncrementUnread;
+
+    if (isActiveRoom) {
+      // ═══════════════════════════════════════════════════
+      // SUB-CASE: User IN ACTIVE ROOM
+      // ═══════════════════════════════════════════════════
+      debugPrint('  ├─ 👁️ User is in this room (active)');
+
+      finalStatus = 'read';
+      shouldIncrementUnread = false;
+
+      // Add message dengan status 'read'
+      _cache.addMessage(message.roomId, message.copyWith(sendStatus: 'read'));
+
+      // Clear unread dan mark as read
+      _cache.clearRoomUnread(message.roomId);
+      _cache.markMessagesAsRead(message.roomId, _currentUserId!);
+
+      debugPrint('  ├─ ✅ Added with status: "read"');
+    } else {
+      // ═══════════════════════════════════════════════════
+      // SUB-CASE: User NOT IN ACTIVE ROOM
+      // ═══════════════════════════════════════════════════
+      debugPrint('  ├─ 📱 User is NOT in this room');
+
+      // Determine status
+      if (message.sendStatus == 'sending' ||
+          message.sendStatus == 'sent' ||
+          message.sendStatus == '') {
+        finalStatus = 'delivered';
+        shouldIncrementUnread = true;
+      } else if (message.sendStatus == 'read') {
+        finalStatus = 'read';
+        shouldIncrementUnread = false;
+      } else {
+        // Already 'delivered' or other
+        finalStatus = message.sendStatus;
+        shouldIncrementUnread = message.sendStatus == 'delivered';
+      }
+
+      // Add message dengan status yang sudah ditentukan
+      _cache.addMessage(
+        message.roomId,
+        message.copyWith(sendStatus: finalStatus),
+      );
+
+      debugPrint('  ├─ ✅ Added with status: "$finalStatus"');
+
+      // Trigger notification callback
+      onNewMessageFromOther?.call(message);
+    }
+
+    // ════════════════════════════════════════════════════════
+    // STEP 3: Update room with message
+    // ════════════════════════════════════════════════════════
+    _cache.updateRoomWithMessage(
+      message.roomId,
+      message.copyWith(sendStatus: finalStatus),
+      incrementUnread: shouldIncrementUnread,
+    );
+
+    // ════════════════════════════════════════════════════════
+    // STEP 4: Update via API if status changed
+    // ════════════════════════════════════════════════════════
+    if (message.sendStatus != finalStatus) {
+      debugPrint(
+          '  ├─ 📡 Updating status via API: ${message.sendStatus} → $finalStatus');
+      _apiService?.updateMessageStatus(
+        messageId: message.messageId,
+        status: finalStatus,
+      );
+    }
+
+    debugPrint(
+        '  └─ ✅ Message from others handled (final status: $finalStatus, unread: $shouldIncrementUnread)');
   }
 
   /// Check apakah message membutuhkan load offer data
   void _checkAndTriggerOfferDataLoad(ChatModel message) {
-    // Check jika message berisi paket, penawaran, atau pesanan
-    final needsOfferData = message.hasPaket ||
-        message.hasPenawaran ||
-        message.hasPesanan;
+    final needsOfferData =
+        message.hasPaket || message.hasPenawaran || message.hasPesanan;
 
     if (needsOfferData) {
       debugPrint(
           '[ChatProvider] 🔔 Offer data needed for room: ${message.roomId}');
+      debugPrint('  - HasPaket: ${message.hasPaket}');
+      debugPrint('  - HasPenawaran: ${message.hasPenawaran}');
+      debugPrint('  - HasPesanan: ${message.hasPesanan}');
 
-      // ✅ Trigger callback dengan delay kecil untuk memastikan message sudah tersimpan
+      // Delay kecil untuk memastikan message sudah tersimpan
       Future.delayed(const Duration(milliseconds: 100), () {
         onOfferDataNeeded?.call(message.roomId);
       });
