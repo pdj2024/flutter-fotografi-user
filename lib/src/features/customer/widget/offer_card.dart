@@ -2,33 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:provider/provider.dart';
 
 class OfferCard extends StatelessWidget {
   final PaketModel paket;
+  final String vendorId; // ✅ Tambahkan vendorId
   final bool isPreview;
-  final VoidCallback onSend;
-  const OfferCard(
-      {super.key,
-      required this.paket,
-      this.isPreview = true,
-      required this.onSend});
+  final VoidCallback? onSend;
+
+  const OfferCard({
+    super.key,
+    required this.paket,
+    required this.vendorId, // ✅ Required
+    this.isPreview = true,
+    this.onSend,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () {
-        context.read<RoomChatProvider>().setTawaranPaket(paket);
-        CustomDialog.showDetailPaketDialog(
-          context: context,
-          paket: paket,
-          isAsk: true,
-          onSend: onSend,
-        );
-      },
+      onTap: () => _showDetailDialog(context),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         padding: const EdgeInsets.all(16),
@@ -47,7 +44,6 @@ class OfferCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// --- TITLE + PRICE + EDIT ICON ---
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -62,9 +58,7 @@ class OfferCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                SizedBox(
-                  width: 10,
-                ),
+                SizedBox(width: 10),
                 Text(
                   Helper.formatCurrency(paket.harga),
                   style: TextStyle(
@@ -75,32 +69,20 @@ class OfferCard extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             Divider(color: Colors.grey.shade300),
             const SizedBox(height: 10),
-
             ..._buildRincianList(paket.rincian),
-
             const SizedBox(height: 10),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  context.read<RoomChatProvider>().setTawaranPaket(paket);
-                  CustomDialog.showDetailPaketDialog(
-                    context: context,
-                    paket: paket,
-                    isAsk: true,
-                    onSend: onSend,
-                  );
-                },
+                onPressed: () => _showDetailDialog(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   overlayColor: Constants.primaryColorVendor.withAlpha(20),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadiusGeometry.circular(15),
+                    borderRadius: BorderRadius.circular(15),
                     side: BorderSide(
                       width: 2,
                       color: Constants.primaryColorVendor,
@@ -121,9 +103,29 @@ class OfferCard extends StatelessWidget {
     );
   }
 
+  void _showDetailDialog(BuildContext context) {
+    final roomChatProv = context.read<RoomChatProvider>();
+    final userProv = context.read<UserProvider>();
+
+    CustomDialog.showDetailPaketDialog(
+      context: context,
+      paket: paket,
+      isAsk: true,
+      onSend: () async {
+        // ✅ Send message dengan explicit vendorId
+        final currentUserId = userProv.userId;
+        if (currentUserId == null) {
+          debugPrint('❌ No userId, cannot send');
+          return;
+        }
+        // Callback jika ada
+        onSend?.call();
+      },
+    );
+  }
+
   List<Widget> _buildRincianList(String rincian, {int maxLines = 3}) {
     final list = rincian.split('\n').where((e) => e.trim().isNotEmpty).toList();
-
     final visibleItems = list.take(maxLines).toList();
     final hasMore = list.length > maxLines;
 
@@ -138,18 +140,13 @@ class OfferCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.trim(),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(fontSize: 14, height: 1.4),
                 ),
               ),
             ],
           ),
         ),
       ),
-
-      /// indikator ada lanjutan
       if (hasMore)
         Padding(
           padding: const EdgeInsets.only(top: 4),

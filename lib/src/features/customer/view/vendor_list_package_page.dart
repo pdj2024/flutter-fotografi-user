@@ -120,6 +120,7 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                     (paket) {
                       return OfferCard(
                         paket: paket,
+                        vendorId: widget.vendor.noId,
                         onSend: () async {
                           setState(() {
                             isLoading = true;

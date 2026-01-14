@@ -7,6 +7,7 @@ import 'package:mpjnew/src/data/models/penawaran_model.dart';
 
 class ChatPaymentCard extends StatelessWidget {
   final PenawaranModel penawaran;
+  final bool isPesanan;
   final PaketModel? paket;
   final String roomId;
   final String customerId;
@@ -17,7 +18,8 @@ class ChatPaymentCard extends StatelessWidget {
       required this.roomId,
       required this.customerId,
       required this.onTap,
-      this.paket});
+      this.paket,
+      this.isPesanan = false});
 
   @override
   Widget build(BuildContext context) {
@@ -61,9 +63,7 @@ class ChatPaymentCard extends StatelessWidget {
               ),
               onPressed: onTap,
               child: Text(
-                penawaran.noPesanan == ""
-                    ? "Detail & Pembayaran"
-                    : "Lihat Pesanan",
+                !isPesanan ? "Detail & Pembayaran" : "Lihat Pesanan",
                 style:
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),

@@ -3,11 +3,13 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
@@ -84,9 +86,62 @@ class _UserLoginState extends State<UserLogin>
 
       // Cek hasil login
       if (result.name == 'aktif') {
-        // Initialize services setelah login berhasil
-        await context.read<ChatProvider>().init(provider.userId ?? '');
-        await context.read<KotaProvider>().getAllKotaList();
+        print("[UserLogin] ✅ Login successful, initializing services...");
+
+        // ==========================================
+        // 1️⃣ Initialize ChatProvider (Connection 1)
+        // ==========================================
+        try {
+          await context.read<ChatProvider>().initWithApiClient(
+                userId: provider.customer!.noId,
+                userType: Constants.customer,
+                hubUrl: "${Constants.baseUrlHub}/api/chathub",
+                getToken: () async => await navigationProvider.authService
+                    .getIdToken(forceRefresh: true),
+              );
+          print("[UserLogin] ✅ ChatProvider initialized");
+        } catch (e) {
+          print("[UserLogin] ⚠️ ChatProvider init error: $e");
+          // Continue even if chat fails
+        }
+
+        // ==========================================
+        // 2️⃣ Initialize HistoryOrderProvider (Connection 2 - Standalone)
+        // ==========================================
+        try {
+          final historyOrderProvider = context.read<HistoryOrderProvider>();
+
+          final historyConnected = await historyOrderProvider.initialize(
+            config: HistoryOrderServiceConfig(
+              hubUrl: "${Constants.baseUrlHub}/api/chathub",
+              role: Constants.customer,
+              getToken: () async => await navigationProvider.authService
+                  .getIdToken(forceRefresh: true),
+            ),
+            userId: provider.customer!.noId,
+          );
+
+          if (historyConnected) {
+            print(
+                "[UserLogin] ✅ HistoryOrderProvider initialized with standalone connection");
+          } else {
+            print("[UserLogin] ⚠️ HistoryOrderProvider connection failed");
+          }
+        } catch (e) {
+          print("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
+          // Continue even if history order fails
+        }
+
+        // ==========================================
+        // 3️⃣ Load Kota List
+        // ==========================================
+        try {
+          await context.read<KotaProvider>().getAllKotaList();
+          print("[UserLogin] ✅ Kota list loaded");
+        } catch (e) {
+          print("[UserLogin] ⚠️ Kota list load error: $e");
+          // Continue even if kota fails
+        }
 
         // Pop halaman login
         Navigator.pop(context);
@@ -101,6 +156,8 @@ class _UserLoginState extends State<UserLogin>
           ),
           targetTabIndex: tabIndex,
         );
+
+        print("[UserLogin] ✅ Navigation completed");
       } else if (result.name == 'nonaktif') {
         CustomSnackbar.showErrorSnackbar(
           context,
@@ -114,8 +171,8 @@ class _UserLoginState extends State<UserLogin>
         );
         await provider.logout();
       }
-    } catch (e) {
-      print("❌ Error handleLoginGoogle: $e");
+    } catch (e, st) {
+      print("❌ Error handleLoginGoogle: $e\n$st");
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(
           context,
@@ -174,7 +231,6 @@ class _UserLoginState extends State<UserLogin>
                         SlideTransition(
                           position: _slideAnimation,
                           child: ClipRRect(
-                            // borderRadius: BorderRadius.circular(24),
                             child: Image.asset(
                               'assets/user_login_image.png',
                               fit: BoxFit.cover,
@@ -330,72 +386,6 @@ class _UserLoginState extends State<UserLogin>
         ),
       ),
     );
-
-    // return Scaffold(
-    //   backgroundColor: const Color(0xFFF9F9F9),
-    //   body: SafeArea(
-    //     child: LayoutBuilder(
-    //       builder: (context, constraints) {
-    //         final availableHeight = constraints.maxHeight;
-    //         return Stack(
-    //           children: [
-    //             Column(
-    //               crossAxisAlignment: CrossAxisAlignment.center,
-    //               children: [
-    //                 const SizedBox(height: 50),
-    //                 Image.asset(
-    //                   'assets/camera_icon_transparent.png',
-    //                   height: availableHeight * 0.07,
-    //                 ),
-    //                 const SizedBox(height: 20),
-    //                 Padding(
-    //                   padding: const EdgeInsets.symmetric(horizontal: 0),
-    //                   child: Image.asset(
-    //                     'assets/user_login_image.png',
-    //                     width: screenWidth,
-    //                     fit: BoxFit.cover,
-    //                   ),
-    //                 ),
-    //                 const SizedBox(height: 30),
-    //                 Column(
-    //                   children: [
-    //                     Text(
-    //                       "Selamat Datang di",
-    //                       style: AppTextStyle.headline1,
-    //                     ),
-    //                     Text(
-    //                       "Fotografi",
-    //                       style: AppTextStyle.primary(AppTextStyle.headline1),
-    //                     ),
-    //                     // CustomText.textBanner(
-    //                     //     text: 'Fotografi',
-    //                     //     color: Constants.primaryColorVendor),
-    //                   ],
-    //                 ),
-    //                 Spacer(),
-    //                 Padding(
-    //                   padding: const EdgeInsets.symmetric(horizontal: 25),
-    //                   child: CustomButton.loginButton(
-    //                     onTap: () async {
-    //                       await handleLoginGoogle(context, targetPage, tabIndex,
-    //                           noIdPortofolio, noIdVendor);
-    //                     },
-    //                   ),
-    //                 ),
-    //                 const SizedBox(height: 80),
-    //               ],
-    //             ),
-    //             Positioned(
-    //               top: 16,
-    //               left: 16,
-    //               child: CustomButton.backButton(context: context),
-    //             ),
-    //           ],
-    //         );
-    //       },
-    //     ),
-    //   ),
-    // );
   }
 
   Widget getPageFromString(String targetPage,
@@ -405,11 +395,11 @@ class _UserLoginState extends State<UserLogin>
       case 'SinglePostPage':
         return SinglePostPage(
           noId: noIdPortofolio ?? 'porto_6',
-        ); // Ganti dengan halaman yang sesuai
+        );
       case 'VendorBioPage':
         return VendorBioPage(
           idVendor: noIdVendor ?? 'ven_2',
-        ); // Ganti dengan halaman yang sesuai
+        );
       case 'Tab1':
         return ChatListPage();
       case 'Tab2':
@@ -419,7 +409,7 @@ class _UserLoginState extends State<UserLogin>
       default:
         return SinglePostPage(
           noId: noIdPortofolio ?? 'porto_6',
-        ); // Default ke halaman SinglePostPage
+        );
     }
   }
 }

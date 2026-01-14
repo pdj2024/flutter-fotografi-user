@@ -13,9 +13,10 @@ import 'package:provider/provider.dart';
 class NavigationProvider with ChangeNotifier {
   DeviceTokenService deviceTokenService = DeviceTokenService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
-  
+
   // ✅ Gunakan singleton AuthService
   final AuthService _authService = AuthService();
+  AuthService get authService => _authService;
 
   // ─────────────── State
   int _selectedIndex = 0;
@@ -110,7 +111,15 @@ class NavigationProvider with ChangeNotifier {
     print("===== [handleLogout] start");
 
     try {
+      // 1️⃣ Remove device token jika ada
       final userProv = context.read<UserProvider>();
+      if (userProv.customer != null) {
+        try {
+          await deviceTokenService.removeDeviceToken(userProv.customer!.noId);
+        } catch (e) {
+          print("⚠️ Error remove device token: $e");
+        }
+      }
 
       await userProv.logout();
 

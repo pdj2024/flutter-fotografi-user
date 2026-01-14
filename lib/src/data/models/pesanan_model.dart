@@ -14,6 +14,7 @@ class PesananModel {
   // =======================
   final String idVendor;
   final String? namaVendor;
+  final String? idMediaVendor;
 
   final String idCustomer;
   final String? namaCustomer;
@@ -75,6 +76,7 @@ class PesananModel {
     this.noPenawaran,
     required this.idVendor,
     this.namaVendor,
+    this.idMediaVendor,
     required this.idCustomer,
     this.namaCustomer,
     required this.idPaket,
@@ -133,6 +135,7 @@ class PesananModel {
       noPenawaran: json['No_Penawaran'],
       idVendor: json['Id_Vendor'] ?? '',
       namaVendor: json['Nama_Vendor'],
+      idMediaVendor: json['Id_Media_Vendor'],
       idCustomer: json['Id_Customer'] ?? '',
       namaCustomer: json['Nama_Customer'],
       idPaket: json['Id_Paket'] ?? '',
@@ -212,6 +215,7 @@ class PesananModel {
     String? noPenawaran,
     String? idVendor,
     String? namaVendor,
+    String? idMediaVendor,
     String? idCustomer,
     String? namaCustomer,
     String? idPaket,
@@ -243,7 +247,8 @@ class PesananModel {
       noTrackingPesanan: noTrackingPesanan ?? this.noTrackingPesanan,
       status: status ?? this.status,
       statusProgresPesanan: statusProgresPesanan ?? this.statusProgresPesanan,
-      deskripsiProgresPesanan: deskripsiProgresPesanan ?? this.deskripsiProgresPesanan,
+      deskripsiProgresPesanan:
+          deskripsiProgresPesanan ?? this.deskripsiProgresPesanan,
       noPenawaran: noPenawaran ?? this.noPenawaran,
       idVendor: idVendor ?? this.idVendor,
       namaVendor: namaVendor ?? this.namaVendor,
@@ -272,6 +277,7 @@ class PesananModel {
       grandTotal: grandTotal ?? this.grandTotal,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      idMediaVendor: idMediaVendor ?? this.idMediaVendor,
     );
   }
 }

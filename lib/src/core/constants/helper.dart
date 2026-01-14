@@ -151,6 +151,59 @@ class Helper {
     if (text.isEmpty) return text;
     return text[0].toUpperCase() + text.substring(1).toLowerCase();
   }
+
+  static String getRatingText(int rating) {
+    switch (rating) {
+      case 1:
+        return 'Sangat Buruk';
+      case 2:
+        return 'Buruk';
+      case 3:
+        return 'Cukup';
+      case 4:
+        return 'Baik';
+      case 5:
+        return 'Sangat Baik';
+      default:
+        return '';
+    }
+  }
+
+  static Color getRatingColor(int rating) {
+    switch (rating) {
+      case 1:
+        return Colors.red;
+      case 2:
+        return Colors.orange;
+      case 3:
+        return Colors.amber.shade700;
+      case 4:
+        return Colors.lightGreen.shade700;
+      case 5:
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  static String formatTanggal(DateTime date) {
+    final months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${date.day} ${months[date.month]} ${date.year}';
+  }
 }
 
 class CurrencyFormatter extends TextInputFormatter {

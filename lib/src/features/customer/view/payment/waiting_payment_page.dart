@@ -213,7 +213,6 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Widget build(BuildContext context) {
     final int grandTotal = widget.paymentData.grandTotal;
     final int subtotal = widget.paymentData.subtotal;
-    final int ppn = widget.paymentData.totPpn ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),

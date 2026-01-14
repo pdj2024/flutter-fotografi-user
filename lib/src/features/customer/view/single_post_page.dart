@@ -158,6 +158,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         else
                           ...paketList.map(
                             (paket) => OfferCard(
+                              vendorId: portofolio.idVendor,
                               paket: paket,
                               onSend: () async {
                                 setState(() {

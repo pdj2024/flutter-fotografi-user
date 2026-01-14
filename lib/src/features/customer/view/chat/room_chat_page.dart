@@ -10,6 +10,7 @@ import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
@@ -46,28 +47,63 @@ class _RoomChatPageState extends State<RoomChatPage>
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
+  // ✅ Simpan reference ke providers
+  late ChatProvider _chatProvider;
+  late RoomChatProvider _roomChatProvider;
+  bool _providersInitialized = false;
+
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return; // cegah async setelah dispose
+      if (!mounted) return;
 
-      final roomProv = context.read<RoomChatProvider>();
       print("===== INIT SINGLE CHAT (room id): ${widget.roomId}");
-
-      _initializeChat(roomProv);
+      _initializeChat(_roomChatProvider, _chatProvider);
     });
   }
 
-  Future<void> _initializeChat(RoomChatProvider roomProv) async {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // ✅ Simpan reference di sini, bukan di dispose
+    if (!_providersInitialized) {
+      _chatProvider = context.read<ChatProvider>();
+      _roomChatProvider = context.read<RoomChatProvider>();
+      _providersInitialized = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    // ✅ Gunakan reference yang sudah disimpan
+    _chatProvider.clearActiveRoomSilently();
+    _roomChatProvider.resetSilently();
+
+    _scrollController.dispose();
+    _refreshController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializeChat(
+      RoomChatProvider roomProv, ChatProvider chatProv) async {
     try {
+      // 1️⃣ Initialize room
       await roomProv.initChat(
         roomId: widget.roomId,
         partnerId: widget.partnerId,
       );
 
+      // 2️⃣ Load offer data
       await roomProv.loadOfferData();
+
+      // 3️⃣ Set active room di ChatProvider jika berhasil init
+      if (roomProv.activeRoomId != null) {
+        chatProv.setActiveRoom(roomProv.activeRoomId);
+        debugPrint('✅ Active room set: ${roomProv.activeRoomId}');
+      }
     } catch (e) {
       print("❌ Error init chat: $e");
     }
@@ -206,7 +242,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                   enablePullUp: true,
                   controller: _refreshController,
                   onRefresh: () {
-                    _initializeChat(roomChatProvider);
+                    _initializeChat(roomChatProvider, chatProv);
                   },
                   child: ListView(
                     controller: _scrollController,
@@ -224,6 +260,27 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                             PaketModel? paket;
                             PenawaranModel? offer;
+
+                            if (roomChatProvider.isLoadingOfferData) {
+                              return Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.symmetric(
+                                    vertical: 4, horizontal: 40),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 2,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: ShimmerPlaceholder(),
+                              );
+                            }
 
                             if (message.idPaket != null) {
                               final index = roomChatProvider.paketList
@@ -248,32 +305,6 @@ class _RoomChatPageState extends State<RoomChatPage>
                               } else {
                                 offer = null;
                               }
-                            }
-
-                            if (message.idPaket != null) {
-                              return Column(
-                                crossAxisAlignment: isMe
-                                    ? CrossAxisAlignment.end
-                                    : CrossAxisAlignment.start,
-                                children: [
-                                  if (paket == null)
-                                    ShimmerPlaceholder(
-                                      width: 300,
-                                      height: 100,
-                                      radius: 10,
-                                    ),
-                                  if (paket != null)
-                                    ChatPackageCard(
-                                      paket: paket,
-                                      isMe: isMe,
-                                    ),
-                                  if (message.message.isNotEmpty)
-                                    ChatBubble(
-                                      message: message,
-                                      isMe: isMe,
-                                    ),
-                                ],
-                              );
                             }
 
                             if (message.noPenawaran != null &&
@@ -306,6 +337,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
                               return ChatPaymentCard(
                                 penawaran: offer,
+                                isPesanan: offer.noPesanan != "",
                                 roomId: widget.roomId ?? "",
                                 customerId: userProv.customer?.noId ?? "",
                                 onTap: () async {
@@ -314,15 +346,28 @@ class _RoomChatPageState extends State<RoomChatPage>
                                     final pesanan = await pesananService.getAll(
                                         noBukti: offer.noPesanan,
                                         status: "aktif");
-                                    context
-                                        .read<NavigationProvider>()
-                                        .navigateToPage(
-                                          context,
-                                          targetTabIndex: 2,
-                                          DetailOrderPage(
-                                            pesananModel: pesanan.first,
-                                          ),
-                                        );
+                                    if (pesanan.first.statusProgresPesanan ==
+                                        "menunggu bayar") {
+                                      context
+                                          .read<NavigationProvider>()
+                                          .navigateToPage(
+                                            context,
+                                            targetTabIndex: 2,
+                                            WaitingPaymentPage(
+                                              paymentData: pesanan.first,
+                                            ),
+                                          );
+                                    } else {
+                                      context
+                                          .read<NavigationProvider>()
+                                          .navigateToPage(
+                                            context,
+                                            targetTabIndex: 2,
+                                            DetailOrderPage(
+                                              pesananModel: pesanan.first,
+                                            ),
+                                          );
+                                    }
                                   } else {
                                     context
                                         .read<NavigationProvider>()
@@ -335,6 +380,32 @@ class _RoomChatPageState extends State<RoomChatPage>
                                         );
                                   }
                                 },
+                              );
+                            }
+
+                            if (message.idPaket != null) {
+                              return Column(
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  if (paket == null)
+                                    ShimmerPlaceholder(
+                                      width: 300,
+                                      height: 100,
+                                      radius: 10,
+                                    ),
+                                  if (paket != null)
+                                    ChatPackageCard(
+                                      paket: paket,
+                                      isMe: isMe,
+                                    ),
+                                  if (message.message.isNotEmpty)
+                                    ChatBubble(
+                                      message: message,
+                                      isMe: isMe,
+                                    ),
+                                ],
                               );
                             }
 

@@ -9,7 +9,6 @@ import 'package:mpjnew/src/data/models/paket_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/payment_option.dart';
 import 'package:provider/provider.dart';
 
@@ -373,10 +372,8 @@ class CustomDialog {
                                                   .userId!;
 
                                               Navigator.pop(context);
-                                              roomChatProvider
-                                                  .setTawaranPaket(paket);
-                                              roomChatProvider.activeRoomId =
-                                                  null;
+                                              roomChatProvider.attachPaket(
+                                                  paket.no_id, paket);
                                               roomChatProvider.vendorId =
                                                   paket.id_vendor;
 

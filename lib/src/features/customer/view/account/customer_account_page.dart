@@ -82,14 +82,36 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
                                   children: [
                                     userProvider.photoUrl == null
                                         ? Container(
-                                            width: 82,
-                                            height: 82,
-                                            padding: const EdgeInsets.all(2),
+                                            width: 68,
+                                            height: 68,
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.shade300,
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Constants.primaryColorVendor,
+                                                  Constants.primaryColorVendor
+                                                      .withOpacity(0.7),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
                                               shape: BoxShape.circle,
                                             ),
-                                            child: Icon(Icons.person),
+                                            child: Center(
+                                              child: Text(
+                                                (userProvider.customer
+                                                                ?.namaDisplay !=
+                                                            ""
+                                                        ? "C"
+                                                        : userProvider.customer
+                                                            ?.namaDisplay[0])!
+                                                    .toUpperCase(),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 32,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
                                           )
                                         : AvatarCircle(
                                             size: 82,
@@ -213,12 +235,6 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
               children: [
                 PortofolioAccountSection(data: "like"),
                 PortofolioAccountSection(data: "save"),
-                // Center(
-                //   child: Text("Likes"),
-                // ),
-                // Center(
-                //   child: Text("Saves"),
-                // ),
               ],
             ),
           ),

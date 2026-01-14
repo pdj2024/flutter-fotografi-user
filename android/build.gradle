@@ -13,24 +13,6 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// ✅ HAPUS SEMUA KODE INI:
-// subprojects { subproject ->
-//     subproject.afterEvaluate {
-//         if (subproject.pluginManager.hasPlugin('com.android.application') ||
-//             subproject.pluginManager.hasPlugin('com.android.library')) {
-//             subproject.android {
-//                 configurations.all {
-//                     resolutionStrategy {
-//                         force 'androidx.browser:browser:1.8.0'
-//                         force 'androidx.core:core:1.13.1'
-//                         force 'androidx.core:core-ktx:1.13.1'
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
-
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
