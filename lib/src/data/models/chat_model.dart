@@ -66,7 +66,7 @@ class ChatModel {
   final DateTime? deliveredAt;
   final DateTime? readAt;
   final List<String> userIds;
-  
+
   // Local tracking
   final String? localId;
 
@@ -134,18 +134,33 @@ class ChatModel {
   // =========================================
   factory ChatModel.fromJson(Map<String, dynamic> json) {
     return ChatModel(
-      messageId: json["Message_Id"]?.toString() ?? json["messageId"]?.toString() ?? "",
+      messageId:
+          json["Message_Id"]?.toString() ?? json["messageId"]?.toString() ?? "",
       roomId: json["Room_Id"]?.toString() ?? json["roomId"]?.toString() ?? "",
-      senderId: json["Sender_Id"]?.toString() ?? json["senderId"]?.toString() ?? json["sender"]?.toString() ?? "",
-      tipeUser: json["Tipe_User"]?.toString() ?? json["tipeUser"]?.toString() ?? "",
+      senderId: json["Sender_Id"]?.toString() ??
+          json["senderId"]?.toString() ??
+          json["sender"]?.toString() ??
+          "",
+      tipeUser:
+          json["Tipe_User"]?.toString() ?? json["tipeUser"]?.toString() ?? "",
       message: json["Message"]?.toString() ?? json["message"]?.toString() ?? "",
-      jenisPesan: json["Jenis_Pesan"]?.toString() ?? json["jenisPesan"]?.toString() ?? "text",
+      jenisPesan: json["Jenis_Pesan"]?.toString() ??
+          json["jenisPesan"]?.toString() ??
+          "text",
       idPaket: json["Id_Paket"]?.toString() ?? json["idPaket"]?.toString(),
-      noInvoice: json["No_Invoice"]?.toString() ?? json["noInvoice"]?.toString() ?? json["noPesanan"]?.toString(),
-      noPenawaran: json["No_Penawaran"]?.toString() ?? json["noPenawaran"]?.toString(),
-      status: json["Status"]?.toString() ?? json["status"]?.toString() ?? "aktif",
-      sendStatus: json["Send_Status"]?.toString() ?? json["sendStatus"]?.toString() ?? "pending",
-      roomType: json["Room_Type"]?.toString() ?? json["roomType"]?.toString() ?? "direct",
+      noInvoice: json["No_Pesanan"]?.toString() ??
+          json["noInvoice"]?.toString() ??
+          json["noPesanan"]?.toString(),
+      noPenawaran:
+          json["No_Penawaran"]?.toString() ?? json["noPenawaran"]?.toString(),
+      status:
+          json["Status"]?.toString() ?? json["status"]?.toString() ?? "aktif",
+      sendStatus: json["Send_Status"]?.toString() ??
+          json["sendStatus"]?.toString() ??
+          "pending",
+      roomType: json["Room_Type"]?.toString() ??
+          json["roomType"]?.toString() ??
+          "direct",
       sentAt: _parseDateTime(json["Sent_At"] ?? json["sentAt"]),
       editedAt: json["Edited_At"] != null || json["editedAt"] != null
           ? _parseDateTime(json["Edited_At"] ?? json["editedAt"])
@@ -156,17 +171,20 @@ class ChatModel {
       readAt: json["Read_At"] != null || json["readAt"] != null
           ? _parseDateTime(json["Read_At"] ?? json["readAt"])
           : null,
-      userIds: _parseUserIds(json["User_Ids"] ?? json["userIds"] ?? json["user_Ids"]),
+      userIds: _parseUserIds(
+          json["User_Ids"] ?? json["userIds"] ?? json["user_Ids"]),
       localId: json["Local_Id"]?.toString() ?? json["localId"]?.toString(),
     );
   }
 
   /// FROM SignalR event data
-  factory ChatModel.fromSignalR(Map<String, dynamic> json, String currentUserId) {
+  factory ChatModel.fromSignalR(
+      Map<String, dynamic> json, String currentUserId) {
     return ChatModel(
       messageId: json["messageId"]?.toString() ?? "",
       roomId: json["roomId"]?.toString() ?? "",
-      senderId: json["senderId"]?.toString() ?? json["sender"]?.toString() ?? "",
+      senderId:
+          json["senderId"]?.toString() ?? json["sender"]?.toString() ?? "",
       tipeUser: json["tipeUser"]?.toString() ?? "",
       message: json["message"]?.toString() ?? "",
       jenisPesan: json["jenisPesan"]?.toString() ?? "text",
@@ -177,8 +195,11 @@ class ChatModel {
       sendStatus: json["sendStatus"]?.toString() ?? "sent",
       roomType: json["roomType"]?.toString() ?? "direct",
       sentAt: _parseDateTime(json["sentAt"]),
-      editedAt: json["editedAt"] != null ? _parseDateTime(json["editedAt"]) : null,
-      deliveredAt: json["deliveredAt"] != null ? _parseDateTime(json["deliveredAt"]) : null,
+      editedAt:
+          json["editedAt"] != null ? _parseDateTime(json["editedAt"]) : null,
+      deliveredAt: json["deliveredAt"] != null
+          ? _parseDateTime(json["deliveredAt"])
+          : null,
       readAt: json["readAt"] != null ? _parseDateTime(json["readAt"]) : null,
       userIds: _parseUserIds(json["userIds"]),
       localId: json["localId"]?.toString(),
@@ -188,7 +209,7 @@ class ChatModel {
   // =========================================
   // TO JSON
   // =========================================
-  
+
   /// TO JSON (REST API)
   Map<String, dynamic> toJson() {
     return {
@@ -301,16 +322,16 @@ class ChatModel {
   @override
   String toString() {
     return 'ChatModel(id: $messageId, room: $roomId, sender: $senderId, '
-           'status: $sendStatus, jenis: ${resolvedJenisPesan.value}, '
-           'msg: ${message.length > 20 ? '${message.substring(0, 20)}...' : message})';
+        'status: $sendStatus, jenis: ${resolvedJenisPesan.value}, '
+        'msg: ${message.length > 20 ? '${message.substring(0, 20)}...' : message})';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is ChatModel && 
-           other.messageId == messageId &&
-           other.roomId == roomId;
+    return other is ChatModel &&
+        other.messageId == messageId &&
+        other.roomId == roomId;
   }
 
   @override

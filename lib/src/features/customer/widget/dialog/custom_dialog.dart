@@ -5,7 +5,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';

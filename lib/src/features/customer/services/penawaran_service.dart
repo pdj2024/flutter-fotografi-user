@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/data/models/penawaran_model.dart';
+import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 
 
 class PenawaranService {

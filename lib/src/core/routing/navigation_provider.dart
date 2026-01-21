@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
@@ -13,10 +14,6 @@ import 'package:provider/provider.dart';
 class NavigationProvider with ChangeNotifier {
   DeviceTokenService deviceTokenService = DeviceTokenService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
-
-  // ✅ Gunakan singleton AuthService
-  final AuthService _authService = AuthService();
-  AuthService get authService => _authService;
 
   // ─────────────── State
   int _selectedIndex = 0;
@@ -152,7 +149,7 @@ class NavigationProvider with ChangeNotifier {
   // =========================================================
   Future<bool> isAuthenticated() async {
     // ✅ Gunakan AuthService singleton
-    final token = await _authService.getIdToken(forceRefresh: false);
+    final token = await authService.getIdToken(forceRefresh: false);
     return token != null && token.isNotEmpty;
   }
 

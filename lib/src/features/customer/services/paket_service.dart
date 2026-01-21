@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 
 class PaketService {
   final String entity = 'Paket';

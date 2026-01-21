@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/features/auth/services/auth_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
@@ -173,7 +175,7 @@ class _MainMenuState extends State<MainMenu> {
           userType: Constants.customer,
           hubUrl: "${Constants.baseUrlHub}/api/chathub",
           getToken: () async =>
-              await navProvider.authService.getIdToken(forceRefresh: true),
+              await authService.getIdToken(forceRefresh: true),
         );
         break;
 

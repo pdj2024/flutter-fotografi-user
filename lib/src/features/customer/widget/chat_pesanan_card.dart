@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
-import 'package:mpjnew/src/data/models/penawaran_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 
-class ChatPaymentCard extends StatelessWidget {
-  final PenawaranModel penawaran;
+class ChatPesananCard extends StatelessWidget {
+  final PesananModel pesanan;
   final bool isPesanan;
   final PaketModel? paket;
   final String roomId;
   final String customerId;
   final VoidCallback? onTap;
-  const ChatPaymentCard(
+  const ChatPesananCard(
       {super.key,
-      required this.penawaran,
+      required this.pesanan,
       required this.roomId,
       required this.customerId,
       required this.onTap,
@@ -24,7 +24,7 @@ class ChatPaymentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tanggal =
-        DateFormat("dd MMM yyyy", "id_ID").format(penawaran.tglRealisasi);
+        DateFormat("dd MMM yyyy", "id_ID").format(pesanan.tglRealisasi);
 
     return Container(
       width: double.infinity,
@@ -40,17 +40,17 @@ class ChatPaymentCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(Helper.formatCurrency(penawaran.harga),
+          Text(Helper.formatCurrency(pesanan.harga),
               style:
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 4),
-          Text(penawaran.namaPaket,
+          Text(pesanan.namaPaket,
               style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 2),
-          Text("${Helper.toLocalTime(penawaran.tglRealisasi)}, $tanggal",
+          Text("${Helper.toLocalTime(pesanan.tglRealisasi)}, $tanggal",
               style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 2),
-          Text(penawaran.lokasi, style: TextStyle(color: Colors.grey.shade700)),
+          Text(pesanan.lokasi, style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -62,8 +62,7 @@ class ChatPaymentCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
               onPressed: onTap,
-              child: Text(
-                !isPesanan ? "Detail & Pembayaran" : "Lihat Pesanan",
+              child: Text("Lihat Pesanan",
                 style:
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),

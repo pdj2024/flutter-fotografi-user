@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -203,6 +204,40 @@ class Helper {
       'Des'
     ];
     return '${date.day} ${months[date.month]} ${date.year}';
+  }
+
+  // =========================================
+  // UTILITIES
+  // =========================================
+
+  static Map<String, dynamic> parseData(dynamic obj) {
+    if (obj is Map) {
+      return obj.map((k, v) => MapEntry(k.toString(), v));
+    }
+
+    if (obj is String) {
+      try {
+        final decoded = jsonDecode(obj);
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), v));
+        }
+      } catch (e) {
+        debugPrint('[ChatService] ⚠️ JSON decode failed: $e');
+      }
+    }
+
+    return {};
+  }
+
+  static DateTime parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value.toLocal();
+
+    try {
+      return DateTime.parse(value.toString()).toLocal();
+    } catch (_) {
+      return DateTime.now();
+    }
   }
 }
 

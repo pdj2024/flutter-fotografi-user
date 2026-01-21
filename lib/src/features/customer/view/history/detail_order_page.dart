@@ -7,8 +7,8 @@ import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
-import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
@@ -40,6 +40,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   PaketModel? paket;
   PesananModel? pesanan;
   MetodePembayaranModel? metodePembayaran;
+
+  late HistoryOrderProvider _historyOrderProvider;
 
   bool isLoading = false;
   String error = '';
@@ -134,37 +136,22 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
 
       pesanan = widget.pesananModel;
 
-      // ✅ Fetch dari provider (sudah real-time)
-      final historyProvider = context.read<HistoryOrderProvider>();
-
-      // 🆕 JOIN ORDER DULU - ini yang kurang!
-      debugPrint(
-          '[DetailOrderPage] 🔄 Joining order: ${widget.pesananModel.noBukti}');
-      final joined =
-          await historyProvider.joinOrder(widget.pesananModel.noBukti);
-
-      if (joined) {
-        debugPrint('[DetailOrderPage] ✅ Successfully joined order group');
-      } else {
-        debugPrint(
-            '[DetailOrderPage] ⚠️ Failed to join order group, but continuing...');
-      }
-
       // Fetch history (ini akan otomatis dipanggil setelah join berhasil di provider,
       // tapi kita tetap panggil untuk memastikan)
-      await historyProvider.fetchHistoryForOrder(widget.pesananModel.noBukti);
+      if (pesanan != null) {
+        await _historyOrderProvider.fetchHistoryForOrder(pesanan!.noBukti);
 
-      paket = (await PaketService().getAll(noId: widget.pesananModel.idPaket))
-          .first;
+        paket = (await PaketService().getAll(noId: pesanan!.idPaket)).first;
 
-      final ulasanList =
-          await UlasanService().getAll(noOrder: pesanan!.noBukti);
-      ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
+        final ulasanList =
+            await UlasanService().getAll(noOrder: pesanan!.noBukti);
+        ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
 
-      final metodePembayaranList = await MetodePembayaranService()
-          .getAll(caraBayar: pesanan!.metodeBayar);
-      metodePembayaran =
-          metodePembayaranList.isNotEmpty ? metodePembayaranList.first : null;
+        final metodePembayaranList = await MetodePembayaranService()
+            .getAll(caraBayar: pesanan!.metodeBayar);
+        metodePembayaran =
+            metodePembayaranList.isNotEmpty ? metodePembayaranList.first : null;
+      }
     } catch (e) {
       print(e);
       error = e.toString();
@@ -257,10 +244,15 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _historyOrderProvider = context.read<HistoryOrderProvider>();
+  }
+
+  @override
   void dispose() {
-    // Leave order group when leaving detail page
     if (pesanan != null) {
-      context.read<HistoryOrderProvider>().leaveOrder(pesanan!.noBukti);
+      _historyOrderProvider.leaveOrder(pesanan!.noBukti);
     }
     super.dispose();
   }
@@ -1471,7 +1463,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      Helper.formatTanggal(ulasan!.tglUlasan),
+                      "${Helper.formatTanggal(ulasan!.tglUlasan)}, ${Helper.toLocalTime(ulasan!.tglUlasan)}",
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,

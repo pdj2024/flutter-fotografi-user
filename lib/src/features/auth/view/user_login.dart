@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
@@ -10,9 +13,11 @@ import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 class UserLogin extends StatefulWidget {
@@ -75,6 +80,7 @@ class _UserLoginState extends State<UserLogin>
     try {
       final provider = context.read<UserProvider>();
       final navigationProvider = context.read<NavigationProvider>();
+      final chatProv = context.read<ChatProvider>();
 
       // Login dengan Google
       final result = await provider.checkLoginGoogle(
@@ -88,17 +94,78 @@ class _UserLoginState extends State<UserLogin>
       if (result.name == 'aktif') {
         print("[UserLogin] ✅ Login successful, initializing services...");
 
+        // ✅ REQUEST PERMISSION DULU (Android 13+)
+        if (Platform.isAndroid) {
+          final status = await Permission.notification.request();
+
+          if (status.isDenied) {
+            // Show dialog to ask user
+            if (mounted) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('Izin Notifikasi'),
+                  content: Text(
+                    'Aplikasi membutuhkan izin notifikasi untuk '
+                    'memberi tahu Anda tentang pesan baru.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Nanti'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        openAppSettings(); // Open settings
+                        Navigator.pop(context);
+                      },
+                      child: Text('Buka Pengaturan'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          } else if (status.isPermanentlyDenied) {
+            // User permanently denied, show info
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Izin notifikasi ditolak. '
+                    'Buka Pengaturan untuk mengaktifkannya.',
+                  ),
+                  action: SnackBarAction(
+                    label: 'Pengaturan',
+                    onPressed: () => openAppSettings(),
+                  ),
+                ),
+              );
+            }
+          }
+        }
+
         // ==========================================
         // 1️⃣ Initialize ChatProvider (Connection 1)
         // ==========================================
         try {
-          await context.read<ChatProvider>().initWithApiClient(
-                userId: provider.customer!.noId,
-                userType: Constants.customer,
-                hubUrl: "${Constants.baseUrlHub}/api/chathub",
-                getToken: () async => await navigationProvider.authService
-                    .getIdToken(forceRefresh: true),
-              );
+          chatProv.chatService.getSenderName = (roomId, senderId) {
+            // Ambil nama dari room info yang sudah di-cache
+            final room = chatProv.getRoom(roomId);
+            if (room != null) {
+              // Jika sender adalah partner, ambil nama partner
+              if (senderId == room.partnerId) {
+                return room.usernameLawan ?? 'Unknown User';
+              }
+            }
+            return 'New Message';
+          };
+          await chatProv.initWithApiClient(
+            userId: provider.customer!.noId,
+            userType: Constants.customer,
+            hubUrl: "${Constants.baseUrlHub}/api/chathub",
+            getToken: () async =>
+                await authService.getIdToken(forceRefresh: false),
+          );
           print("[UserLogin] ✅ ChatProvider initialized");
         } catch (e) {
           print("[UserLogin] ⚠️ ChatProvider init error: $e");
@@ -109,14 +176,22 @@ class _UserLoginState extends State<UserLogin>
         // 2️⃣ Initialize HistoryOrderProvider (Connection 2 - Standalone)
         // ==========================================
         try {
+          // 8️⃣ Initialize HistoryOrderProvider
           final historyOrderProvider = context.read<HistoryOrderProvider>();
+          final pesananProvider = context.read<PesananProvider>();
+
+          // ✅ CRITICAL: Connect callback BEFORE init
+          historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
+            debugPrint("📨 Status update: $noOrder → $newStatus");
+            pesananProvider.updateOrderStatus(noOrder, newStatus);
+          };
 
           final historyConnected = await historyOrderProvider.initialize(
             config: HistoryOrderServiceConfig(
               hubUrl: "${Constants.baseUrlHub}/api/chathub",
               role: Constants.customer,
-              getToken: () async => await navigationProvider.authService
-                  .getIdToken(forceRefresh: true),
+              getToken: () async =>
+                  await authService.getIdToken(forceRefresh: true),
             ),
             userId: provider.customer!.noId,
           );
@@ -142,6 +217,8 @@ class _UserLoginState extends State<UserLogin>
           print("[UserLogin] ⚠️ Kota list load error: $e");
           // Continue even if kota fails
         }
+
+        
 
         // Pop halaman login
         Navigator.pop(context);

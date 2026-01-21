@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 
 class ChatPackageCard extends StatelessWidget {

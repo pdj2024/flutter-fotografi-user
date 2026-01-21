@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/data/models/room_chat_model.dart';
+import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/repositories/hive_chat_repository.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+/// ✅ REFACTORED: Chat List Page using Hive Streams
+///
+/// Changes:
+/// - Uses StreamBuilder untuk reactive updates dari Hive
+/// - Data loads instantly dari Hive cache
+/// - Background sync berjalan otomatis
+/// - No manual notifyListeners needed
 class ChatListPage extends StatefulWidget {
   const ChatListPage({super.key});
 
@@ -19,33 +30,31 @@ class _ChatListPageState extends State<ChatListPage> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+
+    // Reset RoomChatProvider saat masuk ke list
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final roomChatProv = context.read<RoomChatProvider>();
+      roomChatProv.reset();
+
+      // ✅ Optional: Trigger background sync
+      final chatProv = context.read<ChatProvider>();
+      if (chatProv.isInitialized) {
+        chatProv.loadRooms(); // Background sync, tidak blocking UI
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomChatProv = context.read<RoomChatProvider>();
-      roomChatProv.reset();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
-    final rooms = chatProv.rooms;
-
-    // Filter & sort
-    final filtered = rooms.where((room) {
-      if (_searchQuery.isEmpty) return true;
-      final name = room.displayName.toLowerCase();
-      return name.contains(_searchQuery.toLowerCase());
-    }).toList();
-
-    filtered.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
 
     return Scaffold(
       appBar: AppBar(
@@ -59,13 +68,29 @@ class _ChatListPageState extends State<ChatListPage> {
           ),
         ),
         actions: [
-          // Connection indicator
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Icon(
-              chatProv.isConnected ? Icons.wifi : Icons.wifi_off,
-              color: chatProv.isConnected ? Colors.green : Colors.red,
-              size: 20,
+            child: Row(
+              children: [
+                Icon(
+                  chatProv.isConnected ? Icons.wifi : Icons.wifi_off,
+                  color: chatProv.isConnected ? Colors.green : Colors.red,
+                  size: 20,
+                ),
+
+                // ✅ Background sync indicator
+                if (chatProv.isLoading) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.blue),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -73,100 +98,135 @@ class _ChatListPageState extends State<ChatListPage> {
       body: Column(
         children: [
           // Search bar
-          _buildSearchBar(filtered),
+          _buildSearchBar(),
 
-          // Room list
+          // ✅ MAIN CHANGE: StreamBuilder untuk rooms
           Expanded(
-            child: _buildRoomList(chatProv, filtered),
-          ),
-        ],
-      ),
-    );
-  }
+            child: StreamBuilder<List<RoomChatEntity>>(
+              stream: chatProv.repository.getRoomsStream(),
+              builder: (context, snapshot) {
+                // ════════════════════════════════════════════════════════
+                // LOADING STATE (hanya untuk initial load)
+                // ════════════════════════════════════════════════════════
+                if (!snapshot.hasData) {
+                  // Cek apakah sedang loading initial data
+                  if (chatProv.isLoading) {
+                    return _buildLoadingState();
+                  }
+                  // Jika tidak loading tapi tidak ada data = empty
+                  return _buildEmptyState();
+                }
 
-  Widget _buildSearchBar(List<RoomChatModel> rooms) {
-    final unreadCount = rooms.where((r) => r.hasUnread).length;
+                // ════════════════════════════════════════════════════════
+                // DATA STATE
+                // ════════════════════════════════════════════════════════
+                final allRooms = snapshot.data!;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.white,
-      child: Row(
-        children: [
-          // Search field
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Cari percakapan...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onChanged: (value) {
-                setState(() => _searchQuery = value);
+                // Filter & sort
+                final filtered = _filterAndSortRooms(allRooms);
+
+                // Empty state setelah filter
+                if (filtered.isEmpty) {
+                  return _buildEmptyState(
+                    isSearchResult: _searchQuery.isNotEmpty,
+                  );
+                }
+
+                // ✅ Room list
+                return _buildRoomList(chatProv, filtered);
               },
             ),
           ),
-
-          // Unread badge
-          if (unreadCount > 0) ...[
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '$unreadCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildRoomList(ChatProvider chatProv, List<RoomChatModel> rooms) {
-    // Loading state
-    if (chatProv.isLoading && rooms.isEmpty) {
-      return ListView.builder(
-        itemCount: 8,
-        itemBuilder: (_, __) => _buildShimmerItem(),
-      );
-    }
+  // =========================================
+  // FILTER & SORT
+  // =========================================
 
-    // Empty state
-    if (rooms.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.chat_bubble_outline,
-                size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              _searchQuery.isEmpty ? 'Belum ada pesan' : 'Tidak ditemukan',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-            ),
-          ],
-        ),
-      );
-    }
+  List<RoomChatEntity> _filterAndSortRooms(List<RoomChatEntity> rooms) {
+    // Filter berdasarkan search query
+    final filtered = rooms.where((room) {
+      if (_searchQuery.isEmpty) return true;
+      final name = room.displayName.toLowerCase();
+      return name.contains(_searchQuery.toLowerCase());
+    }).toList();
 
-    // Room list
+    // Sort by lastMessageAt descending
+    filtered.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+
+    return filtered;
+  }
+
+  // =========================================
+  // UI BUILDERS
+  // =========================================
+
+  Widget _buildSearchBar() {
+    return StreamBuilder<List<RoomChatEntity>>(
+      stream: context.read<ChatProvider>().repository.getRoomsStream(),
+      builder: (context, snapshot) {
+        final rooms = snapshot.data ?? [];
+        final unreadCount = rooms.where((r) => r.hasUnread).length;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.white,
+          child: Row(
+            children: [
+              // Search field
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Cari percakapan...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value);
+                  },
+                ),
+              ),
+
+              // Unread badge
+              if (unreadCount > 0) ...[
+                const SizedBox(width: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$unreadCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRoomList(ChatProvider chatProv, List<RoomChatEntity> rooms) {
     return RefreshIndicator(
-      onRefresh: () => chatProv.refresh(),
+      onRefresh: () => chatProv.loadRooms(forceRefresh: true),
       child: ListView.builder(
         itemCount: rooms.length,
         itemBuilder: (context, index) {
@@ -176,7 +236,7 @@ class _ChatListPageState extends State<ChatListPage> {
     );
   }
 
-  Widget _buildRoomItem(RoomChatModel room) {
+  Widget _buildRoomItem(RoomChatEntity room) {
     return InkWell(
       onTap: () {
         // Navigate ke RoomChatPage
@@ -184,6 +244,9 @@ class _ChatListPageState extends State<ChatListPage> {
               context,
               RoomChatPage(
                 roomId: room.roomId,
+                partnerId: room.idLawan,
+                partnerUsername: room.usernameLawan,
+                partnerAvatarUrl: room.idMediaLawan,
               ),
               targetTabIndex: 1,
             );
@@ -218,20 +281,6 @@ class _ChatListPageState extends State<ChatListPage> {
                         )
                       : const Icon(Icons.person, color: Colors.white),
                 ),
-                // Online indicator (optional)
-                // Positioned(
-                //   right: 0,
-                //   bottom: 0,
-                //   child: Container(
-                //     width: 12,
-                //     height: 12,
-                //     decoration: BoxDecoration(
-                //       color: Colors.green,
-                //       shape: BoxShape.circle,
-                //       border: Border.all(color: Colors.white, width: 2),
-                //     ),
-                //   ),
-                // ),
               ],
             ),
 
@@ -316,6 +365,34 @@ class _ChatListPageState extends State<ChatListPage> {
     );
   }
 
+  // =========================================
+  // STATES
+  // =========================================
+
+  Widget _buildLoadingState() {
+    return ListView.builder(
+      itemCount: 8,
+      itemBuilder: (_, __) => _buildShimmerItem(),
+    );
+  }
+
+  Widget _buildEmptyState({bool isSearchResult = false}) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chat_bubble_outline,
+              size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            isSearchResult ? 'Tidak ditemukan' : 'Belum ada pesan',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildShimmerItem() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -359,6 +436,10 @@ class _ChatListPageState extends State<ChatListPage> {
       ),
     );
   }
+
+  // =========================================
+  // UTILITIES
+  // =========================================
 
   String _formatTime(DateTime time) {
     final now = DateTime.now();

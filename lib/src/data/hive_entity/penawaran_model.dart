@@ -1,21 +1,61 @@
+import 'package:hive/hive.dart';
+
+part 'penawaran_model.g.dart';
+
+@HiveType(typeId: 3)
 class PenawaranModel {
+  @HiveField(0)
   final String noId;
+  
+  @HiveField(1)
   final String noTrackingPenawaran;
+  
+  @HiveField(2)
   final String noPesanan;
+  
+  @HiveField(3)
   final String idVendor;
+  
+  @HiveField(4)
   final String namaVendor;
+  
+  @HiveField(5)
   final String idCustomer;
+  
+  @HiveField(6)
   final String namaCustomer;
+  
+  @HiveField(7)
   final String idPaket;
+  
+  @HiveField(8)
   final String namaPaket;
+  
+  @HiveField(9)
   final int harga;
+  
+  @HiveField(10)
   final String status;
+  
+  @HiveField(11)
   final String lokasi;
+  
+  @HiveField(12)
   final String namaKota;
+  
+  @HiveField(13)
   final String kota;
+  
+  @HiveField(14)
   final String deskripsi;
+  
+  @HiveField(15)
   final DateTime tglRealisasi;
+  
+  @HiveField(16)
   final DateTime createdAt;
+  
+  @HiveField(17)
   final DateTime? updatedAt;
 
   PenawaranModel({

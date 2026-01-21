@@ -1,70 +1,133 @@
+import 'package:hive/hive.dart';
+
+part 'pesanan_model.g.dart';
+
+@HiveType(typeId: 4)
 class PesananModel {
   // =======================
   // IDENTITAS
   // =======================
+  @HiveField(0)
   final String noBukti;
+  
+  @HiveField(1)
   final String? noTrackingPesanan;
+  
+  @HiveField(2)
   final String? status;
+  
+  @HiveField(3)
   final String? statusProgresPesanan;
-  final String? deskripsiProgresPesanan; // Deskripsi_Progress_Pesanan
+  
+  @HiveField(4)
+  final String? deskripsiProgresPesanan;
+  
+  @HiveField(5)
   final String? noPenawaran;
 
   // =======================
   // VENDOR & CUSTOMER
   // =======================
+  @HiveField(6)
   final String idVendor;
+  
+  @HiveField(7)
   final String? namaVendor;
+  
+  @HiveField(8)
   final String? idMediaVendor;
 
+  @HiveField(9)
   final String idCustomer;
+  
+  @HiveField(10)
   final String? namaCustomer;
 
   // =======================
   // PAKET
   // =======================
+  @HiveField(11)
   final String idPaket;
+  
+  @HiveField(12)
   final String namaPaket;
+  
+  @HiveField(13)
   final int harga;
 
   // =======================
   // LOKASI & WAKTU
   // =======================
+  @HiveField(14)
   final String lokasi;
+  
+  @HiveField(15)
   final String kota;
+  
+  @HiveField(16)
   final String? namaKota;
+  
+  @HiveField(17)
   final DateTime tglRealisasi;
 
   // =======================
   // PEMBAYARAN
   // =======================
+  @HiveField(18)
   final String? metodeBayar;
+  
+  @HiveField(19)
   final String? statusBayar;
+  
+  @HiveField(20)
   final String? idPaymentGateway;
+  
+  @HiveField(21)
   final String? orderIdMidtrans;
 
+  @HiveField(22)
   final DateTime? expiryTime;
+  
+  @HiveField(23)
   final String? paymentNumber1;
+  
+  @HiveField(24)
   final String? paymentNumber2;
 
   // =======================
   // HASIL
   // =======================
+  @HiveField(25)
   final String? linkUrl;
 
   // =======================
   // TOTAL & PAJAK
   // =======================
+  @HiveField(26)
   final int subtotal;
+  
+  @HiveField(27)
   final double? totDpp;
+  
+  @HiveField(28)
   final int? ppn;
+  
+  @HiveField(29)
   final bool? inclPpn;
+  
+  @HiveField(30)
   final int? totPpn;
+  
+  @HiveField(31)
   final int grandTotal;
 
   // =======================
   // TIMESTAMP
   // =======================
+  @HiveField(32)
   final DateTime? createdAt;
+  
+  @HiveField(33)
   final DateTime? updatedAt;
 
   PesananModel({
@@ -164,6 +227,48 @@ class PesananModel {
       createdAt: parseDate(json['Created_At']),
       updatedAt: parseDate(json['Updated_At']),
     );
+  }
+
+  // =======================
+  // TO JSON (FULL)
+  // =======================
+  Map<String, dynamic> toJson() {
+    return {
+      'No_Bukti': noBukti,
+      'No_Tracking_Pesanan': noTrackingPesanan,
+      'Status': status,
+      'Status_Progress_Pesanan': statusProgresPesanan,
+      'Deskripsi_Progress_Pesanan': deskripsiProgresPesanan,
+      'No_Penawaran': noPenawaran,
+      'Id_Vendor': idVendor,
+      'Nama_Vendor': namaVendor,
+      'Id_Media_Vendor': idMediaVendor,
+      'Id_Customer': idCustomer,
+      'Nama_Customer': namaCustomer,
+      'Id_Paket': idPaket,
+      'Nama_Paket': namaPaket,
+      'Harga': harga,
+      'Lokasi': lokasi,
+      'Kota': kota,
+      'Nama_Kota': namaKota,
+      'Tgl_Realisasi': tglRealisasi.toIso8601String(),
+      'Metode_Bayar': metodeBayar,
+      'Status_Bayar': statusBayar,
+      'Id_Payment_Gateway': idPaymentGateway,
+      'Order_Id_Midtrans': orderIdMidtrans,
+      'Expiry_Time': expiryTime?.toIso8601String(),
+      'Payment_Number_1': paymentNumber1,
+      'Payment_Number_2': paymentNumber2,
+      'Link_Url': linkUrl,
+      'Subtotal': subtotal,
+      'Tot_DPP': totDpp,
+      'PPN': ppn,
+      'Incl_PPN': inclPpn,
+      'Tot_PPN': totPpn,
+      'Grand_Total': grandTotal,
+      'Created_At': createdAt?.toIso8601String(),
+      'Updated_At': updatedAt?.toIso8601String(),
+    };
   }
 
   // =======================

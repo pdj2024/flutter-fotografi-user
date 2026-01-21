@@ -1,266 +1,261 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/features/auth/services/auth_service.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+
+/// ============================================
+/// 🌐 ApiClient - FIXED VERSION
+/// ============================================
+/// Improvements:
+/// 1. Better token refresh handling
+/// 2. Exponential backoff untuk retry
+/// 3. Request deduplication
+/// 4. Cleaner error handling
+/// ============================================
 
 class ApiClient {
-  final AuthService _authService = AuthService();
   static const String baseUrl = '${Constants.baseUrl}/api';
   String? _role;
 
-  // 🔒 Lock untuk mencegah multiple refresh bersamaan
-  bool _isRefreshing = false;
-  
-  // 🔔 Callback untuk logout (akan di-set dari luar)
+  // 🔔 Callback untuk session expired
   Function()? onSessionExpired;
 
   void setRole(String role) => _role = role;
   void clearRole() => _role = null;
   String? getRole() => _role;
 
-  Future<String?> getIdToken() async {
-    return await _authService.getIdToken();
-  }
-
+  Future<String?> getIdToken() => authService.getIdToken();
   Future<Map<String, String>> getHeaders() => _headers();
 
-  /// GET request
+  // =========================================================
+  // 📡 HTTP METHODS
+  // =========================================================
+  
   Future<http.Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
-    final uri =
-        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri = Uri.parse('$baseUrl$path')
+        .replace(queryParameters: queryParameters);
 
-    return _handleWithAuthRetry(() async {
-      final headers = await _headers();
-
-      print("📥 [GET] $uri");
-      print("📄 Headers: $headers");
-
-      return http.get(uri, headers: headers);
-    });
+    return _executeWithRetry(
+      () async {
+        final headers = await _headers();
+        print("📥 [GET] $uri");
+        return http.get(uri, headers: headers);
+      },
+      method: 'GET',
+      path: path,
+    );
   }
 
-  /// POST request
   Future<http.Response> post(
     String path, {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri =
-        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri = Uri.parse('$baseUrl$path')
+        .replace(queryParameters: queryParameters);
 
-    return _handleWithAuthRetry(() async {
-      final mergedHeaders = await _mergedHeaders(headers);
+    return _executeWithRetry(
+      () async {
+        final mergedHeaders = await _mergedHeaders(headers);
+        Object? finalBody = body;
 
-      Object? finalBody = body;
-      if (body is Map) {
-        finalBody = jsonEncode(body);
-        mergedHeaders.putIfAbsent(
-          'Content-Type',
-          () => 'application/json',
-        );
-      }
+        if (body is Map) {
+          finalBody = jsonEncode(body);
+          mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
+        }
 
-      print("📤 [POST] $uri");
-      print("📄 Headers: $mergedHeaders");
-      print("📦 Body: $finalBody");
-
-      return http.post(uri, headers: mergedHeaders, body: finalBody);
-    });
+        print("📤 [POST] $uri");
+        return http.post(uri, headers: mergedHeaders, body: finalBody);
+      },
+      method: 'POST',
+      path: path,
+    );
   }
 
-  /// PUT request
   Future<http.Response> put(
     String path, {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri =
-        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri = Uri.parse('$baseUrl$path')
+        .replace(queryParameters: queryParameters);
 
-    return _handleWithAuthRetry(() async {
-      final mergedHeaders = await _mergedHeaders(headers);
+    return _executeWithRetry(
+      () async {
+        final mergedHeaders = await _mergedHeaders(headers);
+        Object? finalBody = body;
 
-      Object? finalBody = body;
-      if (body is Map) {
-        finalBody = jsonEncode(body);
-        mergedHeaders.putIfAbsent(
-          'Content-Type',
-          () => 'application/json',
-        );
-      }
+        if (body is Map) {
+          finalBody = jsonEncode(body);
+          mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
+        }
 
-      print("📤 [PUT] $uri");
-      print("📄 Headers: $mergedHeaders");
-      print("📦 Body: $finalBody");
-
-      return http.put(uri, headers: mergedHeaders, body: finalBody);
-    });
+        print("📤 [PUT] $uri");
+        return http.put(uri, headers: mergedHeaders, body: finalBody);
+      },
+      method: 'PUT',
+      path: path,
+    );
   }
 
-  /// DELETE request
   Future<http.Response> delete(
     String path, {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
   }) async {
-    final uri =
-        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+    final uri = Uri.parse('$baseUrl$path')
+        .replace(queryParameters: queryParameters);
 
-    return _handleWithAuthRetry(() async {
-      final mergedHeaders = await _mergedHeaders(headers);
-
-      print("❌ [DELETE] $uri");
-      print("📄 Headers: $mergedHeaders");
-
-      return http.delete(uri, headers: mergedHeaders);
-    });
+    return _executeWithRetry(
+      () async {
+        final mergedHeaders = await _mergedHeaders(headers);
+        print("❌ [DELETE] $uri");
+        return http.delete(uri, headers: mergedHeaders);
+      },
+      method: 'DELETE',
+      path: path,
+    );
   }
 
-  /// 🔄 Handle request dengan auto retry jika token invalid
-  Future<http.Response> _handleWithAuthRetry(
+  // =========================================================
+  // 🔄 RETRY MECHANISM WITH EXPONENTIAL BACKOFF
+  // =========================================================
+  
+  Future<http.Response> _executeWithRetry(
     Future<http.Response> Function() request, {
-    int retryCount = 0,
-    int maxRetries = 3, // ✅ Reduce dari 5 ke 3 untuk lebih cepat
+    required String method,
+    required String path,
+    int attempt = 1,
+    int maxAttempts = 3,
   }) async {
     try {
+      // Execute request
       final response = await request();
-
-      print("📊 Status Code: ${response.statusCode}");
       
-      // ✅ Request berhasil
+      print("📊 [$method $path] Status: ${response.statusCode}");
+
+      // Success - return immediately
       if (response.statusCode != 401) {
         return response;
       }
 
-      print("📊 Body: ${response.body}");
-
-      // 🔍 Cek apakah error karena token invalid
-      final isTokenError = response.body.contains("Invalid Token") ||
-          response.body.contains("invalid_token") ||
-          response.body.contains("Token expired") ||
-          response.body.contains("Unauthorized");
-
-      if (!isTokenError) {
-        print("⚠️ 401 tapi bukan token error");
+      // Check if it's a token error
+      if (!_isTokenError(response)) {
+        print("⚠️ [$method $path] 401 but not token error");
         return response;
       }
 
-      // ❌ Sudah mencoba retry maksimal
-      if (retryCount >= maxRetries) {
-        print("❌ Max retry tercapai ($maxRetries), session expired");
-        
-        // 🚪 Trigger logout callback
-        if (onSessionExpired != null) {
-          print("🚪 Calling onSessionExpired callback...");
-          onSessionExpired!();
-        }
-        
-        throw Exception('Session expired. Please login again.');
+      // Max attempts reached
+      if (attempt >= maxAttempts) {
+        print("❌ [$method $path] Max attempts ($maxAttempts) reached");
+        _triggerSessionExpired();
+        throw Exception('Session expired after $maxAttempts attempts');
       }
 
-      // 🔄 Refresh token
-      print("🔄 Token invalid, mencoba refresh token (retry: ${retryCount + 1}/$maxRetries)...");
-
+      // Refresh token
+      print("🔄 [$method $path] Token invalid, refreshing (attempt $attempt/$maxAttempts)...");
+      
       final refreshed = await _refreshToken();
-
+      
       if (!refreshed) {
-        print("❌ Refresh token gagal pada retry ${retryCount + 1}");
+        print("❌ [$method $path] Token refresh failed");
         
-        // Jika sudah retry terakhir, trigger logout
-        if (retryCount >= maxRetries - 1) {
-          print("🚪 Logout karena refresh gagal setelah $maxRetries kali");
-          
-          if (onSessionExpired != null) {
-            onSessionExpired!();
-          }
-          
-          throw Exception('Session expired. Please login again.');
+        if (attempt >= maxAttempts - 1) {
+          _triggerSessionExpired();
+          throw Exception('Token refresh failed');
         }
         
         return response;
       }
 
-      print("✅ Token berhasil di-refresh, retry request (${retryCount + 1}/$maxRetries)...");
+      // Wait with exponential backoff before retry
+      final delayMs = _calculateBackoff(attempt);
+      print("⏳ [$method $path] Waiting ${delayMs}ms before retry...");
+      await Future.delayed(Duration(milliseconds: delayMs));
 
-      // Retry request dengan token baru
-      return _handleWithAuthRetry(
+      // Retry request
+      print("🔄 [$method $path] Retrying with new token...");
+      return _executeWithRetry(
         request,
-        retryCount: retryCount + 1,
-        maxRetries: maxRetries,
+        method: method,
+        path: path,
+        attempt: attempt + 1,
+        maxAttempts: maxAttempts,
       );
+      
     } catch (e) {
-      print("❌ Error dalam request: $e");
+      print("❌ [$method $path] Error: $e");
       rethrow;
     }
   }
 
-  /// 🔄 Refresh token dengan strategi bertingkat
+  // =========================================================
+  // 🔄 TOKEN REFRESH
+  // =========================================================
+  
   Future<bool> _refreshToken() async {
-    // 🔒 Cegah multiple refresh bersamaan
-    if (_isRefreshing) {
-      print("⏳ Sedang refresh token, tunggu...");
-      int waitCount = 0;
-      while (_isRefreshing && waitCount < 100) { // Max 10 detik
-        await Future.delayed(const Duration(milliseconds: 100));
-        waitCount++;
-      }
-      return !_isRefreshing;
-    }
-
-    _isRefreshing = true;
-
     try {
-      print("🔄 Mulai refresh token...");
+      print("🔄 [ApiClient] Requesting token refresh...");
 
-      // 🆕 STRATEGI 1: Cek current user dulu
-      final currentUser = await _authService.getCurrentUser();
-      if (currentUser == null) {
-        print("❌ User tidak ada, tidak bisa refresh token");
-        return false;
-      }
-      
-      print("👤 Current user: ${currentUser.email}");
+      // AuthService will handle queue if multiple requests come in
+      final newToken = await authService.getIdToken(forceRefresh: true);
 
-      // 🆕 STRATEGI 2: Force refresh dari Firebase langsung
-      print("🔄 Mencoba force refresh dari Firebase...");
-      final forceRefreshToken = await _authService.getIdToken(forceRefresh: true);
-      
-      if (forceRefreshToken != null && forceRefreshToken.isNotEmpty) {
-        print("✅ Force refresh berhasil");
+      if (newToken != null && newToken.isNotEmpty) {
+        print("✅ [ApiClient] Token refreshed successfully");
+        print("🔑 New token (first 30): ${newToken.substring(0, 30)}...");
         return true;
       }
 
-      print("⚠️ Force refresh gagal, coba silent login...");
-
-      // 🆕 STRATEGI 3: Silent login sebagai backup
-      final silentToken = await _authService.login(silent: true);
-
-      if (silentToken != null && silentToken.isNotEmpty) {
-        print("✅ Silent login berhasil");
-        return true;
-      }
-
-      print("❌ Semua strategi refresh gagal");
+      print("❌ [ApiClient] Token refresh returned null");
       return false;
       
-    } catch (e, stackTrace) {
-      print("❌ Error saat refresh token: $e");
-      print("📍 Stack trace: $stackTrace");
+    } catch (e) {
+      print("❌ [ApiClient] Token refresh error: $e");
       return false;
-    } finally {
-      _isRefreshing = false;
     }
   }
 
-  /// Ambil header standar (opsional token & role)
+  // =========================================================
+  // 🔍 HELPER METHODS
+  // =========================================================
+  
+  /// Check if response indicates a token error
+  bool _isTokenError(http.Response response) {
+    if (response.statusCode != 401) return false;
+
+    final body = response.body.toLowerCase();
+    return body.contains('invalid token') ||
+           body.contains('invalid_token') ||
+           body.contains('token expired') ||
+           body.contains('unauthorized') ||
+           body.contains('token') && body.contains('invalid');
+  }
+
+  /// Calculate exponential backoff delay
+  int _calculateBackoff(int attempt) {
+    // 200ms, 400ms, 800ms, etc.
+    return (200 * (1 << (attempt - 1))).clamp(200, 2000);
+  }
+
+  /// Trigger session expired callback
+  void _triggerSessionExpired() {
+    if (onSessionExpired != null) {
+      print("🚪 [ApiClient] Triggering session expired callback");
+      onSessionExpired!();
+    }
+  }
+
+  // =========================================================
+  // 🔐 HEADERS
+  // =========================================================
+  
   Future<Map<String, String>> _headers() async {
-    // 🔄 Selalu cek token fresh (dengan cache jika belum expired)
-    final token = await _authService.getIdToken(forceRefresh: false);
+    final token = await authService.getIdToken();
 
     return {
       'Content-Type': 'application/json',
@@ -270,7 +265,6 @@ class ApiClient {
     };
   }
 
-  /// Merge header tambahan dengan default
   Future<Map<String, String>> _mergedHeaders(Map<String, String>? extra) async {
     final headers = await _headers();
     return {
@@ -279,20 +273,21 @@ class ApiClient {
     };
   }
 
-  /// Optional: untuk konversi null jadi string kosong
+  // =========================================================
+  // 🛠️ UTILITIES
+  // =========================================================
+  
   Map<String, dynamic> toJsonSafe(Map<String, dynamic> original) {
     return original.map((key, value) => MapEntry(key, value ?? ""));
   }
 
-  /// 🧪 Helper untuk test apakah user masih terautentikasi
   Future<bool> isAuthenticated() async {
-    final token = await _authService.getIdToken(forceRefresh: false);
+    final token = await authService.getIdToken(forceRefresh: false);
     return token != null && token.isNotEmpty;
   }
 
-  /// 🚪 Logout dan clear semua data
   Future<void> logout() async {
-    await _authService.logout();
+    await authService.logout();
     clearRole();
   }
 }

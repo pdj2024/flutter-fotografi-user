@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
-import 'package:mpjnew/src/data/models/penawaran_model.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 
 class PenawaranProvider with ChangeNotifier {
