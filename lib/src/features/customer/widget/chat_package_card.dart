@@ -14,7 +14,7 @@ class ChatPackageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formattedHarga = NumberFormat("#,###", "id_ID").format(paket.harga);
     final backgroundColor =
-        isMe ? Constants.primaryColor.withOpacity(0.1) : Colors.white;
+        isMe ? const Color.fromARGB(255, 195, 195, 241) : Colors.white;
     final innerContainerColor = isMe ? Colors.white : const Color(0xFFF5F5F5);
     final alignment = isMe ? Alignment.centerRight : Alignment.centerLeft;
     final titleText = isMe

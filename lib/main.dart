@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/core/services/fcm_service.dart';
 import 'package:mpjnew/src/data/hive_entity/chat_message_entity.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
@@ -45,6 +47,12 @@ final localizationsDelegates = <LocalizationsDelegate>[
   GlobalCupertinoLocalizations.delegate,
 ];
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await firebaseMessagingBackgroundHandler(message);
+}
+
 void main() async {
   // ✅ Initialize Flutter binding
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +61,12 @@ void main() async {
     // ✅ Initialize Firebase
     await Firebase.initializeApp();
     print("✅ Firebase initialized");
+
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Initialize FCM
+    await FCMService.instance.initialize();
 
     // ✅ Initialize Hive
     await Hive.initFlutter();

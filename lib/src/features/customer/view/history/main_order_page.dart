@@ -255,15 +255,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
         appBar: AppBar(
           backgroundColor: const Color(0xFFF9F9F9),
           elevation: 1,
-          title: const Text(
-            "Pesanan",
-            style: TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
+            preferredSize: const Size.fromHeight(0),
             child: TabBar(
               labelColor: Colors.black,
               unselectedLabelColor: Colors.grey,
@@ -307,16 +300,21 @@ class _MainOrderPageState extends State<MainOrderPage> {
           fit: BoxFit.scaleDown,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Stack(
+              alignment: Alignment.topRight,
+              // mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
                   ),
-                  maxLines: 1,
                 ),
                 if (count > 0) ...[
                   const SizedBox(width: 4),
@@ -326,7 +324,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.shade200,
+                      color: const Color.fromRGBO(255, 82, 82, 1),
                       shape: BoxShape.circle,
                     ),
                     child: Text(

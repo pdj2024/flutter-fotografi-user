@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'message_status_indicator.dart';
 
@@ -42,7 +41,7 @@ class ChatBubble extends StatelessWidget {
                 color: isMe
                     ? (isFailed
                         ? Colors.red.shade50
-                        : Constants.primaryColor.withOpacity(0.1))
+                        : const Color.fromARGB(255, 195, 195, 241))
                     : Colors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),

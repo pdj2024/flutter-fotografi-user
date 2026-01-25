@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
-import 'package:mpjnew/src/data/models/chat_model.dart';
-import 'package:mpjnew/src/data/repositories/hive_chat_repository.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 /// ✅ REFACTORED: Chat List Page using Hive Streams
@@ -70,27 +67,22 @@ class _ChatListPageState extends State<ChatListPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Row(
-              children: [
-                Icon(
-                  chatProv.isConnected ? Icons.wifi : Icons.wifi_off,
-                  color: chatProv.isConnected ? Colors.green : Colors.red,
-                  size: 20,
-                ),
-
-                // ✅ Background sync indicator
-                if (chatProv.isLoading) ...[
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.blue),
-                    ),
-                  ),
-                ],
-              ],
+            child: Tooltip(
+              message: chatProv.isLoading
+                  ? 'Mengecek koneksi chat...'
+                  : chatProv.isConnected
+                      ? 'Chat terhubung'
+                      : 'Chat terputus',
+              triggerMode: TooltipTriggerMode.tap, // ⬅️ klik, bukan long press
+              child: Icon(
+                Icons.square_rounded,
+                color: chatProv.isLoading
+                    ? Colors.blue
+                    : chatProv.isConnected
+                        ? Colors.green
+                        : Colors.red,
+                size: 20,
+              ),
             ),
           ),
         ],
@@ -173,7 +165,7 @@ class _ChatListPageState extends State<ChatListPage> {
 
         return Container(
           padding: const EdgeInsets.all(12),
-          color: Colors.white,
+          color: const Color(0xFFF9F9F9),
           child: Row(
             children: [
               // Search field
@@ -185,7 +177,7 @@ class _ChatListPageState extends State<ChatListPage> {
                     prefixIcon: const Icon(Icons.search, size: 20),
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     filled: true,
-                    fillColor: Colors.grey.shade100,
+                    fillColor: Colors.grey.shade200,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
                       borderSide: BorderSide.none,
@@ -254,7 +246,9 @@ class _ChatListPageState extends State<ChatListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: room.hasUnread ? Colors.blue.withOpacity(0.05) : Colors.white,
+          color: room.hasUnread
+              ? Constants.primaryColor.withOpacity(0.05)
+              : Color(0xFFF9F9F9),
           border: Border(
             bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
           ),
@@ -310,7 +304,7 @@ class _ChatListPageState extends State<ChatListPage> {
                         _formatTime(room.lastMessageAt),
                         style: TextStyle(
                           color: room.hasUnread
-                              ? Colors.blue
+                              ? Constants.primaryColor
                               : Colors.grey.shade600,
                           fontSize: 12,
                         ),
@@ -342,7 +336,7 @@ class _ChatListPageState extends State<ChatListPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue,
+                            color: Constants.primaryColor,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(

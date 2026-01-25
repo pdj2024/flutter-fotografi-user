@@ -26,26 +26,6 @@ class CustomButton {
     );
   }
 
-  static Widget backButton(
-      {required BuildContext context,
-      Color? color = Colors.black,
-      final IconData icon = Icons.arrow_back}) {
-    return IconButton(
-      icon: Icon(
-        icon,
-        color: color,
-      ),
-      onPressed: () async {
-        final provider =
-            Provider.of<NavigationProvider>(context, listen: false);
-        bool allowPop = await provider.onWillPop();
-        if (allowPop) {
-          Navigator.of(context).pop();
-        }
-      },
-    );
-  }
-
   static Widget textButton({
     required String text,
     required VoidCallback onTap,

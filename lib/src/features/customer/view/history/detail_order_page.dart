@@ -41,8 +41,6 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   PesananModel? pesanan;
   MetodePembayaranModel? metodePembayaran;
 
-  late HistoryOrderProvider _historyOrderProvider;
-
   bool isLoading = false;
   String error = '';
 
@@ -134,12 +132,13 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
         error = '';
       });
 
+      final historyProvider = context.read<HistoryOrderProvider>();
       pesanan = widget.pesananModel;
 
       // Fetch history (ini akan otomatis dipanggil setelah join berhasil di provider,
       // tapi kita tetap panggil untuk memastikan)
       if (pesanan != null) {
-        await _historyOrderProvider.fetchHistoryForOrder(pesanan!.noBukti);
+        await historyProvider.fetchHistoryForOrder(pesanan!.noBukti);
 
         paket = (await PaketService().getAll(noId: pesanan!.idPaket)).first;
 
@@ -240,19 +239,22 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   @override
   void initState() {
     super.initState();
-    fetchData();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _historyOrderProvider = context.read<HistoryOrderProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      fetchData();
+    });
   }
 
   @override
   void dispose() {
     if (pesanan != null) {
-      _historyOrderProvider.leaveOrder(pesanan!.noBukti);
+      // Gunakan Provider.of dengan listen: false
+      try {
+        final historyProvider =
+            Provider.of<HistoryOrderProvider>(context, listen: false);
+        historyProvider.leaveOrder(pesanan!.noBukti);
+      } catch (e) {
+        debugPrint('Error leaving order: $e');
+      }
     }
     super.dispose();
   }
@@ -741,7 +743,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     (index) {
                       final history = historyOrder[index];
                       return buildTimelineItem(
-                        DateFormat("dd MMM yyyy").format(history.tglProgress),
+                        "${Helper.formatTanggal(history.tglProgress)}, ${Helper.toLocalTime(history.tglProgress)}",
                         history.deskripsi,
                         history.statusProgressPesanan,
                         index == 0,

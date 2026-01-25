@@ -86,8 +86,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
   @override
   void dispose() {
-    // ✅ FIXED: Access chatService through ChatProvider
-    _chatProvider.chatService.setActiveRoom(null); // ✅ Allow notifications
+    _chatProvider.chatService.setActiveRoom(null);
     _chatProvider.clearActiveRoomSilently();
     _roomChatProvider.resetSilently();
     _scrollController.dispose();
@@ -98,7 +97,6 @@ class _RoomChatPageState extends State<RoomChatPage>
   // =========================================
   // INITIALIZATION
   // =========================================
-
   Future<void> _initializeChat() async {
     if (_hasInitialized) return;
 
@@ -180,71 +178,89 @@ class _RoomChatPageState extends State<RoomChatPage>
 
     return Scaffold(
       appBar: _buildAppBar(roomChatProv, imgUrl),
-      backgroundColor: const Color.fromARGB(255, 242, 242, 242),
-      body: Column(
-        children: [
-          // Background sync indicator
-          if (chatProv.isLoading)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              color: Colors.blue.shade50,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.blue.shade600),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(
+              'assets/chat_background.png',
+            ),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Color(0xFFF9F9F9).withOpacity(0.95),
+              BlendMode.srcATop,
+            ),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Background sync indicator
+            if (chatProv.isLoading)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                color: Colors.blue.shade50,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation(Colors.blue.shade600),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Memuat pesan terbaru...',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.blue.shade700,
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Memuat pesan terbaru...',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+
+            // Messages stream
+            Expanded(
+              child: roomChatProv.activeRoomId == null
+                  ? const Center(child: Text('Memuat pesan...'))
+                  : StreamBuilder<List<ChatMessageEntity>>(
+                      stream: chatProv.repository
+                          .getMessagesStream(roomChatProv.activeRoomId!),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData && chatProv.isLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return _buildEmptyState();
+                        }
+
+                        final entities = snapshot.data!;
+                        return _buildMessagesList(
+                          context,
+                          entities,
+                          chatProv,
+                          roomChatProv,
+                          userProv,
+                        );
+                      },
+                    ),
             ),
 
-          // Messages stream
-          Expanded(
-            child: roomChatProv.activeRoomId == null
-                ? const Center(child: Text('Memuat pesan...'))
-                : StreamBuilder<List<ChatMessageEntity>>(
-                    stream: chatProv.repository
-                        .getMessagesStream(roomChatProv.activeRoomId!),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData && chatProv.isLoading) {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      }
-
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return _buildEmptyState();
-                      }
-
-                      final entities = snapshot.data!;
-                      return _buildMessagesList(
-                        context,
-                        entities,
-                        chatProv,
-                        roomChatProv,
-                        userProv,
-                      );
-                    },
-                  ),
-          ),
-
-          // Input area
-          _buildInputArea(roomChatProv, userProv),
-        ],
+            // Input area
+            _buildInputArea(roomChatProv, userProv),
+          ],
+        ),
       ),
     );
   }
@@ -307,7 +323,6 @@ class _RoomChatPageState extends State<RoomChatPage>
           ],
         ),
       ),
-      toolbarHeight: 72,
     );
   }
 
@@ -503,9 +518,7 @@ class _RoomChatPageState extends State<RoomChatPage>
               ),
             ),
           ),
-
           const SizedBox(width: 8),
-
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
