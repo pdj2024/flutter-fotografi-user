@@ -4,7 +4,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/pesanan_card.dart';

@@ -1,8 +1,19 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/core/services/fcm_service.dart';
+import 'package:mpjnew/src/data/hive_entity/chat_message_entity.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
@@ -15,16 +26,14 @@ import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart'
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
-
 import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
 import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-
 import 'src/features/auth/services/user_provider.dart';
 import 'src/features/customer/services/customer_service.dart';
 import 'src/core/routing/navigation_provider.dart';
@@ -38,22 +47,97 @@ final localizationsDelegates = <LocalizationsDelegate>[
   GlobalCupertinoLocalizations.delegate,
 ];
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await firebaseMessagingBackgroundHandler(message);
+}
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => UserProvider(
-            customerService: CustomerService(),
-            vendorService: VendorService(),
+void main() async {
+  // ✅ Initialize Flutter binding
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    // ✅ Initialize Firebase
+    await Firebase.initializeApp();
+    print("✅ Firebase initialized");
+
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Initialize FCM
+    await FCMService.instance.initialize();
+
+    // ✅ Initialize Hive
+    await Hive.initFlutter();
+    print("✅ Hive initialized");
+
+    // ✅ Register Hive adapters
+    Hive.registerAdapter(ChatMessageEntityAdapter());
+    Hive.registerAdapter(RoomChatEntityAdapter());
+    Hive.registerAdapter(PaketModelAdapter());
+    Hive.registerAdapter(PenawaranModelAdapter());
+    Hive.registerAdapter(PesananModelAdapter());
+    print("✅ Hive adapters registered");
+
+    // ✅ Initialize AuthService singleton
+    await authService.initialize();
+    print("✅ AuthService initialized");
+
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    print("❌ Fatal initialization error: $e");
+    print(stackTrace);
+
+    // Show error screen
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text(
+                'Failed to initialize app',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                e.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
           ),
         ),
+      ),
+    ));
+  }
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        // ✅ UserProvider dengan initialization
+        ChangeNotifierProvider(
+          create: (_) {
+            final provider = UserProvider(
+              customerService: CustomerService(),
+              vendorService: VendorService(),
+            );
+            // Initialize Hive box
+            provider.initialize();
+            return provider;
+          },
+        ),
+
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
 
-        // Provider untuk portofolio yang mengambil userProvider dari atasnya
         ChangeNotifierProvider(
           create: (_) => PortofolioProvider(
             portofolioService: PortofolioService(),
@@ -69,14 +153,11 @@ void main() async {
         ),
 
         ChangeNotifierProvider(
-          create: (_) => PaketProvider(
-            service: PaketService(),
-          ),
+          create: (_) => PaketProvider(service: PaketService()),
         ),
+
         ChangeNotifierProvider(
-          create: (_) => VendorProvider(
-            service: VendorService(),
-          ),
+          create: (_) => VendorProvider(service: VendorService()),
         ),
 
         ChangeNotifierProvider(
@@ -88,70 +169,50 @@ void main() async {
           create: (_) => PesananProvider(pesananService: PesananService()),
         ),
 
-        /// ✅ ChatProvider tetap ada di root
         ChangeNotifierProvider(
           create: (_) => ChatProvider(),
         ),
 
-        /// ✅ HistoryOrderProvider di root (untuk standalone connection)
         ChangeNotifierProvider(
           create: (_) => HistoryOrderProvider(),
         ),
 
-        ChangeNotifierProxyProvider3<PaketProvider, PenawaranProvider,
-            ChatProvider, RoomChatProvider>(
-          create: (_) => RoomChatProvider(
-            paketProv: _.read<PaketProvider>(),
-            penawaranProv: _.read<PenawaranProvider>(),
-            chatProv: _.read<ChatProvider>(),
+        ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
+          create: (context) => RoomChatProvider(
+            chatProv: context.read<ChatProvider>(),
           ),
-          update: (_, pkt, pen, chat, prev) {
-            prev?.updateDependencies(
-              paketProv: pkt,
-              penawaranProv: pen,
-              chatProv: chat,
-            );
-            return prev!;
+          update: (context, chatProvider, previousRoomChatProvider) {
+            return previousRoomChatProvider ??
+                RoomChatProvider(chatProv: chatProvider);
           },
         ),
       ],
-      child: const MyApp(),
-    ),
-  );
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Aplikasi',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: localizationsDelegates,
-      supportedLocales: const [
-        Locale('id', 'ID'),
-        Locale('en', 'US'),
-      ],
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF9F9F9),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.green,
-          unselectedItemColor: Colors.grey,
+      child: MaterialApp(
+        title: 'Aplikasi',
+        debugShowCheckedModeBanner: false,
+        localizationsDelegates: localizationsDelegates,
+        supportedLocales: const [
+          Locale('id', 'ID'),
+          Locale('en', 'US'),
+        ],
+        theme: ThemeData(
+          useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFFF9F9F9),
+          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+            backgroundColor: Colors.white,
+            selectedItemColor: Colors.green,
+            unselectedItemColor: Colors.grey,
+          ),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.white,
+            brightness: Brightness.light,
+          ).copyWith(
+            surface: Colors.white,
+            surfaceTint: Colors.transparent,
+          ),
         ),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.white,
-          brightness: Brightness.light,
-        ).copyWith(
-          surface: Colors.white,
-          surfaceTint: Colors.transparent,
-        ),
+        home: const SplashLogicHandler(),
       ),
-      home: const SplashLogicHandler(),
     );
   }
 }
@@ -180,102 +241,199 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
     final userProv = Provider.of<UserProvider>(context, listen: false);
 
     try {
-      print("=== 🚀 APLIKASI DIMULAI ===");
+      print("=== 🚀 APP STARTED ===");
 
-      // 1️⃣ Cek apakah ada session tersimpan
-      bool sessionRestored = await nav.authService.restoreSession();
+      // ✅ Setup session expired callback
+      apiClient.onSessionExpired = () {
+        print("🚪 [Main] Session expired, logging out...");
+        if (mounted) {
+          nav.handleLogout(context);
+        }
+      };
+
+      // 1️⃣ Try to restore session
+      bool sessionRestored = await authService.restoreSession();
+      print("Session restored: $sessionRestored");
 
       if (sessionRestored) {
-        print("✅ Session ditemukan, mencoba restore user data...");
+        print("✅ Session found, restoring user data...");
 
-        // 2️⃣ Load user data dari storage
-        await userProv.loadUserData();
+        // 2️⃣ Restore user session
+        final userRestored = await userProv.restoreSession();
 
-        // 3️⃣ Validasi apakah data user berhasil di-load
-        if (userProv.customer != null) {
-          print(
-              "✅ User data berhasil di-load: ${userProv.customer!.namaDisplay}");
+        if (userRestored && userProv.customer != null) {
+          print("✅ User restored: ${userProv.customer!.namaDisplay}");
 
-          // 4️⃣ Load role dari storage
+          // 3️⃣ Load role from storage
           String? role = await nav.getRole();
           if (role != null) {
             userProv.setRole(role);
-            print("✅ Role di-set: $role");
+            print("✅ Role set: $role");
           }
 
-          // 5️⃣ Refresh token (silent login) untuk mendapatkan token terbaru
+          // 4️⃣ Verify token is still valid
           try {
-            print("🔄 Melakukan silent login untuk refresh token...");
-            final newToken =
-                await nav.authService.getIdToken(forceRefresh: true);
+            print("🔄 Verifying token...");
+            final token = await authService.getIdToken(forceRefresh: false);
 
-            if (newToken != null) {
-              print("✅ Token berhasil di-refresh");
+            if (token != null) {
+              print("✅ Token valid");
 
-              // 6️⃣ Register device token
-              await userProv.deviceTokenService
-                  .addDeviceToken(userProv.customer!.noId);
-
-              // ==========================================
-              // 7️⃣ Initialize ChatProvider (Connection 1)
-              // ==========================================
-              final chatProv = context.read<ChatProvider>();
-              await chatProv.initWithApiClient(
-                userId: userProv.customer!.noId,
-                userType: Constants.customer,
-                hubUrl: "${Constants.baseUrlHub}/api/chathub",
-                getToken: () async =>
-                    await nav.authService.getIdToken(forceRefresh: true),
-              );
-              print("[Main] ✅ ChatProvider initialized");
-
-              // ==========================================
-              // 8️⃣ Initialize HistoryOrderProvider (Connection 2 - Standalone)
-              // ==========================================
-              final historyOrderProvider = context.read<HistoryOrderProvider>();
-              final historyConnected = await historyOrderProvider.initialize(
-                config: HistoryOrderServiceConfig(
-                  hubUrl: "${Constants.baseUrlHub}/api/chathub",
-                  role: Constants.customer,
-                  getToken: () async =>
-                      await nav.authService.getIdToken(forceRefresh: true),
-                ),
-                userId: userProv.customer!.noId,
-              );
-
-              if (historyConnected) {
-                print("[Main] ✅ HistoryOrderProvider initialized with standalone connection");
-              } else {
-                print("[Main] ⚠️ HistoryOrderProvider connection failed");
+              // 5️⃣ Register device token
+              try {
+                await userProv.deviceTokenService
+                    .addDeviceToken(userProv.customer!.noId);
+              } catch (e) {
+                print("⚠️ Device token registration failed: $e");
               }
 
-              print("✅ User sudah login, langsung ke MainMenu");
+              // 6️⃣ Initialize ChatProvider
+              try {
+                // ✅ REQUEST PERMISSION DULU (Android 13+)
+                if (Platform.isAndroid) {
+                  final status = await Permission.notification.request();
+
+                  if (status.isDenied) {
+                    // Show dialog to ask user
+                    if (mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text('Izin Notifikasi'),
+                          content: Text(
+                            'Aplikasi membutuhkan izin notifikasi untuk '
+                            'memberi tahu Anda tentang pesan baru.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text('Nanti'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                openAppSettings(); // Open settings
+                                Navigator.pop(context);
+                              },
+                              child: Text('Buka Pengaturan'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  } else if (status.isPermanentlyDenied) {
+                    // User permanently denied, show info
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Izin notifikasi ditolak. '
+                            'Buka Pengaturan untuk mengaktifkannya.',
+                          ),
+                          action: SnackBarAction(
+                            label: 'Pengaturan',
+                            onPressed: () => openAppSettings(),
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                }
+                final chatProv = context.read<ChatProvider>();
+
+                chatProv.chatService.getSenderName = (roomId, senderId) {
+                  // Ambil nama dari room info yang sudah di-cache
+                  final room = chatProv.getRoom(roomId);
+                  if (room != null) {
+                    // Jika sender adalah partner, ambil nama partner
+                    if (senderId == room.partnerId) {
+                      return room.usernameLawan ?? 'Unknown User';
+                    }
+                  }
+                  return 'New Message';
+                };
+
+                await chatProv.initWithApiClient(
+                  userId: userProv.customer!.noId,
+                  userType: Constants.customer,
+                  hubUrl: "${Constants.baseUrlHub}/api/chathub",
+                  getToken: () async =>
+                      await authService.getIdToken(forceRefresh: true),
+                );
+                print("[Main] ✅ ChatProvider initialized");
+              } catch (e) {
+                print("[Main] ⚠️ ChatProvider init failed: $e");
+              }
+
+              // 7️⃣ Initialize HistoryOrderProvider
+              try {
+                print("[Main] 🔧 Initializing HistoryOrderProvider...");
+
+                final historyOrderProvider =
+                    context.read<HistoryOrderProvider>();
+                final pesananProvider = context.read<PesananProvider>();
+
+                // ✅ CRITICAL: Connect HistoryOrder → Pesanan BEFORE init
+                print(
+                    "[Main] 🔗 Connecting HistoryOrderProvider → PesananProvider...");
+
+                historyOrderProvider.onOrderStatusChanged =
+                    (noOrder, newStatus) {
+                  print("[Main] 📨 Status update received:");
+                  print("   Order: $noOrder");
+                  print("   Status: $newStatus");
+                  print("   Forwarding to PesananProvider...");
+
+                  pesananProvider.updateOrderStatus(noOrder, newStatus);
+                };
+
+                print(
+                    "[Main] ✅ HistoryOrderProvider ↔ PesananProvider connected");
+
+                final historyConnected = await historyOrderProvider.initialize(
+                  config: HistoryOrderServiceConfig(
+                    hubUrl: "${Constants.baseUrlHub}/api/chathub",
+                    role: Constants.customer,
+                    getToken: () async =>
+                        await authService.getIdToken(forceRefresh: true),
+                  ),
+                  userId: userProv.customer!.noId,
+                );
+
+                if (historyConnected) {
+                  print("[Main] ✅ HistoryOrderProvider initialized");
+                } else {
+                  print("[Main] ⚠️ HistoryOrderProvider connection failed");
+                }
+              } catch (e) {
+                print("[Main] ⚠️ HistoryOrderProvider init failed: $e");
+              }
+
+              print("✅ User logged in, going to MainMenu");
             } else {
-              print("⚠️ Gagal refresh token, perlu login ulang");
+              print("⚠️ Token verification failed, need re-login");
               await nav.handleLogout(context);
             }
           } catch (e) {
-            print("❌ Error saat refresh token: $e");
+            print("❌ Token verification error: $e");
             await nav.handleLogout(context);
           }
         } else {
-          print(
-              "⚠️ Session ada tapi user data tidak lengkap, perlu login ulang");
+          print("⚠️ Session exists but user data incomplete, need re-login");
           await nav.handleLogout(context);
         }
       } else {
-        print("ℹ️ Tidak ada session, user belum pernah login");
-        // Set role default untuk user baru
+        print("ℹ️ No session found, user not logged in");
+        // Set default role for new users
         await nav.saveRole(Constants.customer);
       }
 
-      // 9️⃣ Selalu arahkan ke MainMenu (user bisa explore tanpa login)
+      // 8️⃣ Always go to MainMenu (users can explore without login)
       _startPage = const MainMenu();
     } catch (e, s) {
-      print("❌ Error saat init: $e");
+      print("❌ Initialization error: $e");
       print(s);
 
-      // Jika ada error, tetap arahkan ke MainMenu
+      // On error, still go to MainMenu
       _startPage = const MainMenu();
     } finally {
       if (mounted) {

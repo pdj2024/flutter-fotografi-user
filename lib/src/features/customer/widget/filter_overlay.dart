@@ -572,7 +572,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
               // ✅ Navigasi tetap seperti CustomBackButton
               final provider =
                   Provider.of<NavigationProvider>(context, listen: false);
-              bool allowPop = await provider.onWillPop();
+              bool allowPop = await provider.handleBackButton(context);
               if (allowPop) {
                 Navigator.of(context).pop();
               }

@@ -1,9 +1,25 @@
+import 'package:hive/hive.dart';
+
+part 'paket_model.g.dart';
+
+@HiveType(typeId: 2)
 class PaketModel {
+  @HiveField(0)
   final String no_id;
+  
+  @HiveField(1)
   final String nama_paket;
+  
+  @HiveField(2)
   final String id_vendor;
+  
+  @HiveField(3)
   final int harga;
+  
+  @HiveField(4)
   final String rincian;
+  
+  @HiveField(5)
   final String status;
 
   PaketModel({
@@ -17,7 +33,7 @@ class PaketModel {
 
   factory PaketModel.fromJson(Map<String, dynamic> json) {
     return PaketModel(
-      no_id: json['No_Id'] ?? 0,
+      no_id: json['No_Id'] ?? '',
       nama_paket: json['Nama_Paket'] ?? '',
       id_vendor: json['Id_Vendor'] ?? '',
       harga: json['Harga'] ?? 0,
@@ -55,7 +71,7 @@ class PaketModel {
     );
   }
 
-  /// ⬇⬇⬇ Tambahkan ini untuk CREATE
+  /// Tambahkan ini untuk CREATE
   Map<String, dynamic> toJsonAPI() => {
         "nama_paket": nama_paket,
         "id_vendor": id_vendor,
@@ -63,5 +79,4 @@ class PaketModel {
         "rincian": rincian,
         "status": status,
       };
-
 }

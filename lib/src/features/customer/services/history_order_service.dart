@@ -1,17 +1,20 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:signalr_netcore/http_connection_options.dart';
 import 'package:signalr_netcore/hub_connection.dart';
 import 'package:signalr_netcore/hub_connection_builder.dart';
 
-/// Konfigurasi untuk HistoryOrderService
+/// ✅ IMPROVED: HistoryOrderService dengan notifikasi yang berfungsi
 class HistoryOrderServiceConfig {
   final String hubUrl;
-  final String role; // 'customer' atau 'vendor'
+  final String role;
   final Future<String?> Function() getToken;
   final int requestTimeout;
   final List<int> retryDelays;
@@ -31,9 +34,16 @@ class HistoryOrderService {
 
   final ApiClient _client = apiClient;
 
-  // =========================================
-  // SIGNALR CONNECTION - STANDALONE
-  // =========================================
+  // ✅ Notification plugin
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+  bool _notificationsInitialized = false;
+
+  // ✅ Notification settings
+  String? _activeOrderId; // Order yang sedang dibuka user
+  bool _showNotifications = true;
+
+  // SignalR Connection
   HubConnection? _hubConnection;
   HistoryOrderServiceConfig? _config;
   String _currentUserId = '';
@@ -41,33 +51,139 @@ class HistoryOrderService {
 
   final Set<String> _joinedOrders = {};
 
-  // =========================================
-  // CALLBACKS
-  // =========================================
-
-  /// Callback ketika menerima update progress baru
+  // Callbacks
   Function(HistoryOrderModel progress)? onProgressReceived;
-
-  /// Callback ketika status koneksi berubah
   Function(bool isConnected, String? error)? onConnectionChanged;
-
-  /// Callback ketika reconnect berhasil
   Function()? onReconnected;
 
-  // =========================================
-  // GETTERS
-  // =========================================
-
+  // Getters
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
   bool get isConnecting => _isConnecting;
   String get currentUserId => _currentUserId;
   Set<String> get joinedOrders => Set.unmodifiable(_joinedOrders);
 
   // =========================================
+  // ✅ NOTIFICATION INITIALIZATION
+  // =========================================
+
+  /// Initialize notifications (call this early, e.g., in splash screen)
+  Future<void> initNotifications() async {
+    if (_notificationsInitialized) {
+      debugPrint('[HistoryOrderService] ℹ️ Notifications already initialized');
+      return;
+    }
+
+    try {
+      debugPrint('[HistoryOrderService] 🔔 Initializing notifications...');
+
+      // ✅ STEP 1: Request permission (Android 13+)
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final status = await Permission.notification.request();
+
+        debugPrint('[HistoryOrderService] 📱 Permission status: $status');
+
+        if (status.isDenied || status.isPermanentlyDenied) {
+          debugPrint('[HistoryOrderService] ❌ Permission denied');
+          return;
+        }
+
+        debugPrint('[HistoryOrderService] ✅ Permission granted');
+      }
+
+      // ✅ STEP 2: Create notification channel
+      await _createNotificationChannel();
+
+      // ✅ STEP 3: Initialize plugin
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
+
+      await _notificationsPlugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _onNotificationTapped,
+      );
+
+      // iOS permission
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _notificationsPlugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(
+              alert: true,
+              badge: true,
+              sound: true,
+            );
+      }
+
+      _notificationsInitialized = true;
+      debugPrint('[HistoryOrderService] ✅ Notifications initialized');
+    } catch (e) {
+      debugPrint('[HistoryOrderService] ❌ Notification init error: $e');
+    }
+  }
+
+  /// Create notification channel (Android)
+  Future<void> _createNotificationChannel() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'history_order_channel',
+      'Pembaruan Pesanan',
+      description: 'Notifikasi untuk pembaruan status pesanan Anda',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    debugPrint('[HistoryOrderService] ✅ Notification channel created');
+  }
+
+  // =========================================
+  // ✅ SHOW NOTIFICATION (IMPROVED)
+  // =========================================
+
+  /// Set active order (suppress notifications for this order)
+  void setActiveOrder(String? orderId) {
+    if (_activeOrderId != orderId) {
+      _activeOrderId = orderId;
+      debugPrint(
+          '[HistoryOrderService] 📱 Active order set: ${orderId ?? "none"}');
+
+      if (orderId != null) {
+        debugPrint(
+            '[HistoryOrderService] 🔕 Notifications suppressed for: $orderId');
+      } else {
+        debugPrint(
+            '[HistoryOrderService] 🔔 Notifications enabled for all orders');
+      }
+    }
+  }
+
+  /// Enable/disable notifications globally
+  void setNotificationsEnabled(bool enabled) {
+    _showNotifications = enabled;
+    debugPrint(
+        '[HistoryOrderService] 🔔 Notifications: ${enabled ? 'ENABLED' : 'DISABLED'}');
+  }
+
+  // =========================================
   // CONNECTION
   // =========================================
 
-  /// Connect ke SignalR hub untuk order progress
   Future<bool> connect({
     required HistoryOrderServiceConfig config,
     required String userId,
@@ -77,7 +193,7 @@ class HistoryOrderService {
     debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
 
     if (_isConnecting) {
-      debugPrint('[HistoryOrderService] ⏸️ Already connecting, skip');
+      debugPrint('[HistoryOrderService] ⏸️ Already connecting');
       return false;
     }
 
@@ -93,64 +209,37 @@ class HistoryOrderService {
     try {
       debugPrint('[HistoryOrderService] 👤 User ID: $userId');
       debugPrint('[HistoryOrderService] 🌐 Hub URL: ${config.hubUrl}');
-      debugPrint('[HistoryOrderService] 👥 Role: ${config.role}');
-      debugPrint(
-          '[HistoryOrderService] ⏱️ Timeout: ${config.requestTimeout}ms');
 
-      // Get token
-      debugPrint('[HistoryOrderService] 🔑 Getting authentication token...');
-      final token = await config.getToken();
-
+      final token = await authService.getIdToken();
       if (token == null || token.isEmpty) {
         debugPrint('[HistoryOrderService] ❌ No token available');
         return false;
       }
 
-      debugPrint(
-          '[HistoryOrderService] ✅ Token retrieved (length: ${token.length})');
-
-      // Disconnect existing if any
       if (_hubConnection != null) {
-        debugPrint(
-            '[HistoryOrderService] 🔌 Disconnecting existing connection...');
         await disconnect();
       }
 
-      // Build connection
-      debugPrint('[HistoryOrderService] 🔧 Building SignalR connection...');
       final fullUrl = '${config.hubUrl}?role=${config.role}';
-      debugPrint('[HistoryOrderService] 🌐 Full URL: $fullUrl');
 
       _hubConnection = HubConnectionBuilder()
           .withUrl(
             fullUrl,
             options: HttpConnectionOptions(
-              accessTokenFactory: () async {
-                debugPrint('[HistoryOrderService] 🔑 Token factory called');
-                return token;
-              },
+              accessTokenFactory: () async => token,
               requestTimeout: config.requestTimeout,
             ),
           )
           .withAutomaticReconnect(retryDelays: config.retryDelays)
           .build();
 
-      debugPrint('[HistoryOrderService] ✅ Connection built');
-
-      // Setup listeners
-      debugPrint('[HistoryOrderService] 🎧 Setting up event listeners...');
       _setupListeners();
 
-      // Start connection
-      debugPrint('[HistoryOrderService] 🚀 Starting connection...');
       await _hubConnection!.start();
 
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ✅ CONNECTED SUCCESSFULLY');
+      debugPrint('[HistoryOrderService] ✅ CONNECTED');
       debugPrint(
           '[HistoryOrderService] Connection ID: ${_hubConnection!.connectionId}');
-      debugPrint('[HistoryOrderService] State: ${_hubConnection!.state}');
       debugPrint(
           '[HistoryOrderService] ═══════════════════════════════════════');
 
@@ -158,16 +247,8 @@ class HistoryOrderService {
 
       return true;
     } catch (e, st) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ❌ CONNECTION FAILED');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] Error: $e');
-      debugPrint('[HistoryOrderService] Stack trace: $st');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
+      debugPrint('[HistoryOrderService] ❌ CONNECTION FAILED: $e');
+      debugPrint('Stack: $st');
       onConnectionChanged?.call(false, e.toString());
       return false;
     } finally {
@@ -175,7 +256,6 @@ class HistoryOrderService {
     }
   }
 
-  /// Disconnect dari SignalR
   Future<void> disconnect() async {
     try {
       if (_hubConnection != null) {
@@ -193,120 +273,64 @@ class HistoryOrderService {
   }
 
   // =========================================
-  // LISTENERS SETUP
+  // EVENT LISTENERS
   // =========================================
 
   void _setupListeners() {
-    if (_hubConnection == null) {
-      debugPrint(
-          '[HistoryOrderService] ⚠️ Cannot setup listeners: connection is null');
-      return;
-    }
+    if (_hubConnection == null) return;
 
-    debugPrint(
-        '[HistoryOrderService] 🎧 Setting up SignalR event listeners...');
+    debugPrint('[HistoryOrderService] 🎧 Setting up SignalR listeners...');
 
-    // ✅ LISTENER: Progress baru (sesuai dengan C# backend)
-    // Backend sends: "ProgressPesananUpdated"
     _hubConnection!.on('ProgressPesananUpdated', (args) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint(
-          '[HistoryOrderService] 📨 ProgressPesananUpdated EVENT RECEIVED');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] Args type: ${args?.runtimeType}');
-      debugPrint('[HistoryOrderService] Args length: ${args?.length}');
-      debugPrint('[HistoryOrderService] Raw args: $args');
+      debugPrint('[HistoryOrderService] 📨 ProgressPesananUpdated received');
 
       if (args == null || args.isEmpty) {
-        debugPrint('[HistoryOrderService] ⚠️ Empty args received');
+        debugPrint('[HistoryOrderService] ⚠️ Empty args');
         return;
       }
 
       _handleProgressReceived(args);
     });
 
-    // Connection lifecycle
     _hubConnection!.onclose(({error}) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] 🔌 CONNECTION CLOSED');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      if (error != null) {
-        debugPrint('[HistoryOrderService] Error: $error');
-      }
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
+      debugPrint('[HistoryOrderService] 🔌 Connection closed');
+      if (error != null) debugPrint('   Error: $error');
       onConnectionChanged?.call(false, error?.toString());
     });
 
     _hubConnection!.onreconnecting(({error}) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] 🔄 RECONNECTING...');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      if (error != null) {
-        debugPrint('[HistoryOrderService] Reason: $error');
-      }
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
+      debugPrint('[HistoryOrderService] 🔄 Reconnecting...');
+      if (error != null) debugPrint('   Reason: $error');
       onConnectionChanged?.call(false, 'reconnecting');
     });
 
     _hubConnection!.onreconnected(({connectionId}) async {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ✅ RECONNECTED');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] New Connection ID: $connectionId');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
+      debugPrint('[HistoryOrderService] ✅ Reconnected');
+      debugPrint('   New ID: $connectionId');
       onConnectionChanged?.call(true, null);
-
-      debugPrint('[HistoryOrderService] 🔄 Rejoining order groups...');
       await _rejoinAfterReconnect();
       onReconnected?.call();
     });
 
-    debugPrint('[HistoryOrderService] ✅ Event listeners setup complete');
+    debugPrint('[HistoryOrderService] ✅ Listeners setup complete');
   }
 
   // =========================================
-  // EVENT HANDLERS
+  // ✅ HANDLE PROGRESS (WITH NOTIFICATION)
   // =========================================
+
+  // Tambahkan di bagian _handleProgressReceived, setelah callback
 
   void _handleProgressReceived(List<Object?> args) {
     try {
       debugPrint(
           '[HistoryOrderService] ───────────────────────────────────────');
       debugPrint('[HistoryOrderService] 🔍 PARSING PROGRESS DATA');
-      debugPrint(
-          '[HistoryOrderService] ───────────────────────────────────────');
 
       final raw = args[0];
-      debugPrint('[HistoryOrderService] Raw data type: ${raw.runtimeType}');
-      debugPrint('[HistoryOrderService] Raw data: $raw');
-
       final data = _parseData(raw);
-      debugPrint(
-          '[HistoryOrderService] ───────────────────────────────────────');
-      debugPrint('[HistoryOrderService] 📦 Parsed data map:');
-      data.forEach((key, value) {
-        debugPrint(
-            '[HistoryOrderService]   $key: $value (${value.runtimeType})');
-      });
-      debugPrint(
-          '[HistoryOrderService] ───────────────────────────────────────');
 
       // Map dari C# backend ke Dart model
-      // C# sends: No_Order, Tgl_Progress, Deskripsi, No_Id, Sender_Id, Status, Tipe_User, Status_Progress
       final progress = HistoryOrderModel(
         noId: data['no_Id']?.toString() ?? '',
         noOrder: data['no_Order']?.toString() ?? '',
@@ -314,157 +338,272 @@ class HistoryOrderService {
         deskripsi: data['deskripsi']?.toString() ?? '',
         senderId: data['sender_Id']?.toString() ?? '',
         tipeUser: data['tipe_User']?.toString() ?? '',
-        namaSender: '', // Backend tidak kirim, akan di-fill dari database
+        namaSender: '',
         status: data['status']?.toString() ?? '',
         statusProgressPesanan: data['status_Progress']?.toString() ?? '',
       );
 
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
       debugPrint('[HistoryOrderService] ✅ PROGRESS MODEL CREATED');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
       debugPrint('[HistoryOrderService] No Order: ${progress.noOrder}');
-      debugPrint('[HistoryOrderService] No ID: ${progress.noId}');
       debugPrint(
-          '[HistoryOrderService] Status Progress: ${progress.statusProgressPesanan}');
-      debugPrint('[HistoryOrderService] Deskripsi: ${progress.deskripsi}');
-      debugPrint('[HistoryOrderService] Sender ID: ${progress.senderId}');
-      debugPrint('[HistoryOrderService] Tipe User: ${progress.tipeUser}');
-      debugPrint('[HistoryOrderService] Tanggal: ${progress.tglProgress}');
-      debugPrint('[HistoryOrderService] Status: ${progress.status}');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
+          '[HistoryOrderService] Status: ${progress.statusProgressPesanan}');
 
+      // ✅ Call callback FIRST
       debugPrint(
           '[HistoryOrderService] 📢 Calling onProgressReceived callback...');
       onProgressReceived?.call(progress);
-      debugPrint('[HistoryOrderService] ✅ Callback executed');
+
+      // ✅ THEN show notification
+      debugPrint(
+          '[HistoryOrderService] 🔔 Checking if should show notification...');
+      _showMessageNotification(progress);
+
+      debugPrint('[HistoryOrderService] ✅ Callback and notification handled');
+    } catch (e, st) {
+      debugPrint('[HistoryOrderService] ❌ PARSE PROGRESS ERROR');
+      debugPrint('[HistoryOrderService] Error: $e');
+      debugPrint('[HistoryOrderService] Stack: $st');
+    }
+  }
+
+// ✅ IMPROVED: Show notification untuk history order
+  Future<void> _showMessageNotification(HistoryOrderModel historyOrder) async {
+    try {
+      // Check if notifications initialized
+      if (!_notificationsInitialized) {
+        debugPrint(
+            '[HistoryOrderService] ⚠️ Notifications not initialized, initializing now...');
+        await initNotifications();
+
+        if (!_notificationsInitialized) {
+          debugPrint(
+              '[HistoryOrderService] ❌ Failed to initialize notifications');
+          return;
+        }
+      }
+
+      // Don't show if notifications disabled
+      if (!_showNotifications) {
+        debugPrint('[HistoryOrderService] 🔕 Notifications disabled globally');
+        return;
+      }
+
+      // Don't show own updates (optional - bisa dikomentari jika mau notif semua)
+      if (historyOrder.senderId == _currentUserId) {
+        debugPrint('[HistoryOrderService] 🔕 Skip notification (own update)');
+        return;
+      }
+
+      debugPrint(
+          '[HistoryOrderService] ═══════════════════════════════════════');
+      debugPrint('[HistoryOrderService] 🔔 SHOWING NOTIFICATION');
+      debugPrint(
+          '[HistoryOrderService] ═══════════════════════════════════════');
+
+      // ✅ Build notification title based on status
+      String notificationTitle =
+          _getNotificationTitle(historyOrder.statusProgressPesanan);
+      debugPrint('[HistoryOrderService] 📌 Title: $notificationTitle');
+
+      // ✅ Build notification body
+      String notificationBody = historyOrder.deskripsi.isNotEmpty
+          ? historyOrder.deskripsi
+          : HistoryOrderService.getStatusDescription(
+              historyOrder.statusProgressPesanan);
+
+      // Truncate if too long
+      if (notificationBody.length > 100) {
+        notificationBody = '${notificationBody.substring(0, 97)}...';
+      }
+
+      debugPrint('[HistoryOrderService] 📝 Body: $notificationBody');
+      debugPrint('[HistoryOrderService] 📦 Order: ${historyOrder.noOrder}');
+
+      // ✅ Notification details
+      final androidDetails = AndroidNotificationDetails(
+        'history_order_channel', // Must match channel ID
+        'Progress Pesanan',
+        channelDescription: 'Notifikasi untuk update progress pesanan',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        icon: 'ic_stat_pacific_data_jaya', // Pastikan icon ini ada
+        enableVibration: true,
+        playSound: true,
+        // ✅ Add actions for user interaction
+        styleInformation: BigTextStyleInformation(
+          notificationBody,
+          contentTitle: notificationTitle,
+        ),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        subtitle: 'Update Pesanan',
+      );
+
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      // ✅ Generate unique notification ID from order number
+      final notificationId = historyOrder.noOrder.hashCode;
+
+      // Show notification
+      await _notificationsPlugin.show(
+        notificationId,
+        notificationTitle,
+        notificationBody,
+        notificationDetails,
+        payload: historyOrder.noOrder, // For navigation when tapped
+      );
+
+      debugPrint('[HistoryOrderService] ✅ Notification shown successfully');
+      debugPrint('[HistoryOrderService] ID: $notificationId');
+      debugPrint(
+          '[HistoryOrderService] ═══════════════════════════════════════');
     } catch (e, st) {
       debugPrint(
           '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ❌ PARSE PROGRESS ERROR');
+      debugPrint('[HistoryOrderService] ❌ SHOW NOTIFICATION ERROR');
       debugPrint(
           '[HistoryOrderService] ═══════════════════════════════════════');
       debugPrint('[HistoryOrderService] Error: $e');
-      debugPrint('[HistoryOrderService] Stack trace: $st');
-      debugPrint('[HistoryOrderService] Raw args: $args');
+      debugPrint('[HistoryOrderService] Stack: $st');
       debugPrint(
           '[HistoryOrderService] ═══════════════════════════════════════');
     }
+  }
+
+// ✅ NEW: Helper to get notification title based on status
+  String _getNotificationTitle(String status) {
+    switch (status.toLowerCase()) {
+      case 'menunggu bayar':
+        return '⏳ Menunggu Pembayaran';
+      case 'persiapan':
+        return '📋 Sedang Dipersiapkan';
+      case 'proses':
+        return '⚙️ Sedang Dikerjakan';
+      case 'review':
+        return '👀 Menunggu Review';
+      case 'revisi':
+        return '🔄 Sedang Direvisi';
+      case 'selesai':
+        return '✅ Pesanan Selesai';
+      case 'dibatalkan':
+        return '❌ Pesanan Dibatalkan';
+      default:
+        return '📦 Update Pesanan';
+    }
+  }
+
+// ✅ IMPROVED: Create notification channel with proper config
+  Future<void> createNotificationChannel() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'history_order_channel', // ✅ ID yang sama dengan di androidDetails
+      'Progress Pesanan',
+      description: 'Notifikasi untuk update progress pesanan',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    );
+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    debugPrint(
+        '[HistoryOrderService] ✅ Notification channel created: ${channel.id}');
+  }
+
+// ✅ IMPROVED: Handle notification tap to navigate to order
+  void _onNotificationTapped(NotificationResponse response) {
+    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
+    debugPrint('[HistoryOrderService] 🔔 NOTIFICATION TAPPED');
+    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
+
+    final payload = response.payload;
+    debugPrint('[HistoryOrderService] Payload: $payload');
+
+    if (payload != null && payload.isNotEmpty) {
+      debugPrint('[HistoryOrderService] 📱 Order ID: $payload');
+
+      // TODO: Add navigation logic here
+      // Example:
+      // navigatorKey.currentState?.pushNamed(
+      //   '/order-detail',
+      //   arguments: payload,
+      // );
+
+      debugPrint('[HistoryOrderService] ℹ️ Navigation not implemented yet');
+      debugPrint('[HistoryOrderService] 💡 Implement navigation in your app');
+    }
+
+    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
   }
 
   // =========================================
   // ORDER GROUP MANAGEMENT
   // =========================================
 
-  /// Join order group untuk menerima updates
   Future<bool> joinOrder(String noOrder) async {
-    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
-    debugPrint('[HistoryOrderService] 📦 JOINING ORDER GROUP');
-    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
-
-    if (!isConnected) {
-      debugPrint('[HistoryOrderService] ⚠️ Cannot join: not connected');
-      debugPrint(
-          '[HistoryOrderService] Current state: ${_hubConnection?.state}');
-      return false;
-    }
-
-    if (noOrder.isEmpty) {
-      debugPrint('[HistoryOrderService] ⚠️ Cannot join: empty order number');
-      return false;
-    }
-
-    if (_joinedOrders.contains(noOrder)) {
-      debugPrint('[HistoryOrderService] ℹ️ Already joined order: $noOrder');
-      return true;
-    }
+    if (!isConnected || noOrder.isEmpty) return false;
+    if (_joinedOrders.contains(noOrder)) return true;
 
     try {
-      debugPrint('[HistoryOrderService] 📡 Invoking JoinOrder...');
-      debugPrint('[HistoryOrderService] Order: $noOrder');
-      debugPrint('[HistoryOrderService] Group name: order-$noOrder');
+      debugPrint('[HistoryOrderService] 📦 Joining order: $noOrder');
 
       await _hubConnection!.invoke('JoinOrder', args: [noOrder]);
-
       _joinedOrders.add(noOrder);
 
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ✅ JOINED ORDER GROUP');
-      debugPrint('[HistoryOrderService] Order: $noOrder');
-      debugPrint(
-          '[HistoryOrderService] Total joined orders: ${_joinedOrders.length}');
-      debugPrint(
-          '[HistoryOrderService] All joined: ${_joinedOrders.join(", ")}');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
+      debugPrint('[HistoryOrderService] ✅ Joined order: $noOrder');
       return true;
-    } catch (e, st) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ❌ JOIN ORDER ERROR');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] Order: $noOrder');
-      debugPrint('[HistoryOrderService] Error: $e');
-      debugPrint('[HistoryOrderService] Stack trace: $st');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
+    } catch (e) {
+      debugPrint('[HistoryOrderService] ❌ Join error: $e');
       return false;
     }
   }
 
-  /// Join multiple orders
   Future<void> joinOrders(List<String> orderIds) async {
-    debugPrint('[HistoryOrderService] 📦 Joining ${orderIds.length} orders...');
-
     for (final orderId in orderIds) {
       if (orderId.isNotEmpty) {
         await joinOrder(orderId);
       }
     }
-
-    debugPrint('[HistoryOrderService] ✅ Finished joining orders');
   }
 
-  /// Leave order group
   Future<void> leaveOrder(String noOrder) async {
     if (!isConnected) return;
 
     try {
-      debugPrint('[HistoryOrderService] 👋 Leaving order group: $noOrder');
-
       await _hubConnection!.invoke('LeaveOrder', args: [noOrder]);
       _joinedOrders.remove(noOrder);
-
-      debugPrint('[HistoryOrderService] ✅ Left order group: $noOrder');
-      debugPrint(
-          '[HistoryOrderService] Remaining joined orders: ${_joinedOrders.length}');
+      debugPrint('[HistoryOrderService] ✅ Left order: $noOrder');
     } catch (e) {
-      debugPrint('[HistoryOrderService] ❌ Leave order error: $e');
+      debugPrint('[HistoryOrderService] ❌ Leave error: $e');
     }
   }
 
-  /// Rejoin orders after reconnection
   Future<void> _rejoinAfterReconnect() async {
     final orders = List<String>.from(_joinedOrders);
     _joinedOrders.clear();
 
-    debugPrint(
-        '[HistoryOrderService] 🔄 Rejoining ${orders.length} orders after reconnect...');
+    debugPrint('[HistoryOrderService] 🔄 Rejoining ${orders.length} orders...');
 
     for (final orderId in orders) {
       await joinOrder(orderId);
     }
-
-    debugPrint('[HistoryOrderService] ✅ Rejoin complete');
   }
 
   // =========================================
-  // API METHODS
+  // API METHODS (unchanged)
   // =========================================
 
   Future<List<HistoryOrderModel>> getAll({
@@ -477,12 +616,6 @@ class HistoryOrderService {
     String? orderDir,
   }) async {
     try {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] 🌐 API CALL: getAll');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
       final queryParams = {
         if (noid != null) 'no_id': noid,
         if (senderId != null) 'sender_id': senderId,
@@ -493,115 +626,51 @@ class HistoryOrderService {
         if (orderDir != null) 'orderdir': orderDir,
       };
 
-      debugPrint('[HistoryOrderService] Query parameters:');
-      queryParams.forEach((key, value) {
-        debugPrint('[HistoryOrderService]   $key: $value');
-      });
-
       final response = await _client.get(
         '/$controller/getAll',
         queryParameters: queryParams,
       );
 
-      debugPrint(
-          '[HistoryOrderService] ───────────────────────────────────────');
-      debugPrint('[HistoryOrderService] 📥 Response received');
-      debugPrint('[HistoryOrderService] Status code: ${response.statusCode}');
-      debugPrint('[HistoryOrderService] Body length: ${response.body.length}');
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final data = decoded['Data'];
 
-        debugPrint('[HistoryOrderService] Data type: ${data.runtimeType}');
-
         if (data is List) {
-          final progressList = (data as List? ?? [])
+          return (data as List)
               .map((item) {
                 try {
                   return HistoryOrderModel.fromJson(item);
                 } catch (e) {
-                  debugPrint(
-                      '[HistoryOrderService] ⚠️ Failed to parse item: $e');
-                  debugPrint('[HistoryOrderService] Item: $item');
                   return null;
                 }
               })
               .whereType<HistoryOrderModel>()
               .toList();
-
-          debugPrint(
-              '[HistoryOrderService] ═══════════════════════════════════════');
-          debugPrint('[HistoryOrderService] ✅ API SUCCESS');
-          debugPrint(
-              '[HistoryOrderService] Total items: ${progressList.length}');
-          debugPrint(
-              '[HistoryOrderService] ═══════════════════════════════════════');
-
-          return progressList;
-        } else {
-          debugPrint(
-              '[HistoryOrderService] ⚠️ Data is not a list, returning empty');
-          return [];
         }
+        return [];
       } else if (response.statusCode == 204) {
-        debugPrint('[HistoryOrderService] ℹ️ No content (204)');
         return [];
       } else {
-        debugPrint(
-            '[HistoryOrderService] ❌ Error status: ${response.statusCode}');
-        debugPrint('[HistoryOrderService] Body: ${response.body}');
-        throw Exception('Gagal load $entity (${response.statusCode})');
+        throw Exception('Failed to load $entity (${response.statusCode})');
       }
-    } catch (e, st) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ❌ API ERROR');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] Error: $e');
-      debugPrint('[HistoryOrderService] Stack trace: $st');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      throw Exception('Error saat mengambil $entity: $e');
+    } catch (e) {
+      throw Exception('Error loading $entity: $e');
     }
   }
 
   Future<void> create(HistoryOrderModel model) async {
-    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
-    debugPrint('[HistoryOrderService] 📤 API CALL: create');
-    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
-
-    final jsonBody = jsonEncode(model.toJsonCreate());
-    debugPrint('[HistoryOrderService] Request body: $jsonBody');
-
     final response = await apiClient.post(
       '/$controller/create',
-      body: jsonBody,
+      body: jsonEncode(model.toJsonCreate()),
       headers: {'Content-Type': 'application/json'},
     );
 
-    debugPrint('[HistoryOrderService] ───────────────────────────────────────');
-    debugPrint('[HistoryOrderService] URL: ${response.request?.url}');
-    debugPrint('[HistoryOrderService] Status Code: ${response.statusCode}');
-    debugPrint('[HistoryOrderService] Response Body: ${response.body}');
-    debugPrint('[HistoryOrderService] ───────────────────────────────────────');
-
     if (response.statusCode != 200) {
-      debugPrint('[HistoryOrderService] ❌ Create failed');
-      throw Exception('Gagal membuat progress pesanan');
+      throw Exception('Failed to create progress');
     }
-
-    debugPrint('[HistoryOrderService] ✅ Create success');
-    debugPrint(
-        '[HistoryOrderService] ℹ️ SignalR will broadcast ProgressPesananUpdated automatically');
-    debugPrint('[HistoryOrderService] ═══════════════════════════════════════');
   }
 
-  /// UPDATE
   Future<void> update(HistoryOrderModel model) async {
-    debugPrint('[HistoryOrderService] 📤 API CALL: update (${model.noId})');
-
     final response = await apiClient.put(
       '/$controller/update',
       queryParameters: {'no_id': model.noId},
@@ -609,19 +678,12 @@ class HistoryOrderService {
       headers: {'Content-Type': 'application/json'},
     );
 
-    debugPrint('[HistoryOrderService] Update response: ${response.statusCode}');
-
     if (response.statusCode != 200) {
-      throw Exception('Gagal mengupdate $entity');
+      throw Exception('Failed to update $entity');
     }
-
-    debugPrint('[HistoryOrderService] ✅ Update success');
   }
 
-  /// DELETE
   Future<void> delete(String noId) async {
-    debugPrint('[HistoryOrderService] 🗑️ API CALL: delete ($noId)');
-
     final response = await apiClient.delete(
       '/$controller/delete',
       queryParameters: {'no_id': noId},
@@ -629,10 +691,8 @@ class HistoryOrderService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menghapus $entity');
+      throw Exception('Failed to delete $entity');
     }
-
-    debugPrint('[HistoryOrderService] ✅ Delete success');
   }
 
   // =========================================
@@ -640,66 +700,45 @@ class HistoryOrderService {
   // =========================================
 
   Map<String, dynamic> _parseData(dynamic obj) {
-    debugPrint('[HistoryOrderService] 🔍 Parsing data...');
-    debugPrint('[HistoryOrderService] Input type: ${obj.runtimeType}');
-
     if (obj is Map) {
-      final result = obj.map((k, v) => MapEntry(k.toString(), v));
-      debugPrint(
-          '[HistoryOrderService] ✅ Parsed as Map (${result.length} keys)');
-      return result;
+      return obj.map((k, v) => MapEntry(k.toString(), v));
     }
-
     if (obj is String) {
       try {
-        debugPrint('[HistoryOrderService] Attempting JSON decode...');
         final decoded = jsonDecode(obj);
         if (decoded is Map) {
-          final result = decoded.map((k, v) => MapEntry(k.toString(), v));
-          debugPrint(
-              '[HistoryOrderService] ✅ Parsed as JSON Map (${result.length} keys)');
-          return result;
+          return decoded.map((k, v) => MapEntry(k.toString(), v));
         }
       } catch (e) {
-        debugPrint('[HistoryOrderService] ⚠️ JSON decode failed: $e');
+        // Ignore
       }
     }
-
-    debugPrint('[HistoryOrderService] ⚠️ Could not parse, returning empty map');
     return {};
   }
 
   DateTime _parseDateTime(dynamic value) {
-    if (value == null) {
-      debugPrint(
-          '[HistoryOrderService] ⚠️ DateTime is null, using current time');
-      return DateTime.now();
-    }
+    if (value == null) return DateTime.now();
     if (value is DateTime) return value.toLocal();
     try {
       return DateTime.parse(value.toString()).toLocal();
     } catch (e) {
-      debugPrint(
-          '[HistoryOrderService] ⚠️ DateTime parse failed: $e, using current time');
       return DateTime.now();
     }
   }
 
-  /// Clean up
   void dispose() {
-    debugPrint('[HistoryOrderService] 🔌 Disposing service...');
+    debugPrint('[HistoryOrderService] 🔌 Disposing...');
     _hubConnection?.stop();
     _hubConnection = null;
     _joinedOrders.clear();
     onProgressReceived = null;
     onConnectionChanged = null;
     onReconnected = null;
-    debugPrint('[HistoryOrderService] ✅ Service disposed');
   }
 
-  // =====================================================
-  // 📝 CREATE HISTORY - HELPER METHODS
-  // =====================================================
+  // =========================================
+  // HELPER METHODS (unchanged)
+  // =========================================
 
   static HistoryOrderModel createMenungguPembayaran({
     required String noOrder,
@@ -760,7 +799,7 @@ class HistoryOrderService {
       noId: '',
       noOrder: noOrder,
       tglProgress: DateTime.now(),
-      deskripsi: 'Pesanan selesai dikerjakan. minta review dari customer',
+      deskripsi: 'Pesanan selesai dikerjakan, mohon berikan ulasan',
       senderId: senderId,
       tipeUser: 'Customer',
       namaSender: '',
@@ -812,7 +851,7 @@ class HistoryOrderService {
       noId: '',
       noOrder: noOrder,
       tglProgress: DateTime.now(),
-      deskripsi: customDeskripsi ?? 'Pesanan telah dibatalkan.',
+      deskripsi: customDeskripsi ?? 'Pesanan telah dibatalkan',
       senderId: senderId,
       tipeUser: 'Customer',
       namaSender: '',
@@ -846,7 +885,7 @@ class HistoryOrderService {
       case 'revisi':
         return 'Vendor sedang melakukan revisi sesuai permintaan Anda.';
       case 'selesai':
-        return 'Pesanan telah selesai. Terima kasih atas kepercayaan Anda!';
+        return 'Pesanan telah selesai. Terima kasih!';
       case 'dibatalkan':
         return 'Pesanan telah dibatalkan.';
       default:

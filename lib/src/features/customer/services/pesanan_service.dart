@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/models/create_pesanan_result.dart';
-import 'package:mpjnew/src/data/models/pesanan_model.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 
 class PesananService {
   final String entity = 'Order';

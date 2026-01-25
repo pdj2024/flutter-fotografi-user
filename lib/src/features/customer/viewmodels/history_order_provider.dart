@@ -38,6 +38,8 @@ class HistoryOrderProvider extends ChangeNotifier {
   bool get isConnected => _isConnected;
   String? get connectionError => _connectionError;
 
+  void Function(String noOrder, String newStatus)? onOrderStatusChanged;
+
   /// Get history untuk order tertentu
   List<HistoryOrderModel> getHistoryForOrder(String noOrder) {
     debugPrint('[HistoryOrderProvider] 🔍 Getting history for order: $noOrder');
@@ -250,6 +252,7 @@ class HistoryOrderProvider extends ChangeNotifier {
     _orderStatuses[noOrder] = progress.statusProgressPesanan;
 
     if (oldStatus != null && oldStatus != progress.statusProgressPesanan) {
+      onOrderStatusChanged?.call(noOrder, progress.statusProgressPesanan);
       debugPrint(
           '[HistoryOrderProvider] 🔄 Status changed: $oldStatus → ${progress.statusProgressPesanan}');
     } else {

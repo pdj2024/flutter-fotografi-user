@@ -24,6 +24,38 @@ class _PortofolioSectionState extends State<PortofolioSection> {
         () => context.read<PortofolioProvider>().loadPortofolio(context));
   }
 
+  /// ✅ Helper method untuk safely get media URL
+  String? _getMediaUrl(dynamic portofolio) {
+    try {
+      // Check if mediaUrls exists and is not empty
+      if (portofolio.mediaUrls != null &&
+          portofolio.mediaUrls is List &&
+          portofolio.mediaUrls.isNotEmpty) {
+        final firstMedia = portofolio.mediaUrls[0];
+
+        // Check if firstMedia has url property
+        if (firstMedia != null && firstMedia.url != null) {
+          return firstMedia.url;
+        }
+      }
+
+      // Fallback: Try to get from idMedia if available
+      if (portofolio.mediaUrls != null &&
+          portofolio.mediaUrls is List &&
+          portofolio.mediaUrls.isNotEmpty) {
+        final firstMedia = portofolio.mediaUrls[0];
+        if (firstMedia?.idMedia != null) {
+          return firstMedia.idMedia;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[PortofolioSection] ❌ Error getting media URL: $e');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final portofolioProvider = context.watch<PortofolioProvider>();
@@ -31,8 +63,13 @@ class _PortofolioSectionState extends State<PortofolioSection> {
     final isLoadingPorto = portofolioProvider.isLoadingPorto;
     final error = portofolioProvider.errorPorto;
 
-    print("======= All Portofolio: ${portofolioList.length}");
-    print("Error: $error");
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint(
+        "[PortofolioSection] 📊 Total portofolio: ${portofolioList.length}");
+    if (error != null) {
+      debugPrint("[PortofolioSection] ❌ Error: $error");
+    }
+    debugPrint("═══════════════════════════════════════════════════");
 
     return SliverToBoxAdapter(
       child: Column(
@@ -78,7 +115,21 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               child: Center(
                 child: Column(
                   children: [
-                    Text('Error: $error'),
+                    Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Gagal memuat portofolio',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error.toString(),
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: () => context
@@ -93,12 +144,19 @@ class _PortofolioSectionState extends State<PortofolioSection> {
 
           // ===== Kondisi Kosong =====
           if (!isLoadingPorto && error == null && portofolioList.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Center(
-                child: Text(
-                  'Belum ada portofolio',
-                  style: AppTextStyle.body1,
+                child: Column(
+                  children: [
+                    Icon(Icons.photo_library_outlined,
+                        size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum ada portofolio',
+                      style: AppTextStyle.body1,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -110,21 +168,68 @@ class _PortofolioSectionState extends State<PortofolioSection> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: portofolioList.length,
               itemBuilder: (context, index) {
-                final p = portofolioList[index];
-                final String? mediaUrl = p.mediaUrls[0].url;
-                print("Media URL: $mediaUrl");
+                try {
+                  final p = portofolioList[index];
 
-                // final String? mediaUrl =
-                //     context.read<NavigationProvider>().getMediaUrl(p) ?? '';
+                  // ✅ FIXED: Safely get media URL
+                  final String? mediaUrl = _getMediaUrl(p);
 
-                return PortofolioCard(
-                  photographerIcon: p.idMediaVendor ?? '',
-                  imageUrl: mediaUrl,
-                  name: p.usernameVendor ?? "",
-                  rating: p.ratingVendor,
-                  noId: p.noId,
-                  idVendor: p.idVendor,
-                );
+                  debugPrint("[PortofolioSection] 📸 Portofolio ${index + 1}:");
+                  debugPrint("[PortofolioSection]   ID: ${p.noId}");
+                  debugPrint(
+                      "[PortofolioSection]   Vendor: ${p.usernameVendor}");
+                  debugPrint(
+                      "[PortofolioSection]   Media URLs count: ${p.mediaUrls?.length ?? 0}");
+                  debugPrint("[PortofolioSection]   Media URL: $mediaUrl");
+
+                  // ✅ OPTIONAL: Skip portofolio tanpa media
+                  // Uncomment jika tidak ingin menampilkan portofolio tanpa gambar
+                  // if (mediaUrl == null || mediaUrl.isEmpty) {
+                  //   debugPrint("[PortofolioSection]   ⚠️ Skipping - no media URL");
+                  //   return SizedBox.shrink();
+                  // }
+
+                  return PortofolioCard(
+                    photographerIcon: p.idMediaVendor ?? '',
+                    imageUrl:
+                        mediaUrl, // Bisa null, PortofolioCard harus handle ini
+                    name: p.usernameVendor ?? "",
+                    rating: p.ratingVendor,
+                    noId: p.noId,
+                    idVendor: p.idVendor,
+                  );
+                } catch (e, stackTrace) {
+                  // ✅ Catch error untuk single item, jangan crash seluruh list
+                  debugPrint(
+                      "[PortofolioSection] ❌ Error rendering item $index: $e");
+                  debugPrint("[PortofolioSection] Stack: $stackTrace");
+
+                  // Return error card untuk item yang bermasalah
+                  return Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Error memuat item portofolio',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
               },
             ),
         ],

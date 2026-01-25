@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/data/models/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 
 class ChatPackageCard extends StatelessWidget {
@@ -14,7 +14,7 @@ class ChatPackageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formattedHarga = NumberFormat("#,###", "id_ID").format(paket.harga);
     final backgroundColor =
-        isMe ? Constants.primaryColor.withOpacity(0.1) : Colors.white;
+        isMe ? const Color.fromARGB(255, 195, 195, 241) : Colors.white;
     final innerContainerColor = isMe ? Colors.white : const Color(0xFFF5F5F5);
     final alignment = isMe ? Alignment.centerRight : Alignment.centerLeft;
     final titleText = isMe

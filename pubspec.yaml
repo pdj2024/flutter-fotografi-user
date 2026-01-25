@@ -20,6 +20,7 @@ dependencies:
   device_info_plus: ^9.1.2
   dotted_border: null
   dropdown_search: ^5.0.3
+  equatable: ^2.0.8
   firebase_auth: ^5.1.2
   firebase_core: ^3.2.0
   firebase_messaging: null
@@ -29,6 +30,7 @@ dependencies:
     sdk: flutter
   flutter_expandable_fab: ^2.5.2
   flutter_foreground_task: ^9.1.0
+  flutter_local_notifications: ^19.5.0
   flutter_localizations:
     sdk: flutter
   flutter_masked_text2: ^0.9.1
@@ -43,6 +45,8 @@ dependencies:
   geolocator: ^13.0.1
   google_maps_flutter: ^2.5.0
   google_sign_in: ^6.1.6
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
   http_parser: null
   image: ^4.1.3
   image_cropper: ^9.1.0
@@ -68,13 +72,19 @@ dependencies:
   uuid: ^4.2.1
   video_editor: ^3.0.0
   video_player: ^2.8.1
+  wakelock_plus: ^1.4.0
   webview_flutter: ^4.13.1
   workmanager: ^0.9.0+3
 
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+
 dev_dependencies:
+  hive_generator: ^2.0.1
   flutter_lints: ^5.0.0
   flutter_test:
     sdk: flutter
+  build_runner: 2.4.13
 
 # The following section is specific to Flutter packages.
 flutter:
