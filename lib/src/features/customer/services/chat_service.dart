@@ -265,13 +265,13 @@ class ChatService {
       );
 
       // Show notification
-      await _notificationsPlugin.show(
-        message.messageId.hashCode, // Unique ID
-        senderName, // Title
-        messageContent, // Body
-        notificationDetails,
-        payload: '${message.roomId}|${message.messageId}', // For navigation
-      );
+      // await _notificationsPlugin.show(
+      //   message.messageId.hashCode, // Unique ID
+      //   senderName, // Title
+      //   messageContent, // Body
+      //   notificationDetails,
+      //   payload: '${message.roomId}|${message.messageId}', // For navigation
+      // );
 
       debugPrint('[ChatService] ✅ Notification shown successfully');
     } catch (e) {
