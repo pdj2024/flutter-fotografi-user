@@ -66,6 +66,7 @@ class ChatModel {
   final DateTime? deliveredAt;
   final DateTime? readAt;
   final List<String> userIds;
+  final List<String> receiverIds;
 
   // Local tracking
   final String? localId;
@@ -88,6 +89,7 @@ class ChatModel {
     this.deliveredAt,
     this.readAt,
     required this.userIds,
+    required this.receiverIds,
     this.localId,
   });
 
@@ -149,7 +151,7 @@ class ChatModel {
           "text",
       idPaket: json["Id_Paket"]?.toString() ?? json["idPaket"]?.toString(),
       noInvoice: json["No_Pesanan"]?.toString() ??
-          json["noInvoice"]?.toString() ??
+          json["No_Invoice"]?.toString() ??
           json["noPesanan"]?.toString(),
       noPenawaran:
           json["No_Penawaran"]?.toString() ?? json["noPenawaran"]?.toString(),
@@ -173,6 +175,8 @@ class ChatModel {
           : null,
       userIds: _parseUserIds(
           json["User_Ids"] ?? json["userIds"] ?? json["user_Ids"]),
+      receiverIds: _parseUserIds(
+          json["Receiver_Ids"]),
       localId: json["Local_Id"]?.toString() ?? json["localId"]?.toString(),
     );
   }
@@ -202,6 +206,7 @@ class ChatModel {
           : null,
       readAt: json["readAt"] != null ? _parseDateTime(json["readAt"]) : null,
       userIds: _parseUserIds(json["userIds"]),
+      receiverIds: _parseUserIds(json["receiverIds"]),
       localId: json["localId"]?.toString(),
     );
   }
@@ -228,6 +233,7 @@ class ChatModel {
       "Sent_At": sentAt.toUtc().toIso8601String(),
       "Edited_At": editedAt?.toUtc().toIso8601String(),
       "user_Ids": userIds,
+      "receiver_Ids": receiverIds,
     };
   }
 
@@ -274,6 +280,7 @@ class ChatModel {
     DateTime? deliveredAt,
     DateTime? readAt,
     List<String>? userIds,
+    List<String>? receiverIds,
     String? localId,
   }) {
     return ChatModel(
@@ -294,6 +301,7 @@ class ChatModel {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       readAt: readAt ?? this.readAt,
       userIds: userIds ?? this.userIds,
+      receiverIds: receiverIds ?? this.receiverIds,
       localId: localId ?? this.localId,
     );
   }

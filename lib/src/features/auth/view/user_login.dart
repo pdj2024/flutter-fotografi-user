@@ -75,6 +75,8 @@ class _UserLoginState extends State<UserLogin>
     String? noIdPortofolio,
     String? noIdVendor,
   ) async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
 
     try {
@@ -94,71 +96,64 @@ class _UserLoginState extends State<UserLogin>
       if (result.name == 'aktif') {
         print("[UserLogin] ✅ Login successful, initializing services...");
 
-        // ✅ REQUEST PERMISSION DULU (Android 13+)
+        // ==========================================
+        // REQUEST PERMISSION (Android 13+)
+        // ==========================================
         if (Platform.isAndroid) {
           final status = await Permission.notification.request();
 
-          if (status.isDenied) {
-            // Show dialog to ask user
-            if (mounted) {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Izin Notifikasi'),
-                  content: Text(
-                    'Aplikasi membutuhkan izin notifikasi untuk '
-                    'memberi tahu Anda tentang pesan baru.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Nanti'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        openAppSettings(); // Open settings
-                        Navigator.pop(context);
-                      },
-                      child: Text('Buka Pengaturan'),
-                    ),
-                  ],
+          if (status.isDenied && mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Text('Izin Notifikasi'),
+                content: Text(
+                  'Aplikasi membutuhkan izin notifikasi untuk '
+                  'memberi tahu Anda tentang pesan baru.',
                 ),
-              );
-            }
-          } else if (status.isPermanentlyDenied) {
-            // User permanently denied, show info
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Izin notifikasi ditolak. '
-                    'Buka Pengaturan untuk mengaktifkannya.',
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Nanti'),
                   ),
-                  action: SnackBarAction(
-                    label: 'Pengaturan',
-                    onPressed: () => openAppSettings(),
+                  TextButton(
+                    onPressed: () {
+                      openAppSettings();
+                      Navigator.pop(context);
+                    },
+                    child: Text('Buka Pengaturan'),
                   ),
+                ],
+              ),
+            );
+          } else if (status.isPermanentlyDenied && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Izin notifikasi ditolak. '
+                  'Buka Pengaturan untuk mengaktifkannya.',
                 ),
-              );
-            }
+                action: SnackBarAction(
+                  label: 'Pengaturan',
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
           }
         }
 
         // ==========================================
-        // 1️⃣ Initialize ChatProvider (Connection 1)
+        // 1️⃣ Initialize ChatProvider
         // ==========================================
         try {
           chatProv.chatService.getSenderName = (roomId, senderId) {
-            // Ambil nama dari room info yang sudah di-cache
             final room = chatProv.getRoom(roomId);
-            if (room != null) {
-              // Jika sender adalah partner, ambil nama partner
-              if (senderId == room.partnerId) {
-                return room.usernameLawan ?? 'Unknown User';
-              }
+            if (room != null && senderId == room.partnerId) {
+              return room.usernameLawan ?? 'Unknown User';
             }
             return 'New Message';
           };
+
           await chatProv.initWithApiClient(
             userId: provider.customer!.noId,
             userType: Constants.customer,
@@ -169,18 +164,15 @@ class _UserLoginState extends State<UserLogin>
           print("[UserLogin] ✅ ChatProvider initialized");
         } catch (e) {
           print("[UserLogin] ⚠️ ChatProvider init error: $e");
-          // Continue even if chat fails
         }
 
         // ==========================================
-        // 2️⃣ Initialize HistoryOrderProvider (Connection 2 - Standalone)
+        // 2️⃣ Initialize HistoryOrderProvider
         // ==========================================
         try {
-          // 8️⃣ Initialize HistoryOrderProvider
           final historyOrderProvider = context.read<HistoryOrderProvider>();
           final pesananProvider = context.read<PesananProvider>();
 
-          // ✅ CRITICAL: Connect callback BEFORE init
           historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
             debugPrint("📨 Status update: $noOrder → $newStatus");
             pesananProvider.updateOrderStatus(noOrder, newStatus);
@@ -197,14 +189,12 @@ class _UserLoginState extends State<UserLogin>
           );
 
           if (historyConnected) {
-            print(
-                "[UserLogin] ✅ HistoryOrderProvider initialized with standalone connection");
+            print("[UserLogin] ✅ HistoryOrderProvider initialized");
           } else {
             print("[UserLogin] ⚠️ HistoryOrderProvider connection failed");
           }
         } catch (e) {
           print("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
-          // Continue even if history order fails
         }
 
         // ==========================================
@@ -215,46 +205,74 @@ class _UserLoginState extends State<UserLogin>
           print("[UserLogin] ✅ Kota list loaded");
         } catch (e) {
           print("[UserLogin] ⚠️ Kota list load error: $e");
-          // Continue even if kota fails
         }
 
-        
+        if (!mounted) return;
 
-        // Pop halaman login
-        Navigator.pop(context);
+        // ✅ Pop login page dengan success = true
+        Navigator.pop(context, true);
 
-        // Navigate ke target page
-        navigationProvider.navigateToPage(
-          context,
-          getPageFromString(
-            targetPage,
-            noIdPortofolio: noIdPortofolio,
-            noIdVendor: noIdVendor,
-          ),
-          targetTabIndex: tabIndex,
+        // ✅ Navigate ke target page
+        final targetWidget = getPageFromString(
+          targetPage,
+          noIdPortofolio: noIdPortofolio,
+          noIdVendor: noIdVendor,
         );
+
+        // ✅ Jika target adalah tab page, switch tab
+        if (targetPage.startsWith('Tab')) {
+          navigationProvider.setSelectedIndex(tabIndex);
+          navigationProvider.showBottomNav();
+          navigationProvider.notifyListeners();
+        } else {
+          // ✅ Jika target adalah detail page, navigate
+          await navigationProvider.navigateToPage(
+            context,
+            targetWidget,
+            targetTabIndex: tabIndex,
+            hrsLogin: false, // Already logged in
+          );
+        }
 
         print("[UserLogin] ✅ Navigation completed");
       } else if (result.name == 'nonaktif') {
+        if (!mounted) return;
+
         CustomSnackbar.showErrorSnackbar(
           context,
           "Akun Anda tidak aktif. Silakan hubungi admin.",
         );
         await provider.logout();
+
+        // ✅ Pop dengan false (login failed)
+        if (mounted) {
+          Navigator.pop(context, false);
+        }
       } else {
+        if (!mounted) return;
+
         CustomSnackbar.showErrorSnackbar(
           context,
           "Login gagal. Silakan coba lagi.",
         );
         await provider.logout();
+
+        // ✅ Pop dengan false (login failed)
+        if (mounted) {
+          Navigator.pop(context, false);
+        }
       }
     } catch (e, st) {
       print("❌ Error handleLoginGoogle: $e\n$st");
+
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(
           context,
           "Terjadi kesalahan saat login: $e",
         );
+
+        // ✅ Pop dengan false (error)
+        Navigator.pop(context, false);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -266,200 +284,215 @@ class _UserLoginState extends State<UserLogin>
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ??
             {};
-    final String targetPage = args['targetPage'] ?? 'EcommerceHome';
+    final String targetPage = args['targetPage'] ?? 'CustomerHome';
     final int tabIndex = args['tabIndex'] ?? 0;
     final String? noIdPortofolio = args['noIdPortofolio'];
     final String? noIdVendor = args['noIdVendor'];
 
-    return Scaffold(
-      backgroundColor: Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            FadeTransition(
-              opacity: _fadeAnimation,
-              child: CustomScrollView(
-                physics: NeverScrollableScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 30),
+    return WillPopScope(
+      // ✅ When user presses back, return false (cancelled)
+      onWillPop: () async {
+        Navigator.pop(context, false);
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Color(0xFFF9F9F9),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: CustomScrollView(
+                  physics: NeverScrollableScrollPhysics(),
+                  slivers: [
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 30),
 
-                        /// --- Animated Logo ---
-                        SlideTransition(
-                          position: _slideAnimation,
-                          child: Hero(
-                            tag: 'app_logo',
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              child: Image.asset(
-                                'assets/camera_icon_transparent.png',
-                                height: 50,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        /// --- Hero Image with Shadow ---
-                        SlideTransition(
-                          position: _slideAnimation,
-                          child: ClipRRect(
-                            child: Image.asset(
-                              'assets/user_login_image.png',
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        /// --- Welcome Text with Animation ---
-                        SlideTransition(
-                          position: _slideAnimation,
-                          child: Column(
-                            children: [
-                              Text(
-                                'Selamat Datang di',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
+                          /// --- Animated Logo ---
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: Hero(
+                              tag: 'app_logo',
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                child: Image.asset(
+                                  'assets/camera_icon_transparent.png',
+                                  height: 50,
                                 ),
                               ),
-                              ShaderMask(
-                                shaderCallback: (bounds) => LinearGradient(
-                                  colors: [
-                                    Constants.primaryColor,
-                                    Constants.primaryColor.withOpacity(0.8),
-                                  ],
-                                ).createShader(bounds),
-                                child: const Text(
-                                  'Fotografi',
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          /// --- Hero Image ---
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: ClipRRect(
+                              child: Image.asset(
+                                'assets/user_login_image.png',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 30),
+
+                          /// --- Welcome Text ---
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Selamat Datang di',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Constants.primaryColor,
+                                    color: Colors.black,
                                     fontSize: 28,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        /// --- Google Sign In Button ---
-                        SlideTransition(
-                          position: _slideAnimation,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 24),
-                              child: ElevatedButton(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () async {
-                                        await handleLoginGoogle(
-                                          context,
-                                          targetPage,
-                                          tabIndex,
-                                          noIdPortofolio,
-                                          noIdVendor,
-                                        );
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  elevation: 0,
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black87,
-                                  disabledBackgroundColor: Colors.grey.shade100,
-                                  minimumSize: const Size.fromHeight(60),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    side: BorderSide(
-                                      color: Colors.grey.shade200,
-                                      width: 1.5,
+                                ShaderMask(
+                                  shaderCallback: (bounds) => LinearGradient(
+                                    colors: [
+                                      Constants.primaryColor,
+                                      Constants.primaryColor.withOpacity(0.8),
+                                    ],
+                                  ).createShader(bounds),
+                                  child: const Text(
+                                    'Fotografi',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: Constants.primaryColor,
+                                      fontSize: 28,
                                     ),
                                   ),
                                 ),
-                                child: _isLoading
-                                    ? SizedBox(
-                                        height: 24,
-                                        width: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                            Constants.primaryColor,
-                                          ),
-                                        ),
-                                      )
-                                    : Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Image.asset(
-                                            'assets/google_icon.png',
-                                            height: 26,
-                                          ),
-                                          const SizedBox(width: 14),
-                                          const Text(
-                                            'Masuk dengan Google',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 0.3,
+                              ],
+                            ),
+                          ),
+
+                          const Spacer(),
+
+                          /// --- Google Sign In Button ---
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.08),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 24),
+                                child: ElevatedButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () async {
+                                          await handleLoginGoogle(
+                                            context,
+                                            targetPage,
+                                            tabIndex,
+                                            noIdPortofolio,
+                                            noIdVendor,
+                                          );
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    elevation: 0,
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.black87,
+                                    disabledBackgroundColor:
+                                        Colors.grey.shade100,
+                                    minimumSize: const Size.fromHeight(60),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                              Constants.primaryColor,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Image.asset(
+                                              'assets/google_icon.png',
+                                              height: 26,
+                                            ),
+                                            const SizedBox(width: 14),
+                                            const Text(
+                                              'Masuk dengan Google',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.3,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
 
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                        /// --- Terms & Privacy ---
-                        SlideTransition(
-                          position: _slideAnimation,
-                          child: Text(
-                            'Dengan masuk, Anda menyetujui Syarat & Ketentuan\ndan Kebijakan Privasi kami',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              fontSize: 12,
-                              height: 1.5,
+                          /// --- Terms & Privacy ---
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: Text(
+                              'Dengan masuk, Anda menyetujui Syarat & Ketentuan\ndan Kebijakan Privasi kami',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                                height: 1.5,
+                              ),
                             ),
                           ),
-                        ),
 
-                        const SizedBox(height: 32),
-                      ],
+                          const SizedBox(height: 32),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              top: 16,
-              left: 16,
-              child: CustomBackButton(),
-            ),
-          ],
+
+              // ✅ Back button - returns false when pressed
+              Positioned(
+                top: 16,
+                left: 16,
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back),
+                  onPressed: () {
+                    Navigator.pop(context, false);
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

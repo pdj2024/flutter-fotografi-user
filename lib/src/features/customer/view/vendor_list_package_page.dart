@@ -8,6 +8,7 @@ import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
@@ -32,6 +33,8 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
   String? errorMessage;
   List<PaketModel> paketList = [];
   Map<String, List<UlasanModel>> _ulasanByPaket = {};
+
+  
 
   @override
   void initState() {
@@ -188,198 +191,200 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        leading: CustomBackButton(),
-        title: Text(
-          "Daftar Paket",
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+    return FullScreenPage(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          title: Text(
+            "Daftar Paket",
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-      ),
-      backgroundColor: const Color(0xfff9f9f9),
-      body: RefreshIndicator(
-        onRefresh: _fetchData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              VendorBioCard(
-                vendor: widget.vendor,
-                isListPackagePage: true,
-              ),
-              Divider(),
-              SizedBox(height: 10),
+        backgroundColor: const Color(0xfff9f9f9),
+        body: RefreshIndicator(
+          onRefresh: _fetchData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                VendorBioCard(
+                  vendor: widget.vendor,
+                  isListPackagePage: true,
+                ),
+                Divider(),
+                SizedBox(height: 10),
 
-              // ✅ Loading state
-              if (isLoading)
-                Column(
-                  children: List.generate(
-                    4,
-                    (index) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: ShimmerPlaceholder(
-                        height: 150,
-                        radius: 10,
+                // ✅ Loading state
+                if (isLoading)
+                  Column(
+                    children: List.generate(
+                      4,
+                      (index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: ShimmerPlaceholder(
+                          height: 150,
+                          radius: 10,
+                        ),
                       ),
                     ),
-                  ),
-                )
-              // ✅ Error state
-              else if (errorMessage != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        SizedBox(height: 16),
-                        Text(
-                          "Gagal memuat paket",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          errorMessage!,
-                          style: TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _fetchData,
-                          child: Text('Coba Lagi'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              // ✅ Empty state
-              else if (paketList.isEmpty)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 48, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          "Belum ada paket tersedia",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              // ✅ Paket list dengan ulasan
-              else
-                Column(
-                  children: paketList.map((paket) {
-                    // ✅ Get ulasan untuk paket ini
-                    final ulasanList = _ulasanByPaket[paket.no_id] ?? [];
-
-                    debugPrint(
-                        '[VendorListPackage] 🎨 Rendering paket: ${paket.no_id}');
-                    debugPrint(
-                        '[VendorListPackage]   Ulasan count: ${ulasanList.length}');
-
-                    return OfferCard(
-                      paket: paket,
-                      vendorId: widget.vendor.noId,
-                      ulasanList: ulasanList, // ✅ Pass ulasan list
-                      onSend: () async {
-                        // ✅ Check login first
-                        final userProvider = context.read<UserProvider>();
-                        if (userProvider.userId == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Silakan login terlebih dahulu'),
-                              backgroundColor: Colors.orange,
+                  )
+                // ✅ Error state
+                else if (errorMessage != null)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 48, color: Colors.red),
+                          SizedBox(height: 16),
+                          Text(
+                            "Gagal memuat paket",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                          );
-                          return;
-                        }
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            errorMessage!,
+                            style: TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _fetchData,
+                            child: Text('Coba Lagi'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                // ✅ Empty state
+                else if (paketList.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inventory_2_outlined,
+                              size: 48, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            "Belum ada paket tersedia",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                // ✅ Paket list dengan ulasan
+                else
+                  Column(
+                    children: paketList.map((paket) {
+                      // ✅ Get ulasan untuk paket ini
+                      final ulasanList = _ulasanByPaket[paket.no_id] ?? [];
 
-                        setState(() {
-                          isLoading = true;
-                        });
+                      debugPrint(
+                          '[VendorListPackage] 🎨 Rendering paket: ${paket.no_id}');
+                      debugPrint(
+                          '[VendorListPackage]   Ulasan count: ${ulasanList.length}');
 
-                        try {
-                          final userId = userProvider.userId!;
-                          final roomChatProvider =
-                              context.read<RoomChatProvider>();
-
-                          roomChatProvider.setTawaranPaket(paket);
-                          roomChatProvider.activeRoomId = null;
-                          roomChatProvider.vendorId = paket.id_vendor;
-
-                          await roomChatProvider.sendMessage(
-                            currentUserId: userId,
-                          );
-
-                          if (!mounted) return;
+                      return OfferCard(
+                        paket: paket,
+                        vendorId: widget.vendor.noId,
+                        ulasanList: ulasanList, // ✅ Pass ulasan list
+                        onSend: () async {
+                          // ✅ Check login first
+                          final userProvider = context.read<UserProvider>();
+                          if (userProvider.userId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Silakan login terlebih dahulu'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                            return;
+                          }
 
                           setState(() {
-                            isLoading = false;
+                            isLoading = true;
                           });
 
-                          Navigator.pop(context);
+                          try {
+                            final userId = userProvider.userId!;
+                            final roomChatProvider =
+                                context.read<RoomChatProvider>();
 
-                          if (!mounted) return;
+                            roomChatProvider.setTawaranPaket(paket);
+                            roomChatProvider.activeRoomId = null;
+                            roomChatProvider.vendorId = paket.id_vendor;
 
-                          context.read<NavigationProvider>().navigateToPage(
-                                context,
-                                targetTabIndex: 1,
-                                RoomChatPage(
-                                  partnerId: paket.id_vendor,
-                                ),
-                              );
-                        } catch (e) {
-                          debugPrint(
-                              '[VendorListPackage] ❌ Error sending message: $e');
+                            await roomChatProvider.sendMessage(
+                              currentUserId: userId,
+                            );
 
-                          if (!mounted) return;
+                            if (!mounted) return;
 
-                          setState(() {
-                            isLoading = false;
-                          });
+                            setState(() {
+                              isLoading = false;
+                            });
 
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Gagal mengirim pesan: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      },
-                    );
-                  }).toList(),
-                ),
+                            Navigator.pop(context);
 
-              SizedBox(height: 100),
-            ],
+                            if (!mounted) return;
+
+                            context.read<NavigationProvider>().navigateToPage(
+                                  context,
+                                  targetTabIndex: 1,
+                                  RoomChatPage(
+                                    partnerId: paket.id_vendor,
+                                  ),
+                                );
+                          } catch (e) {
+                            debugPrint(
+                                '[VendorListPackage] ❌ Error sending message: $e');
+
+                            if (!mounted) return;
+
+                            setState(() {
+                              isLoading = false;
+                            });
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Gagal mengirim pesan: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                SizedBox(height: 100),
+              ],
+            ),
           ),
         ),
+        floatingActionButton: paketList.isNotEmpty
+            ? FloatingActionButton(
+                onPressed: _fetchData,
+                backgroundColor: Constants.primaryColor,
+                child: const Icon(Icons.refresh, color: Colors.white),
+                tooltip: 'Refresh Paket',
+              )
+            : null,
       ),
-      floatingActionButton: paketList.isNotEmpty
-          ? FloatingActionButton(
-              onPressed: _fetchData,
-              backgroundColor: Constants.primaryColor,
-              child: const Icon(Icons.refresh, color: Colors.white),
-              tooltip: 'Refresh Paket',
-            )
-          : null,
     );
   }
 }

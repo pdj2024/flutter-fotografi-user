@@ -103,7 +103,7 @@ class ChatService {
 
       // ✅ STEP 2: Initialize plugin
       const androidSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings('ic_stat_pacific_data_jaya');
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -264,7 +264,7 @@ class ChatService {
         iOS: iosDetails,
       );
 
-      // Show notification
+      // // Show notification
       // await _notificationsPlugin.show(
       //   message.messageId.hashCode, // Unique ID
       //   senderName, // Title

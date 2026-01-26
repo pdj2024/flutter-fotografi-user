@@ -23,8 +23,7 @@ class ChatPesananCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tanggal =
-        DateFormat("dd MMM yyyy", "id_ID").format(pesanan.tglRealisasi);
+
 
     return Container(
       width: double.infinity,
@@ -47,7 +46,7 @@ class ChatPesananCard extends StatelessWidget {
           Text(pesanan.namaPaket,
               style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 2),
-          Text("${Helper.toLocalTime(pesanan.tglRealisasi)}, $tanggal",
+          Text("${Helper.toLocalTime(pesanan.tglRealisasi)}, ${Helper.formatTanggal(pesanan.tglRealisasi)}",
               style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 2),
           Text(pesanan.lokasi, style: TextStyle(color: Colors.grey.shade700)),

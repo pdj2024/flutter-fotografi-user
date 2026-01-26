@@ -37,6 +37,7 @@ class _MainMenuState extends State<MainMenu> {
           builder: (context, navigationProvider, child) {
             return Stack(
               children: [
+                // ✅ Each navigator now has RouteObserver
                 _buildOffstageNavigator(0, (_) => CustomerHomePage()),
                 _buildOffstageNavigator(1, (_) => ChatListPage()),
                 _buildOffstageNavigator(2, (_) => MainOrderPage()),
@@ -45,7 +46,6 @@ class _MainMenuState extends State<MainMenu> {
             );
           },
         ),
-        // ✅ Conditional bottom navigation bar
         bottomNavigationBar: navigationProvider.isBottomNavVisible
             ? Consumer<NavigationProvider>(
                 builder: (context, navigationProvider, child) {
@@ -142,12 +142,11 @@ class _MainMenuState extends State<MainMenu> {
                   );
                 },
               )
-            : null, // ✅ Hide bottom nav when navigating to child pages
+            : null,
       ),
     );
   }
 
-  // ✅ Handle tab tap
   Future<void> _handleTabTap(
       int index, BuildContext context, int currentIndex) async {
     final navigationProvider = context.read<NavigationProvider>();
@@ -155,25 +154,22 @@ class _MainMenuState extends State<MainMenu> {
     final user = userProvider.customer;
 
     debugPrint("🔘 [MainMenu] Tab $index tapped, current: $currentIndex");
-    debugPrint("👤 [MainMenu] User: ${user?.namaDisplay ?? 'Not logged in'}");
 
-    // ✅ Navigation check dilakukan di onItemTapped
+    // ✅ Navigation handled in onItemTapped
     navigationProvider.onItemTapped(index, context);
 
-    // ✅ Refresh logic jika user sudah login DAN tap tab yang sama
+    // ✅ Refresh when tapping same tab
     if (user != null && currentIndex == index) {
       await _handleTabRefresh(index, context, user);
     }
   }
 
-  // ✅ Handle refresh saat tap tab yang sama
   Future<void> _handleTabRefresh(
       int index, BuildContext context, dynamic user) async {
     debugPrint("🔄 [MainMenu] Refreshing tab $index");
 
     switch (index) {
-      case 0: // Home/Jelajah
-        // Refresh home data if needed
+      case 0: // Home
         break;
 
       case 1: // Chat
@@ -198,6 +194,7 @@ class _MainMenuState extends State<MainMenu> {
     }
   }
 
+  /// ✅ IMPROVED: Navigator with RouteObserver
   Widget _buildOffstageNavigator(int index, WidgetBuilder builder) {
     return Consumer<NavigationProvider>(
       builder: (context, provider, _) {
@@ -205,10 +202,86 @@ class _MainMenuState extends State<MainMenu> {
           offstage: provider.selectedIndex != index,
           child: Navigator(
             key: provider.navigatorKeys[index],
+            observers: [
+              // ✅ Add RouteObserver to track navigation changes
+              provider.routeObservers[index],
+              // ✅ Add custom observer for bottom nav visibility
+              _BottomNavRouteObserver(provider, index),
+            ],
             onGenerateRoute: (_) => MaterialPageRoute(builder: builder),
           ),
         );
       },
     );
+  }
+}
+
+// =========================================================
+// ✨ CUSTOM ROUTE OBSERVER - AUTO BOTTOM NAV CONTROL
+// =========================================================
+
+class _BottomNavRouteObserver extends NavigatorObserver {
+  final NavigationProvider provider;
+  final int tabIndex;
+
+  _BottomNavRouteObserver(this.provider, this.tabIndex);
+
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    super.didPush(route, previousRoute);
+    _updateVisibility();
+    debugPrint('📍 [Observer] Tab $tabIndex - PUSH: ${route.settings.name}');
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    super.didPop(route, previousRoute);
+    _updateVisibility();
+    debugPrint('📍 [Observer] Tab $tabIndex - POP: ${route.settings.name}');
+  }
+
+  @override
+  void didRemove(Route route, Route? previousRoute) {
+    super.didRemove(route, previousRoute);
+    _updateVisibility();
+    debugPrint('📍 [Observer] Tab $tabIndex - REMOVE: ${route.settings.name}');
+  }
+
+  @override
+  void didReplace({Route? newRoute, Route? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _updateVisibility();
+    debugPrint('📍 [Observer] Tab $tabIndex - REPLACE');
+  }
+
+  /// ✅ AUTO UPDATE: Check route stack and update visibility
+  void _updateVisibility() {
+    // Only update if this is the active tab
+    if (provider.selectedIndex != tabIndex) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigator == null) return;
+
+      // ✅ Count routes in stack
+      int routeCount = 0;
+      navigator!.popUntil((route) {
+        routeCount++;
+        return true;
+      });
+
+      // ✅ Show bottom nav only if at root (1 route = root page)
+      final shouldShow = routeCount <= 1;
+
+      debugPrint(
+          '📊 [Observer] Tab $tabIndex: $routeCount routes, bottomNav: ${shouldShow ? "SHOW" : "HIDE"}');
+
+      if (provider.isBottomNavVisible != shouldShow) {
+        if (shouldShow) {
+          provider.showBottomNav();
+        } else {
+          provider.hideBottomNav();
+        }
+      }
+    });
   }
 }

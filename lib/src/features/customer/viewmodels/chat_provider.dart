@@ -443,21 +443,33 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<Map<String, PesananModel>> _batchFetchPesanan(List<String> ids) async {
-    if (ids.isEmpty) return {};
+  if (ids.isEmpty) return {};
 
-    try {
-      final pesananService = PesananService();
-      List<PesananModel> list = [];
-      for (var id in ids) {
-        final data = (await pesananService.getAll(noBukti: id)).first;
-        list.add(data);
+  try {
+    final pesananService = PesananService();
+    final Map<String, PesananModel> result = {};
+    
+    // ✅ Fetch semua pesanan secara parallel
+    final futures = ids.map((id) async {
+      try {
+        final list = await pesananService.getAll(noBukti: id, status: 'aktif');
+        if (list.isNotEmpty) {
+          result[id] = list.first;
+        }
+      } catch (e) {
+        debugPrint('[ChatProvider] ⚠️ Error fetching pesanan $id: $e');
       }
-      return {for (var p in list) p.noBukti: p};
-    } catch (e) {
-      debugPrint('[ChatProvider] ❌ Batch fetch pesanan error: $e');
-      return {};
-    }
+    });
+    
+    await Future.wait(futures);
+    
+    debugPrint('[ChatProvider] ✅ Fetched ${result.length}/${ids.length} pesanan');
+    return result;
+  } catch (e) {
+    debugPrint('[ChatProvider] ❌ Batch fetch pesanan error: $e');
+    return {};
   }
+}
 
   Future<PaketModel?> _loadPaketModel(String? idPaket) async {
     if (idPaket == null || idPaket.isEmpty) return null;
@@ -623,6 +635,7 @@ class ChatProvider extends ChangeNotifier {
       roomType: 'direct',
       sentAt: now,
       userIds: userIds,
+      receiverIds: [],
       localId: localId,
       noInvoice: null,
       editedAt: null,

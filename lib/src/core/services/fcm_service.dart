@@ -1,18 +1,170 @@
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/models/history_order_model.dart';
 
 /// ✅ Background message handler (MUST be top-level function)
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('═══════════════════════════════════════════════════');
   debugPrint('[FCM Background] 📨 Message received: ${message.messageId}');
   debugPrint('[FCM Background] 📦 Data: ${message.data}');
+  debugPrint('═══════════════════════════════════════════════════');
 
   // Handle the message and show notification
-  await FCMService.instance._handleBackgroundMessage(message);
+  await FCMService.instance.handleBackgroundMessage(message);
+}
+
+/// ✅ Notification Type Enum
+enum NotificationType {
+  chat,
+  like,
+  progress,
+  unknown;
+
+  static NotificationType fromString(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'chat':
+        return NotificationType.chat;
+      case 'like':
+        return NotificationType.like;
+      case 'progress':
+      case 'progres':
+        return NotificationType.progress;
+      default:
+        return NotificationType.unknown;
+    }
+  }
+}
+
+/// ✅ Progress Status Enum untuk mapping status pesanan
+enum OrderProgressStatus {
+  menungguBayar, // Pesanan baru, menunggu pembayaran
+  persiapan, // Pembayaran diterima, vendor siapkan
+  proses, // Sedang dikerjakan oleh vendor
+  review, // Selesai dikerjakan, menunggu review
+  revisi, // Vendor melakukan revisi
+  selesai, // Pesanan selesai
+  dibatalkan, // Pesanan dibatalkan
+  unknown;
+
+  static OrderProgressStatus fromString(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'menunggu bayar':
+      case 'menunggu_bayar':
+      case 'pending':
+        return OrderProgressStatus.menungguBayar;
+      case 'persiapan':
+      case 'preparation':
+        return OrderProgressStatus.persiapan;
+      case 'proses':
+      case 'processing':
+      case 'dikerjakan':
+        return OrderProgressStatus.proses;
+      case 'review':
+      case 'ulasan':
+        return OrderProgressStatus.review;
+      case 'revisi':
+      case 'revision':
+        return OrderProgressStatus.revisi;
+      case 'selesai':
+      case 'completed':
+      case 'done':
+        return OrderProgressStatus.selesai;
+      case 'dibatalkan':
+      case 'cancelled':
+      case 'batal':
+        return OrderProgressStatus.dibatalkan;
+      default:
+        return OrderProgressStatus.unknown;
+    }
+  }
+
+  /// Get emoji for each status
+  String get emoji {
+    switch (this) {
+      case OrderProgressStatus.menungguBayar:
+        return '💳';
+      case OrderProgressStatus.persiapan:
+        return '📦';
+      case OrderProgressStatus.proses:
+        return '⚙️';
+      case OrderProgressStatus.review:
+        return '⭐';
+      case OrderProgressStatus.revisi:
+        return '🔧';
+      case OrderProgressStatus.selesai:
+        return '🎉';
+      case OrderProgressStatus.dibatalkan:
+        return '❌';
+      default:
+        return '📋';
+    }
+  }
+
+  /// Get user-friendly title
+  String get title {
+    switch (this) {
+      case OrderProgressStatus.menungguBayar:
+        return 'Menunggu Pembayaran';
+      case OrderProgressStatus.persiapan:
+        return 'Persiapan Pesanan';
+      case OrderProgressStatus.proses:
+        return 'Sedang Diproses';
+      case OrderProgressStatus.review:
+        return 'Berikan Ulasan';
+      case OrderProgressStatus.revisi:
+        return 'Dalam Revisi';
+      case OrderProgressStatus.selesai:
+        return 'Pesanan Selesai';
+      case OrderProgressStatus.dibatalkan:
+        return 'Pesanan Dibatalkan';
+      default:
+        return 'Update Pesanan';
+    }
+  }
+
+  /// Get description for each status
+  String get description {
+    switch (this) {
+      case OrderProgressStatus.menungguBayar:
+        return 'Pesanan berhasil dibuat. Silakan selesaikan pembayaran.';
+      case OrderProgressStatus.persiapan:
+        return 'Pembayaran diterima. Vendor sedang menyiapkan pesanan Anda.';
+      case OrderProgressStatus.proses:
+        return 'Pesanan sedang dikerjakan oleh vendor.';
+      case OrderProgressStatus.review:
+        return 'Pesanan selesai dikerjakan. Mohon berikan ulasan Anda.';
+      case OrderProgressStatus.revisi:
+        return 'Vendor sedang melakukan revisi sesuai permintaan Anda.';
+      case OrderProgressStatus.selesai:
+        return 'Pesanan telah selesai. Terima kasih!';
+      case OrderProgressStatus.dibatalkan:
+        return 'Pesanan telah dibatalkan.';
+      default:
+        return 'Status tidak diketahui';
+    }
+  }
+
+  /// Get tipe user (who triggers this status)
+  String get tipeUser {
+    switch (this) {
+      case OrderProgressStatus.menungguBayar:
+      case OrderProgressStatus.review:
+      case OrderProgressStatus.selesai:
+      case OrderProgressStatus.dibatalkan:
+        return 'Customer';
+      case OrderProgressStatus.persiapan:
+      case OrderProgressStatus.proses:
+      case OrderProgressStatus.revisi:
+        return 'Vendor';
+      default:
+        return 'Unknown';
+    }
+  }
 }
 
 class FCMService {
@@ -26,10 +178,25 @@ class FCMService {
 
   String? _fcmToken;
   bool _initialized = false;
+  String? _currentUserId;
 
-  // Callbacks
-  Function(ChatModel message)? onMessageReceived;
+  // ✅ Active room tracking (untuk suppress notification)
+  String? _activeRoomId;
+
+  // ✅ Callbacks
+  Function(ChatModel message)? onChatMessageReceived;
+  Function(String portofolioId, String userId)? onLikeReceived;
+
+  // ✅ NEW: Enhanced progress callback
+  Function(HistoryOrderModel progressData)? onProgressReceived;
+
   Function(String roomId)? onNotificationTapped;
+
+  // ✅ NEW: Callback untuk navigate ke order detail
+  Function(String orderId)? onOrderNotificationTapped;
+
+  // ✅ Callback untuk get sender name
+  String Function(String roomId, String senderId)? getSenderName;
 
   String? get fcmToken => _fcmToken;
   bool get isInitialized => _initialized;
@@ -69,15 +236,25 @@ class FCMService {
       _fcmToken = await _firebaseMessaging.getToken();
       debugPrint('[FCM] 🔑 FCM Token: $_fcmToken');
 
+      if (_fcmToken == null) {
+        debugPrint('[FCM] ⚠️ WARNING: FCM Token is NULL!');
+        await Future.delayed(Duration(seconds: 2));
+        _fcmToken = await _firebaseMessaging.getToken();
+        debugPrint('[FCM] 🔄 Retry token: $_fcmToken');
+      }
+
       // 4. Setup message handlers
       _setupMessageHandlers();
 
       // 5. Setup token refresh listener
-      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+      _firebaseMessaging.onTokenRefresh.listen((newToken) async {
         debugPrint('[FCM] 🔄 Token refreshed: $newToken');
         _fcmToken = newToken;
-        // TODO: Send new token to backend
-        _sendTokenToBackend(newToken);
+
+        if (_currentUserId != null) {
+          // TODO: Send new token to backend
+          await _sendTokenToBackend(newToken, _currentUserId!);
+        }
       });
 
       _initialized = true;
@@ -91,24 +268,12 @@ class FCMService {
   Future<void> _initializeLocalNotifications() async {
     debugPrint('[FCM] 🔔 Setting up local notifications...');
 
-    // Android channel
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'chat_messages_fcm', // id
-      'Chat Messages', // name
-      description: 'Notifications for chat messages via FCM',
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    // ✅ Create notification channels
+    await _createNotificationChannels();
 
     // Initialize plugin
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('ic_stat_pacific_data_jaya');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -128,20 +293,82 @@ class FCMService {
     debugPrint('[FCM] ✅ Local notifications ready');
   }
 
+  /// ✅ Create multiple notification channels
+  Future<void> _createNotificationChannels() async {
+    final plugin = _notificationsPlugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+
+    if (plugin == null) return;
+
+    // Channel untuk Chat (dengan grouping)
+    const chatChannel = AndroidNotificationChannel(
+      'chat_messages',
+      'Chat Messages',
+      description: 'Notifications for new chat messages',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    );
+
+    // Channel untuk Like
+    const likeChannel = AndroidNotificationChannel(
+      'likes',
+      'Likes',
+      description: 'Notifications for portfolio likes',
+      importance: Importance.defaultImportance,
+      playSound: true,
+    );
+
+    // Channel untuk Progress
+    const progressChannel = AndroidNotificationChannel(
+      'order_progress',
+      'Order Progress',
+      description: 'Notifications for order progress updates',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await plugin.createNotificationChannel(chatChannel);
+    await plugin.createNotificationChannel(likeChannel);
+    await plugin.createNotificationChannel(progressChannel);
+
+    debugPrint('[FCM] ✅ Notification channels created');
+  }
+
   void _setupMessageHandlers() {
     debugPrint('[FCM] 📡 Setting up message handlers...');
 
     // 1. FOREGROUND messages
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessage.listen((message) {
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('[FCM FOREGROUND] 📨 Message received!');
+      debugPrint('[FCM FOREGROUND] MessageId: ${message.messageId}');
+      debugPrint('[FCM FOREGROUND] Data: ${message.data}');
+      debugPrint('═══════════════════════════════════════════════════');
 
-    // 2. BACKGROUND messages (when app is in background but not terminated)
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      _handleForegroundMessage(message);
+    });
 
-    // 3. TERMINATED messages (handled by background handler at top)
-    // Check if app was opened from terminated state
+    // 2. BACKGROUND messages (app in background)
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('[FCM] 👆 App opened from notification (background)');
+      debugPrint('[FCM] Data: ${message.data}');
+      debugPrint('═══════════════════════════════════════════════════');
+
+      _handleNotificationTap(message);
+    });
+
+    // 3. TERMINATED messages
     _firebaseMessaging.getInitialMessage().then((message) {
       if (message != null) {
+        debugPrint('═══════════════════════════════════════════════════');
         debugPrint('[FCM] 📨 App opened from terminated state');
+        debugPrint('[FCM] Data: ${message.data}');
+        debugPrint('═══════════════════════════════════════════════════');
+
         _handleNotificationTap(message);
       }
     });
@@ -150,92 +377,430 @@ class FCMService {
   }
 
   // =========================================
+  // TOKEN MANAGEMENT
+  // =========================================
+
+  Future<void> registerToken(String userId) async {
+    try {
+      debugPrint('[FCM] 📤 Registering token for user: $userId');
+      _currentUserId = userId;
+
+      if (_fcmToken == null) {
+        debugPrint('[FCM] ⚠️ No FCM token available yet, fetching...');
+        _fcmToken = await _firebaseMessaging.getToken();
+      }
+
+      if (_fcmToken != null) {
+        debugPrint('[FCM] ✅ Token available: $_fcmToken');
+        await _sendTokenToBackend(_fcmToken!, userId);
+      } else {
+        debugPrint('[FCM] ❌ Failed to get FCM token');
+      }
+    } catch (e) {
+      debugPrint('[FCM] ❌ Register token error: $e');
+    }
+  }
+
+  Future<void> unregisterToken(String userId) async {
+    try {
+      debugPrint('[FCM] 📤 Unregistering token from backend...');
+
+      // TODO: Call backend to remove token
+      // await deviceTokenService.removeDeviceToken(userId);
+
+      _currentUserId = null;
+      debugPrint('[FCM] ✅ Token unregistered successfully');
+    } catch (e) {
+      debugPrint('[FCM] ❌ Unregister token error: $e');
+    }
+  }
+
+  Future<void> _sendTokenToBackend(String token, String userId) async {
+    try {
+      debugPrint('[FCM] 📤 Sending token to backend for user: $userId');
+      debugPrint('[FCM] Token: $token');
+
+      // TODO: Implement API call
+      // await deviceTokenService.addDeviceToken(userId);
+
+      debugPrint('[FCM] ✅ Token sent to backend successfully');
+    } catch (e) {
+      debugPrint('[FCM] ❌ Send token error: $e');
+    }
+  }
+
+  // =========================================
   // MESSAGE HANDLERS
   // =========================================
 
-  /// Handle foreground messages (when app is open)
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM Foreground] 📨 Message: ${message.messageId}');
-    debugPrint('[FCM Foreground] 📦 Data: ${message.data}');
+    debugPrint('[FCM Foreground] 🔄 Processing message...');
 
     try {
-      // Parse message data
-      final chatMessage = _parseChatMessage(message.data);
+      final type = NotificationType.fromString(message.data['type']);
+      debugPrint('[FCM Foreground] Type: $type');
 
-      if (chatMessage != null) {
-        // Trigger callback
-        onMessageReceived?.call(chatMessage);
-
-        // Show notification (optional - you might want to skip if chat screen is open)
-        await _showNotification(message);
+      switch (type) {
+        case NotificationType.chat:
+          await _handleChatMessage(message);
+          break;
+        case NotificationType.like:
+          await _handleLikeMessage(message);
+          break;
+        case NotificationType.progress:
+          await _handleProgressMessage(message);
+          break;
+        default:
+          debugPrint(
+              '[FCM Foreground] ⚠️ Unknown message type: ${message.data['type']}');
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[FCM Foreground] ❌ Error: $e');
+      debugPrint('[FCM Foreground] Stack: $st');
     }
   }
 
-  /// Handle background messages (called by top-level handler)
-  Future<void> _handleBackgroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM Background] 📨 Processing message: ${message.messageId}');
+  Future<void> handleBackgroundMessage(RemoteMessage message) async {
+    debugPrint('[FCM Background] 🔄 Processing message...');
 
     try {
-      // Show notification
-      await _showNotification(message);
-    } catch (e) {
+      final type = NotificationType.fromString(message.data['type']);
+      debugPrint('[FCM Background] Type: $type');
+
+      switch (type) {
+        case NotificationType.chat:
+          await _showChatNotification(message);
+          break;
+        case NotificationType.like:
+          await _showLikeNotification(message);
+          break;
+        case NotificationType.progress:
+          await _showProgressNotification(message);
+          break;
+        default:
+          debugPrint('[FCM Background] ⚠️ Unknown message type');
+      }
+    } catch (e, st) {
       debugPrint('[FCM Background] ❌ Error: $e');
+      debugPrint('[FCM Background] Stack: $st');
     }
   }
 
-  /// Handle notification tap
   void _handleNotificationTap(RemoteMessage message) {
-    debugPrint('[FCM] 👆 Notification tapped: ${message.messageId}');
-    debugPrint('[FCM] 📦 Data: ${message.data}');
+    debugPrint('[FCM] 👆 Notification tapped');
+    debugPrint('[FCM] Data: ${message.data}');
 
-    final roomId = message.data['roomId'] as String?;
-    if (roomId != null) {
-      onNotificationTapped?.call(roomId);
+    final type = NotificationType.fromString(message.data['type']);
+
+    switch (type) {
+      case NotificationType.chat:
+        final detail = _parseDetail(message.data['detail']);
+        final roomId = detail['room_id'] as String?;
+        if (roomId != null) {
+          debugPrint('[FCM] 📍 Navigating to room: $roomId');
+          onNotificationTapped?.call(roomId);
+        }
+        break;
+      case NotificationType.like:
+        // TODO: Handle like notification tap
+        break;
+      case NotificationType.progress:
+        final detail = _parseDetail(message.data['detail']);
+        final orderId = detail['no_order'] as String?;
+        if (orderId != null) {
+          debugPrint('[FCM] 📍 Navigating to order: $orderId');
+          onOrderNotificationTapped?.call(orderId);
+        }
+        break;
+      default:
+        break;
     }
   }
 
   void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('[FCM] 👆 Local notification tapped: ${response.payload}');
+    debugPrint('[FCM] 👆 Local notification tapped');
+    debugPrint('[FCM] Payload: ${response.payload}');
 
     if (response.payload != null && response.payload!.isNotEmpty) {
-      final parts = response.payload!.split('|');
-      if (parts.isNotEmpty) {
-        onNotificationTapped?.call(parts[0]);
+      try {
+        final payload = jsonDecode(response.payload!);
+        final type = NotificationType.fromString(payload['type']);
+
+        switch (type) {
+          case NotificationType.chat:
+            final roomId = payload['roomId'] as String?;
+            if (roomId != null) {
+              onNotificationTapped?.call(roomId);
+            }
+            break;
+          case NotificationType.like:
+            // TODO: Handle like tap
+            break;
+          case NotificationType.progress:
+            final orderId = payload['orderId'] as String?;
+            if (orderId != null) {
+              onOrderNotificationTapped?.call(orderId);
+            }
+            break;
+          default:
+            break;
+        }
+      } catch (e) {
+        debugPrint('[FCM] ❌ Error parsing payload: $e');
       }
     }
   }
 
   // =========================================
-  // NOTIFICATION DISPLAY
+  // CHAT MESSAGE HANDLING
   // =========================================
 
-  Future<void> _showNotification(RemoteMessage message) async {
+  Future<void> _handleChatMessage(RemoteMessage message) async {
+    debugPrint('[FCM] 💬 Handling chat message...');
+
     try {
-      // Get notification data
-      final data = message.data;
-      final senderName = data['senderName'] as String? ?? 'New Message';
-      final messageText =
-          data['message'] as String? ?? 'You have a new message';
-      final roomId = data['roomId'] as String? ?? '';
-      final messageId = data['messageId'] as String? ?? '';
+      final detail = _parseDetail(message.data['detail']);
+      final chatMessage = ChatModel.fromSignalR(detail, _currentUserId ?? '');
 
-      debugPrint('[FCM] 🔔 Showing notification');
-      debugPrint('[FCM]   Title: $senderName');
-      debugPrint('[FCM]   Body: $messageText');
+      debugPrint('[FCM] ✅ Chat message parsed: ${chatMessage.messageId}');
+      debugPrint('[FCM]   Room: ${chatMessage.roomId}');
+      debugPrint('[FCM]   Sender: ${chatMessage.senderId}');
 
-      const androidDetails = AndroidNotificationDetails(
-        'chat_messages_fcm',
+      // ✅ Trigger callback
+      if (onChatMessageReceived != null) {
+        debugPrint('[FCM] 📞 Calling onChatMessageReceived callback');
+        onChatMessageReceived?.call(chatMessage);
+      } else {
+        debugPrint('[FCM] ⚠️ WARNING: onChatMessageReceived callback is NULL!');
+      }
+
+      // ✅ Show notification
+      await _showChatNotification(message);
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Handle chat error: $e');
+      debugPrint('[FCM] Stack: $st');
+    }
+  }
+
+  /// ✅ Show chat notification with GROUPING
+  Future<void> _showChatNotification(RemoteMessage message) async {
+    try {
+      final detail = _parseDetail(message.data['detail']);
+
+      final roomId = detail['room_id'] as String? ?? '';
+      final senderId = detail['sender_id'] as String? ?? '';
+      final messageText = detail['message'] as String? ?? '';
+      final messageId = detail['message_id'] as String? ?? '';
+      final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';
+
+      debugPrint('[FCM] 🔔 Preparing chat notification...');
+      debugPrint('[FCM]   Room: $roomId');
+      debugPrint('[FCM]   Sender: $senderId');
+      debugPrint('[FCM]   Type: $jenisPesan');
+
+      // ✅ Skip if from self or active room
+      if (senderId == _currentUserId) {
+        debugPrint('[FCM] 🔕 Skip notification (own message)');
+        return;
+      }
+
+      if (_activeRoomId == roomId) {
+        debugPrint('[FCM] 🔕 Skip notification (room is active)');
+        return;
+      }
+
+      // ✅ Get sender name
+      String senderName = 'New Message';
+      if (getSenderName != null) {
+        try {
+          senderName = getSenderName!(roomId, senderId);
+          debugPrint('[FCM] 👤 Sender name: $senderName');
+        } catch (e) {
+          debugPrint('[FCM] ⚠️ Error getting sender name: $e');
+        }
+      }
+
+      // ✅ Format message content
+      String content = _formatMessageContent(messageText, jenisPesan, detail);
+
+      // ✅ GROUPING: Use roomId + senderId as group key
+      final groupKey = '${roomId}_$senderId';
+      final summaryId = groupKey.hashCode;
+
+      debugPrint('[FCM] 📦 Group key: $groupKey');
+      debugPrint('[FCM] 📝 Content: $content');
+
+      // ✅ Create notification with grouping
+      final androidDetails = AndroidNotificationDetails(
+        'chat_messages',
         'Chat Messages',
-        channelDescription: 'Notifications for chat messages via FCM',
+        channelDescription: 'Notifications for new chat messages',
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
         icon: 'ic_stat_pacific_data_jaya',
         enableVibration: true,
         playSound: true,
+
+        // ✅ GROUPING CONFIGURATION
+        groupKey: groupKey,
+        setAsGroupSummary: false, // Individual message
+
+        // ✅ Styling
+        styleInformation: BigTextStyleInformation(
+          content,
+          contentTitle: senderName,
+        ),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        threadIdentifier: null, // Will use groupKey for grouping
+      );
+
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final payload = jsonEncode({
+        'type': 'chat',
+        'roomId': roomId,
+        'messageId': messageId,
+      });
+
+      // ✅ Show individual notification
+      await _notificationsPlugin.show(
+        messageId.hashCode,
+        senderName,
+        content,
+        notificationDetails,
+        payload: payload,
+      );
+
+      // ✅ Show summary notification for group
+      await _showGroupSummary(groupKey, summaryId, senderName);
+
+      debugPrint('[FCM] ✅ Chat notification shown');
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Show chat notification error: $e');
+      debugPrint('[FCM] Stack: $st');
+    }
+  }
+
+  /// ✅ Show group summary notification
+  Future<void> _showGroupSummary(
+    String groupKey,
+    int summaryId,
+    String senderName,
+  ) async {
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        'chat_messages',
+        'Chat Messages',
+        channelDescription: 'Notifications for new chat messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        groupKey: groupKey,
+        setAsGroupSummary: true, // This is the summary
+
+        // ✅ Inbox style for summary
+        styleInformation: InboxStyleInformation(
+          [],
+          contentTitle: senderName,
+          summaryText: 'New messages',
+        ),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: false, // Don't show summary on iOS
+        presentBadge: false,
+        presentSound: false,
+      );
+
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await _notificationsPlugin.show(
+        summaryId,
+        senderName,
+        'New messages',
+        notificationDetails,
+      );
+
+      debugPrint('[FCM] ✅ Group summary shown for: $groupKey');
+    } catch (e) {
+      debugPrint('[FCM] ⚠️ Show group summary error: $e');
+    }
+  }
+
+  String _formatMessageContent(
+    String message,
+    String jenisPesan,
+    Map<String, dynamic> detail,
+  ) {
+    if (message.isNotEmpty) {
+      return message.length > 100 ? '${message.substring(0, 97)}...' : message;
+    }
+
+    switch (jenisPesan) {
+      case 'paket':
+        return '📦 Mengirim paket';
+      case 'penawaran':
+        return '💼 Mengirim penawaran';
+      case 'pesanan':
+      case 'order':
+        return '🧾 Mengirim pesanan';
+      case 'image':
+      case 'gambar':
+        return '🖼️ Mengirim gambar';
+      case 'file':
+        return '📎 Mengirim file';
+      default:
+        return 'Pesan baru';
+    }
+  }
+
+  // =========================================
+  // LIKE MESSAGE HANDLING
+  // =========================================
+
+  Future<void> _handleLikeMessage(RemoteMessage message) async {
+    debugPrint('[FCM] ❤️ Handling like message...');
+
+    try {
+      final detail = _parseDetail(message.data['detail']);
+      final portofolioId = detail['portofolio_id'] as String?;
+      final userId = detail['user_id'] as String?;
+
+      if (portofolioId != null && userId != null) {
+        onLikeReceived?.call(portofolioId, userId);
+      }
+
+      await _showLikeNotification(message);
+    } catch (e) {
+      debugPrint('[FCM] ❌ Handle like error: $e');
+    }
+  }
+
+  Future<void> _showLikeNotification(RemoteMessage message) async {
+    try {
+      final detail = _parseDetail(message.data['detail']);
+      final userName = detail['user_name'] as String? ?? 'Someone';
+      final portofolioTitle =
+          detail['portofolio_title'] as String? ?? 'your portfolio';
+
+      const androidDetails = AndroidNotificationDetails(
+        'likes',
+        'Likes',
+        channelDescription: 'Notifications for portfolio likes',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: 'ic_stat_pacific_data_jaya',
       );
 
       const iosDetails = DarwinNotificationDetails(
@@ -250,46 +815,168 @@ class FCMService {
       );
 
       await _notificationsPlugin.show(
-        messageId.hashCode,
-        senderName,
-        messageText,
+        DateTime.now().millisecondsSinceEpoch % 100000,
+        'New Like',
+        '$userName liked $portofolioTitle',
         notificationDetails,
-        payload: '$roomId|$messageId',
+        payload: jsonEncode({
+          'type': 'like',
+          'portofolioId': detail['portofolio_id'],
+        }),
       );
 
-      debugPrint('[FCM] ✅ Notification shown');
+      debugPrint('[FCM] ✅ Like notification shown');
     } catch (e) {
-      debugPrint('[FCM] ❌ Show notification error: $e');
+      debugPrint('[FCM] ❌ Show like notification error: $e');
     }
   }
 
+  // =========================================
+  // ✅ PROGRESS MESSAGE HANDLING (ENHANCED)
+  // =========================================
+
+  /// ✅ Handle progress message dengan parsing data lengkap
+  Future<void> _handleProgressMessage(RemoteMessage message) async {
+    debugPrint('[FCM] 📊 Handling progress message...');
+    debugPrint('[FCM] Raw data: ${message.data}');
+
+    try {
+      final detail = _parseDetail(message.data['detail']);
+      debugPrint('[FCM] Parsed detail: $detail');
+
+      // ✅ Parse ke HistoryOrderModel model
+      final progressData = HistoryOrderModel.fromJson(detail);
+
+      debugPrint('[FCM] ✅ Progress data parsed:');
+      debugPrint('[FCM]   Order: ${progressData.noOrder}');
+      debugPrint('[FCM]   Status: ${progressData.statusProgressPesanan}');
+      debugPrint(
+          '[FCM]   Sender: ${progressData.senderId} (${progressData.tipeUser})');
+      debugPrint('[FCM]   Deskripsi: ${progressData.deskripsi}');
+
+      // ✅ Trigger callback untuk update UI/data
+      if (onProgressReceived != null) {
+        debugPrint('[FCM] 📞 Calling onProgressReceived callback');
+        onProgressReceived?.call(progressData);
+      } else {
+        debugPrint('[FCM] ⚠️ WARNING: onProgressReceived callback is NULL!');
+      }
+
+      // ✅ Show notification
+      await _showProgressNotification(message);
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Handle progress error: $e');
+      debugPrint('[FCM] Stack: $st');
+    }
+  }
+
+  /// ✅ Show progress notification dengan styling yang lebih baik
+  Future<void> _showProgressNotification(RemoteMessage message) async {
+    try {
+      final detail = _parseDetail(message.data['detail']);
+
+      // Parse data
+      final nomorId = detail['no_id'] as String? ?? '';
+      final deskripsi = detail['deskripsi'] as String? ?? '';
+      final statusStr = detail['status_progress_pesanan'] as String?;
+      final status = OrderProgressStatus.fromString(statusStr);
+
+      debugPrint('[FCM] 🔔 Preparing progress notification...');
+      debugPrint('[FCM]   noid: $nomorId');
+      debugPrint('[FCM]   Status: ${status.name}');
+      debugPrint('[FCM]   Description: $deskripsi');
+
+      // ✅ Build notification title dengan emoji
+      final title = '${status.emoji} ${status.title}';
+
+      // ✅ Build notification body
+      final body = deskripsi.isNotEmpty
+          ? deskripsi
+          : 'Pesanan telah ${status.title.toLowerCase()}';
+
+      // ✅ Styling notification berdasarkan status
+      final androidDetails = AndroidNotificationDetails(
+        'order_progress',
+        'Order Progress',
+        channelDescription: 'Notifications for order progress updates',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: 'ic_stat_pacific_data_jaya',
+        enableVibration: true,
+        playSound: true,
+
+        // ✅ Big text style untuk deskripsi panjang
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+        ),
+
+        // ✅ Show timestamp
+        showWhen: true,
+        when: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final payload = jsonEncode({
+        'type': 'progress',
+        'nomorId': nomorId,
+        'status': status.name,
+      });
+
+      // ✅ Show notification dengan unique ID berdasarkan order
+      await _notificationsPlugin.show(
+        nomorId.hashCode, // Unique ID per order
+        title,
+        body,
+        notificationDetails,
+        payload: "payload",
+      );
+
+      debugPrint('[FCM] ✅ Progress notification shown');
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Show progress notification error: $e');
+      debugPrint('[FCM] Stack: $st');
+    }
+  }
   // =========================================
   // UTILITIES
   // =========================================
 
-  ChatModel? _parseChatMessage(Map<String, dynamic> data) {
-    try {
-      // Parse FCM data to ChatModel
-      // Adjust based on your backend data structure
-      return ChatModel.fromSignalR(data, authService.userId ?? "");
-    } catch (e) {
-      debugPrint('[FCM] ❌ Parse chat message error: $e');
-      return null;
+  Map<String, dynamic> _parseDetail(dynamic detail) {
+    if (detail is String) {
+      try {
+        return jsonDecode(detail) as Map<String, dynamic>;
+      } catch (e) {
+        debugPrint('[FCM] ⚠️ Failed to parse detail string: $e');
+        return {};
+      }
+    } else if (detail is Map) {
+      return Map<String, dynamic>.from(detail);
     }
+    return {};
   }
 
-  /// Send FCM token to backend
-  Future<void> _sendTokenToBackend(String token) async {
-    try {
-      debugPrint('[FCM] 📤 Sending token to backend...');
+  /// ✅ Set active room (suppress notifications for this room)
+  void setActiveRoom(String? roomId) {
+    if (_activeRoomId != roomId) {
+      _activeRoomId = roomId;
+      debugPrint('[FCM] 📱 Active room set: ${roomId ?? "none"}');
 
-      // TODO: Implement API call to save token
-      // Example:
-      // await ApiClient().post('/users/fcm-token', body: {'token': token});
-
-      debugPrint('[FCM] ✅ Token sent to backend');
-    } catch (e) {
-      debugPrint('[FCM] ❌ Send token error: $e');
+      if (roomId != null) {
+        debugPrint('[FCM] 🔕 Notifications suppressed for room: $roomId');
+      } else {
+        debugPrint('[FCM] 🔔 Notifications enabled for all rooms');
+      }
     }
   }
 
@@ -326,7 +1013,13 @@ class FCMService {
 
   void dispose() {
     debugPrint('[FCM] 🗑️ Disposing...');
-    onMessageReceived = null;
+    onChatMessageReceived = null;
+    onLikeReceived = null;
+    onProgressReceived = null;
     onNotificationTapped = null;
+    onOrderNotificationTapped = null;
+    getSenderName = null;
+    _currentUserId = null;
+    _activeRoomId = null;
   }
 }

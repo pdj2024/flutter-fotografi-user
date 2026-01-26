@@ -32,7 +32,6 @@ class PortofolioCard extends StatelessWidget {
     final bool isImageValid = imageUrl != null && imageUrl!.trim().isNotEmpty;
     final bool isAvatarValid = photographerIcon.trim().isNotEmpty;
 
-    print("IS IMAGE VALID: $isImageValid");
     if (isImageValid == false) print(imageUrl);
     return Container(
       margin: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
