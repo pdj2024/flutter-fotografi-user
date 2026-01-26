@@ -257,9 +257,9 @@ class HiveChatRepository {
     await box.put(message.messageId, message);
     _notifyMessagesUpdate(message.roomId);
 
-    debugPrint(exists
-        ? '[HiveChatRepo] 🔄 Updated: ${message.messageId}'
-        : '[HiveChatRepo] ✅ Added: ${message.messageId}');
+    // debugPrint(exists
+    //     ? '[HiveChatRepo] 🔄 Updated: ${message.messageId}'
+    //     : '[HiveChatRepo] ✅ Added: ${message.messageId}');
   }
 
   Future<void> addMessageFromModel(ChatModel model) async {
@@ -272,6 +272,12 @@ class HiveChatRepository {
     PenawaranModel? penawaran,
     PesananModel? pesanan,
   }) async {
+    debugPrint('[HiveRepo] 💾 Saving message with addons:');
+    debugPrint('   MessageId: ${model.messageId}');
+    debugPrint('   Paket: ${paket != null ? "✅" : "❌"}');
+    debugPrint('   Penawaran: ${penawaran != null ? "✅" : "❌"}');
+    debugPrint('   Pesanan: ${pesanan != null ? "✅" : "❌"}');
+
     await addMessage(ChatMessageEntity.fromChatModel(
       model,
       paket: paket,

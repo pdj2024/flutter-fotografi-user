@@ -14,11 +14,13 @@ import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
+import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
@@ -47,10 +49,12 @@ final localizationsDelegates = <LocalizationsDelegate>[
   GlobalCupertinoLocalizations.delegate,
 ];
 
+/// ✅ Background message handler (MUST be top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  await firebaseMessagingBackgroundHandler(message);
+  debugPrint('[Background Handler] 📨 Message: ${message.messageId}');
+  await FCMService.instance.handleBackgroundMessage(message);
 }
 
 void main() async {
@@ -58,57 +62,103 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint("🚀 APP INITIALIZATION START");
+    debugPrint("═══════════════════════════════════════════════════");
+
     // ✅ Initialize Firebase
     await Firebase.initializeApp();
-    print("✅ Firebase initialized");
+    debugPrint("✅ Firebase initialized");
 
-    // Set background message handler
+    // ✅ Set background message handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    debugPrint("✅ Background message handler registered");
 
-    // Initialize FCM
+    // ✅ Initialize FCM Service
     await FCMService.instance.initialize();
+    debugPrint("✅ FCM Service initialized");
+    debugPrint(
+        "   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
 
     // ✅ Initialize Hive
     await Hive.initFlutter();
-    print("✅ Hive initialized");
+    debugPrint("✅ Hive initialized");
 
     // ✅ Register Hive adapters
-    Hive.registerAdapter(ChatMessageEntityAdapter());
-    Hive.registerAdapter(RoomChatEntityAdapter());
-    Hive.registerAdapter(PaketModelAdapter());
-    Hive.registerAdapter(PenawaranModelAdapter());
-    Hive.registerAdapter(PesananModelAdapter());
-    print("✅ Hive adapters registered");
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(ChatMessageEntityAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(RoomChatEntityAdapter());
+    }
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(PaketModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(PenawaranModelAdapter());
+    }
+    if (!Hive.isAdapterRegistered(4)) {
+      Hive.registerAdapter(PesananModelAdapter());
+    }
+    debugPrint("✅ Hive adapters registered");
 
     // ✅ Initialize AuthService singleton
     await authService.initialize();
-    print("✅ AuthService initialized");
+    debugPrint("✅ AuthService initialized");
+
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint("✅ INITIALIZATION COMPLETE");
+    debugPrint("═══════════════════════════════════════════════════");
 
     runApp(const MyApp());
   } catch (e, stackTrace) {
-    print("❌ Fatal initialization error: $e");
-    print(stackTrace);
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint("❌ FATAL INITIALIZATION ERROR");
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint("Error: $e");
+    debugPrint("Stack trace:");
+    debugPrint(stackTrace.toString());
 
     // Show error screen
     runApp(MaterialApp(
       home: Scaffold(
+        backgroundColor: Colors.white,
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text(
-                'Failed to initialize app',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                e.toString(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 24),
+                const Text(
+                  'Failed to initialize app',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  e.toString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    // Restart app
+                    debugPrint("🔄 Restarting app...");
+                  },
+                  child: const Text('Restart App'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -118,6 +168,10 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
+  // ✅ Navigator key untuk navigation dari notification
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +184,6 @@ class MyApp extends StatelessWidget {
               customerService: CustomerService(),
               vendorService: VendorService(),
             );
-            // Initialize Hive box
             provider.initialize();
             return provider;
           },
@@ -187,33 +240,155 @@ class MyApp extends StatelessWidget {
           },
         ),
       ],
-      child: MaterialApp(
-        title: 'Aplikasi',
-        debugShowCheckedModeBanner: false,
-        localizationsDelegates: localizationsDelegates,
-        supportedLocales: const [
-          Locale('id', 'ID'),
-          Locale('en', 'US'),
-        ],
-        theme: ThemeData(
-          useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFFF9F9F9),
-          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-            backgroundColor: Colors.white,
-            selectedItemColor: Colors.green,
-            unselectedItemColor: Colors.grey,
-          ),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.white,
-            brightness: Brightness.light,
-          ).copyWith(
-            surface: Colors.white,
-            surfaceTint: Colors.transparent,
-          ),
-        ),
-        home: const SplashLogicHandler(),
+      child: Builder(
+        builder: (context) {
+          // ✅ Setup FCM callbacks AFTER providers are available
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _setupFCMCallbacks(context);
+          });
+
+          return MaterialApp(
+            navigatorKey: navigatorKey,
+            title: 'Aplikasi',
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: localizationsDelegates,
+            supportedLocales: const [
+              Locale('id', 'ID'),
+              Locale('en', 'US'),
+            ],
+            theme: ThemeData(
+              useMaterial3: true,
+              scaffoldBackgroundColor: const Color(0xFFF9F9F9),
+              bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+                backgroundColor: Colors.white,
+                selectedItemColor: Colors.green,
+                unselectedItemColor: Colors.grey,
+              ),
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.white,
+                brightness: Brightness.light,
+              ).copyWith(
+                surface: Colors.white,
+                surfaceTint: Colors.transparent,
+              ),
+            ),
+            home: const SplashLogicHandler(),
+          );
+        },
       ),
     );
+  }
+
+  /// ✅ Setup FCM callbacks with ChatProvider integration
+  void _setupFCMCallbacks(BuildContext context) {
+    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint("[Main] 🔧 Setting up FCM callbacks...");
+    debugPrint("═══════════════════════════════════════════════════");
+
+    try {
+      final chatProvider = context.read<ChatProvider>();
+      final navigationProvider = context.read<NavigationProvider>();
+
+      // ═══════════════════════════════════════════════════
+      // 1️⃣ SETUP getSenderName CALLBACK
+      // ═══════════════════════════════════════════════════
+      FCMService.instance.getSenderName = (roomId, senderId) {
+        debugPrint("[Main] 🔍 getSenderName called");
+        debugPrint("   Room ID: $roomId");
+        debugPrint("   Sender ID: $senderId");
+
+        // Try to get from ChatProvider
+        final room = chatProvider.getRoom(roomId);
+        if (room != null) {
+          final name = room.usernameLawan ?? 'Unknown User';
+          debugPrint("   ✅ Sender name: $name");
+          return name;
+        }
+
+        debugPrint("   ⚠️ Room not found, using default");
+        return 'New Message';
+      };
+
+      // ═══════════════════════════════════════════════════
+      // 2️⃣ SETUP onChatMessageReceived CALLBACK
+      // ═══════════════════════════════════════════════════
+      FCMService.instance.onChatMessageReceived = (chatMessage) {
+        debugPrint("[Main] 💬 FCM Chat message received");
+        debugPrint("   Room: ${chatMessage.roomId}");
+        debugPrint("   Sender: ${chatMessage.senderId}");
+        debugPrint("   Message: ${chatMessage.message}");
+
+        // ChatProvider will handle adding to Hive via SignalR
+        // This is just for logging and optional extra handling
+      };
+
+      // ═══════════════════════════════════════════════════
+      // 3️⃣ SETUP onNotificationTapped CALLBACK
+      // ═══════════════════════════════════════════════════
+      FCMService.instance.onNotificationTapped = (roomId) {
+        debugPrint("[Main] 👆 Notification tapped");
+        debugPrint("   Navigating to room: $roomId");
+
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          navigationProvider.navigateToPage(
+            context,
+            RoomChatPage(roomId: roomId),
+            targetTabIndex: 1, // Chat tab
+            hrsLogin: false,
+            transitionType: PageTransitionType.slideRight,
+          );
+        } else {
+          debugPrint("   ⚠️ Navigator context not available");
+        }
+      };
+
+      // ═══════════════════════════════════════════════════
+      // 4️⃣ SETUP onLikeReceived CALLBACK (Optional)
+      // ═══════════════════════════════════════════════════
+      FCMService.instance.onLikeReceived = (portofolioId, userId) {
+        debugPrint("[Main] ❤️ Like received");
+        debugPrint("   Portfolio: $portofolioId");
+        debugPrint("   User: $userId");
+
+        // TODO: Update portfolio provider or refresh data
+        // context.read<PortofolioProvider>().refreshPortfolio(portofolioId);
+      };
+
+      // ═══════════════════════════════════════════════════
+      // 5️⃣ SETUP onProgressReceived CALLBACK (Optional)
+      // ═══════════════════════════════════════════════════
+      FCMService.instance.onProgressReceived =
+          (HistoryOrderModel progressData) {
+        debugPrint(
+            "[Main] 📊 Progress: ${progressData.noOrder} → ${progressData.statusProgressPesanan}");
+
+        try {
+          // ✅ Update provider
+          // context.read<PesananProvider>().handleProgressUpdate(progressData);
+        } catch (e) {
+          debugPrint("[Main] ❌ Error: $e");
+        }
+      };
+
+      FCMService.instance.onOrderNotificationTapped = (String orderId) {
+        // debugPrint("[Main] 👆 Navigate to: $orderId");
+
+        // Navigator.of(navigatorKey.currentContext!).pushNamed(
+        //   '/order-detail',
+        //   arguments: {'orderId': orderId},
+        // );
+      };
+
+      debugPrint("[Main] ✅ FCM callbacks configured successfully");
+      debugPrint("═══════════════════════════════════════════════════");
+    } catch (e, stackTrace) {
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("[Main] ❌ Error setting up FCM callbacks");
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("Error: $e");
+      debugPrint("Stack: $stackTrace");
+    }
   }
 }
 
@@ -241,11 +416,13 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
     final userProv = Provider.of<UserProvider>(context, listen: false);
 
     try {
-      print("=== 🚀 APP STARTED ===");
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("🚀 APP STARTED - Loading initial data");
+      debugPrint("═══════════════════════════════════════════════════");
 
       // ✅ Setup session expired callback
       apiClient.onSessionExpired = () {
-        print("🚪 [Main] Session expired, logging out...");
+        debugPrint("🚪 [Main] Session expired, logging out...");
         if (mounted) {
           nav.handleLogout(context);
         }
@@ -253,185 +430,82 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
       // 1️⃣ Try to restore session
       bool sessionRestored = await authService.restoreSession();
-      print("Session restored: $sessionRestored");
+      debugPrint("Session restored: $sessionRestored");
 
       if (sessionRestored) {
-        print("✅ Session found, restoring user data...");
+        debugPrint("✅ Session found, restoring user data...");
 
         // 2️⃣ Restore user session
         final userRestored = await userProv.restoreSession();
 
         if (userRestored && userProv.customer != null) {
-          print("✅ User restored: ${userProv.customer!.namaDisplay}");
+          debugPrint("✅ User restored: ${userProv.customer!.namaDisplay}");
 
           // 3️⃣ Load role from storage
           String? role = await nav.getRole();
           if (role != null) {
             userProv.setRole(role);
-            print("✅ Role set: $role");
+            debugPrint("✅ Role set: $role");
           }
 
           // 4️⃣ Verify token is still valid
           try {
-            print("🔄 Verifying token...");
+            debugPrint("🔄 Verifying token...");
             final token = await authService.getIdToken(forceRefresh: false);
 
             if (token != null) {
-              print("✅ Token valid");
+              debugPrint("✅ Token valid");
 
-              // 5️⃣ Register device token
+              // 5️⃣ Request notification permission (Android 13+)
+              await _requestNotificationPermission();
+
+              // 6️⃣ Register device token
               try {
                 await userProv.deviceTokenService
                     .addDeviceToken(userProv.customer!.noId);
+                debugPrint("✅ Device token registered");
               } catch (e) {
-                print("⚠️ Device token registration failed: $e");
+                debugPrint("⚠️ Device token registration failed: $e");
               }
 
-              // 6️⃣ Initialize ChatProvider
-              try {
-                // ✅ REQUEST PERMISSION DULU (Android 13+)
-                if (Platform.isAndroid) {
-                  final status = await Permission.notification.request();
+              // 7️⃣ Initialize ChatProvider
+              await _initializeChatProvider(userProv);
 
-                  if (status.isDenied) {
-                    // Show dialog to ask user
-                    if (mounted) {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('Izin Notifikasi'),
-                          content: Text(
-                            'Aplikasi membutuhkan izin notifikasi untuk '
-                            'memberi tahu Anda tentang pesan baru.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text('Nanti'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                openAppSettings(); // Open settings
-                                Navigator.pop(context);
-                              },
-                              child: Text('Buka Pengaturan'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                  } else if (status.isPermanentlyDenied) {
-                    // User permanently denied, show info
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Izin notifikasi ditolak. '
-                            'Buka Pengaturan untuk mengaktifkannya.',
-                          ),
-                          action: SnackBarAction(
-                            label: 'Pengaturan',
-                            onPressed: () => openAppSettings(),
-                          ),
-                        ),
-                      );
-                    }
-                  }
-                }
-                final chatProv = context.read<ChatProvider>();
+              // 8️⃣ Initialize HistoryOrderProvider
+              await _initializeHistoryOrderProvider(userProv);
 
-                chatProv.chatService.getSenderName = (roomId, senderId) {
-                  // Ambil nama dari room info yang sudah di-cache
-                  final room = chatProv.getRoom(roomId);
-                  if (room != null) {
-                    // Jika sender adalah partner, ambil nama partner
-                    if (senderId == room.partnerId) {
-                      return room.usernameLawan ?? 'Unknown User';
-                    }
-                  }
-                  return 'New Message';
-                };
-
-                await chatProv.initWithApiClient(
-                  userId: userProv.customer!.noId,
-                  userType: Constants.customer,
-                  hubUrl: "${Constants.baseUrlHub}/api/chathub",
-                  getToken: () async =>
-                      await authService.getIdToken(forceRefresh: true),
-                );
-                print("[Main] ✅ ChatProvider initialized");
-              } catch (e) {
-                print("[Main] ⚠️ ChatProvider init failed: $e");
-              }
-
-              // 7️⃣ Initialize HistoryOrderProvider
-              try {
-                print("[Main] 🔧 Initializing HistoryOrderProvider...");
-
-                final historyOrderProvider =
-                    context.read<HistoryOrderProvider>();
-                final pesananProvider = context.read<PesananProvider>();
-
-                // ✅ CRITICAL: Connect HistoryOrder → Pesanan BEFORE init
-                print(
-                    "[Main] 🔗 Connecting HistoryOrderProvider → PesananProvider...");
-
-                historyOrderProvider.onOrderStatusChanged =
-                    (noOrder, newStatus) {
-                  print("[Main] 📨 Status update received:");
-                  print("   Order: $noOrder");
-                  print("   Status: $newStatus");
-                  print("   Forwarding to PesananProvider...");
-
-                  pesananProvider.updateOrderStatus(noOrder, newStatus);
-                };
-
-                print(
-                    "[Main] ✅ HistoryOrderProvider ↔ PesananProvider connected");
-
-                final historyConnected = await historyOrderProvider.initialize(
-                  config: HistoryOrderServiceConfig(
-                    hubUrl: "${Constants.baseUrlHub}/api/chathub",
-                    role: Constants.customer,
-                    getToken: () async =>
-                        await authService.getIdToken(forceRefresh: true),
-                  ),
-                  userId: userProv.customer!.noId,
-                );
-
-                if (historyConnected) {
-                  print("[Main] ✅ HistoryOrderProvider initialized");
-                } else {
-                  print("[Main] ⚠️ HistoryOrderProvider connection failed");
-                }
-              } catch (e) {
-                print("[Main] ⚠️ HistoryOrderProvider init failed: $e");
-              }
-
-              print("✅ User logged in, going to MainMenu");
+              debugPrint("✅ User logged in, going to MainMenu");
             } else {
-              print("⚠️ Token verification failed, need re-login");
+              debugPrint("⚠️ Token verification failed, need re-login");
               await nav.handleLogout(context);
             }
           } catch (e) {
-            print("❌ Token verification error: $e");
+            debugPrint("❌ Token verification error: $e");
             await nav.handleLogout(context);
           }
         } else {
-          print("⚠️ Session exists but user data incomplete, need re-login");
+          debugPrint(
+              "⚠️ Session exists but user data incomplete, need re-login");
           await nav.handleLogout(context);
         }
       } else {
-        print("ℹ️ No session found, user not logged in");
+        debugPrint("ℹ️ No session found, user not logged in");
         // Set default role for new users
         await nav.saveRole(Constants.customer);
       }
 
-      // 8️⃣ Always go to MainMenu (users can explore without login)
+      // 9️⃣ Always go to MainMenu (users can explore without login)
       _startPage = const MainMenu();
+
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("✅ INITIAL DATA LOAD COMPLETE");
+      debugPrint("═══════════════════════════════════════════════════");
     } catch (e, s) {
-      print("❌ Initialization error: $e");
-      print(s);
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("❌ INITIALIZATION ERROR");
+      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("Error: $e");
+      debugPrint("Stack: $s");
 
       // On error, still go to MainMenu
       _startPage = const MainMenu();
@@ -439,6 +513,137 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// ✅ Request notification permission (Android 13+)
+  Future<void> _requestNotificationPermission() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      debugPrint("[Main] 🔔 Requesting notification permission...");
+
+      final status = await Permission.notification.request();
+      debugPrint("[Main] Permission status: $status");
+
+      if (status.isDenied && mounted) {
+        // Show dialog to explain why we need permission
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Izin Notifikasi'),
+            content: const Text(
+              'Aplikasi membutuhkan izin notifikasi untuk '
+              'memberi tahu Anda tentang pesan baru, update pesanan, '
+              'dan aktivitas lainnya.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Nanti'),
+              ),
+              TextButton(
+                onPressed: () {
+                  openAppSettings();
+                  Navigator.pop(context);
+                },
+                child: const Text('Buka Pengaturan'),
+              ),
+            ],
+          ),
+        );
+      } else if (status.isPermanentlyDenied && mounted) {
+        // User permanently denied
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Izin notifikasi ditolak. '
+              'Buka Pengaturan untuk mengaktifkannya.',
+            ),
+            action: SnackBarAction(
+              label: 'Pengaturan',
+              onPressed: () => openAppSettings(),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else if (status.isGranted) {
+        debugPrint("[Main] ✅ Notification permission granted");
+      }
+    } catch (e) {
+      debugPrint("[Main] ⚠️ Error requesting notification permission: $e");
+    }
+  }
+
+  /// ✅ Initialize ChatProvider with FCM
+  Future<void> _initializeChatProvider(UserProvider userProv) async {
+    try {
+      debugPrint("[Main] 🔧 Initializing ChatProvider...");
+
+      final chatProv = context.read<ChatProvider>();
+
+      // ✅ Setup getSenderName callback for ChatService
+      chatProv.chatService.getSenderName = (roomId, senderId) {
+        final room = chatProv.getRoom(roomId);
+        if (room != null && senderId == room.partnerId) {
+          return room.usernameLawan ?? 'Unknown User';
+        }
+        return 'New Message';
+      };
+
+      // Initialize ChatProvider
+      await chatProv.initWithApiClient(
+        userId: userProv.customer!.noId,
+        userType: Constants.customer,
+        hubUrl: "${Constants.baseUrlHub}/api/chathub",
+        getToken: () async => await authService.getIdToken(forceRefresh: true),
+      );
+
+      debugPrint("[Main] ✅ ChatProvider initialized");
+    } catch (e, stackTrace) {
+      debugPrint("[Main] ❌ ChatProvider init failed: $e");
+      debugPrint("[Main] Stack: $stackTrace");
+    }
+  }
+
+  /// ✅ Initialize HistoryOrderProvider
+  Future<void> _initializeHistoryOrderProvider(UserProvider userProv) async {
+    try {
+      debugPrint("[Main] 🔧 Initializing HistoryOrderProvider...");
+
+      final historyOrderProvider = context.read<HistoryOrderProvider>();
+      final pesananProvider = context.read<PesananProvider>();
+      await pesananProvider.loadOrder(userId: userProv.customer!.noId);
+
+      // ✅ Connect HistoryOrder → Pesanan
+      historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
+        debugPrint("[Main] 📨 Order status update:");
+        debugPrint("   Order: $noOrder");
+        debugPrint("   Status: $newStatus");
+        pesananProvider.updateOrderStatus(noOrder, newStatus);
+      };
+
+      debugPrint("[Main] ✅ HistoryOrderProvider ↔ PesananProvider connected");
+
+      // Initialize
+      final historyConnected = await historyOrderProvider.initialize(
+        config: HistoryOrderServiceConfig(
+          hubUrl: "${Constants.baseUrlHub}/api/chathub",
+          role: Constants.customer,
+          getToken: () async =>
+              await authService.getIdToken(forceRefresh: true),
+        ),
+        userId: userProv.customer!.noId,
+      );
+
+      if (historyConnected) {
+        debugPrint("[Main] ✅ HistoryOrderProvider initialized");
+      } else {
+        debugPrint("[Main] ⚠️ HistoryOrderProvider connection failed");
+      }
+    } catch (e, stackTrace) {
+      debugPrint("[Main] ❌ HistoryOrderProvider init failed: $e");
+      debugPrint("[Main] Stack: $stackTrace");
     }
   }
 

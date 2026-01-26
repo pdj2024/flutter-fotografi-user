@@ -8,10 +8,11 @@ import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 
 // =========================================================
-// NAVPROVIDER CUSTOMER - UPGRADED VERSION
+// ✨ IMPROVED NAVPROVIDER - ROUTE OBSERVER PATTERN
 // =========================================================
 
 class NavigationProvider with ChangeNotifier {
@@ -27,7 +28,7 @@ class NavigationProvider with ChangeNotifier {
 
   DateTime? _lastPressedAt;
 
-  // ✅ Bottom Navigation Visibility Control
+  // ✅ Bottom Navigation Visibility - Default TRUE
   bool _isBottomNavVisible = true;
   bool get isBottomNavVisible => _isBottomNavVisible;
 
@@ -35,26 +36,45 @@ class NavigationProvider with ChangeNotifier {
   static const String _keyStatusUser = 'status_user';
   static const String _keyRole = 'user_role';
 
-  // 📚 Navigation History - Track route stack per tab
+  // 📚 Navigation Keys
   final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
     4,
     (_) => GlobalKey<NavigatorState>(),
   );
 
-  // Track navigation depth per tab (0 = root page)
-  final Map<int, int> _tabNavigationDepth = {0: 0, 1: 0, 2: 0, 3: 0};
+  // ✅ NEW: Route Observers for each tab
+  final List<RouteObserver<PageRoute>> routeObservers = List.generate(
+    4,
+    (_) => RouteObserver<PageRoute>(),
+  );
 
-  int getNavigationDepth(int tabIndex) => _tabNavigationDepth[tabIndex] ?? 0;
+  // ✅ NEW: Track active routes per tab (automatic detection)
+  final Map<int, List<Route>> _activeRoutes = {
+    0: [],
+    1: [],
+    2: [],
+    3: [],
+  };
+
+  // ✅ Get current route depth (AUTOMATIC - no manual tracking)
+  int getNavigationDepth(int tabIndex) {
+    return _activeRoutes[tabIndex]?.length ?? 0;
+  }
+
+  // ✅ Check if tab is at root
+  bool isAtRoot(int tabIndex) {
+    return getNavigationDepth(tabIndex) <= 1; // 1 = root page only
+  }
 
   // =========================================================
-  // 🎨 BOTTOM NAV VISIBILITY CONTROL
+  // 🎨 BOTTOM NAV VISIBILITY - SIMPLIFIED
   // =========================================================
 
   /// Show bottom navigation bar
   void showBottomNav() {
     if (!_isBottomNavVisible) {
       _isBottomNavVisible = true;
-      debugPrint('[NavigationProvider] 📱 Bottom nav SHOWN');
+      debugPrint('[NavProvider] 📱 Bottom nav SHOWN');
       notifyListeners();
     }
   }
@@ -63,20 +83,19 @@ class NavigationProvider with ChangeNotifier {
   void hideBottomNav() {
     if (_isBottomNavVisible) {
       _isBottomNavVisible = false;
-      debugPrint('[NavigationProvider] 🙈 Bottom nav HIDDEN');
+      debugPrint('[NavProvider] 🙈 Bottom nav HIDDEN');
       notifyListeners();
     }
   }
 
-  /// Set bottom navigation visibility based on navigation depth
+  /// ✅ AUTO UPDATE - Called by route observer
   void updateBottomNavVisibility() {
-    final currentDepth = _tabNavigationDepth[_selectedIndex] ?? 0;
-    final shouldShow = currentDepth == 0;
+    final atRoot = isAtRoot(_selectedIndex);
 
-    if (_isBottomNavVisible != shouldShow) {
-      _isBottomNavVisible = shouldShow;
+    if (_isBottomNavVisible != atRoot) {
+      _isBottomNavVisible = atRoot;
       debugPrint(
-          '[NavigationProvider] 📱 Bottom nav auto-updated: ${shouldShow ? "SHOWN" : "HIDDEN"} (depth: $currentDepth)');
+          '[NavProvider] 📱 Auto-update: ${atRoot ? "SHOWN" : "HIDDEN"} (routes: ${getNavigationDepth(_selectedIndex)})');
       notifyListeners();
     }
   }
@@ -87,7 +106,7 @@ class NavigationProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 💾 SIMPAN & AMBIL STATUS USER
+  // 💾 STORAGE METHODS (unchanged)
   // =========================================================
   Future<void> saveStatusUser(String status) async {
     await _storage.write(key: _keyStatusUser, value: status);
@@ -105,9 +124,6 @@ class NavigationProvider with ChangeNotifier {
     _statusUser = null;
   }
 
-  // =========================================================
-  // 💾 SIMPAN & AMBIL ROLE
-  // =========================================================
   Future<void> saveRole(String role) async {
     await _storage.write(key: _keyRole, value: role);
     apiClient.setRole(role);
@@ -123,7 +139,7 @@ class NavigationProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 🔐 CHECK LOGIN
+  // 🔐 AUTH METHODS (unchanged)
   // =========================================================
   Future<void> checkLogin(
       BuildContext context, String role, bool silent) async {
@@ -152,19 +168,14 @@ class NavigationProvider with ChangeNotifier {
     } catch (e, stackTrace) {
       debugPrint("❌ Error checkLogin: $e");
       debugPrint(stackTrace.toString());
-
       await handleLogout(context);
     }
   }
 
-  // =========================================================
-  // 🚪 HANDLE LOGOUT
-  // =========================================================
   Future<void> handleLogout(BuildContext context) async {
     debugPrint("===== [handleLogout] start");
 
     try {
-      // 1️⃣ Remove device token jika ada
       final userProv = context.read<UserProvider>();
       if (userProv.customer != null) {
         try {
@@ -175,23 +186,18 @@ class NavigationProvider with ChangeNotifier {
         }
       }
 
-      // 2️⃣ Logout dari Google & hapus data di AuthService
       await authService.logout();
-
-      // 3️⃣ Hapus data lokal di NavigationProvider
       await clearStatusUser();
       await clearRole();
       clearSelectedIndex();
       resetNavigationState();
-      showBottomNav(); // ✅ Reset visibility
+      showBottomNav();
 
-      // 4️⃣ Clear UserProvider
       userProv.clear();
       popAllToRoot();
 
       debugPrint("✅ Semua data berhasil dihapus");
 
-      // 5️⃣ Redirect ke login
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const UserLogin()),
@@ -204,7 +210,6 @@ class NavigationProvider with ChangeNotifier {
       debugPrint("❌ Error saat handleLogout: $e");
       debugPrint(stackTrace.toString());
 
-      // Fallback: tetap redirect ke login meskipun ada error
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const UserLogin()),
@@ -214,24 +219,21 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-  // =========================================================
-  // 🔍 CHECK AUTHENTICATION STATUS
-  // =========================================================
   Future<bool> isAuthenticated() async {
     final token = await authService.getIdToken(forceRefresh: false);
     return token != null && token.isNotEmpty;
   }
 
   // =========================================================
-  // 🧭 NAVIGATE TO PAGE WITH AUTH CHECK & ANIMATIONS
+  // 🧭 IMPROVED NAVIGATION - NO MANUAL DEPTH TRACKING
   // =========================================================
 
   void resetNavigationState() {
-    _tabNavigationDepth.clear();
-    _tabNavigationDepth.addAll({0: 0, 1: 0, 2: 0, 3: 0});
+    _activeRoutes.clear();
+    _activeRoutes.addAll({0: [], 1: [], 2: [], 3: []});
   }
 
-  /// Navigate to a page with slide animation and auto bottom nav control
+  /// ✅ IMPROVED: Navigate with automatic route tracking
   Future<void> navigateToPage(
     BuildContext context,
     Widget page, {
@@ -244,20 +246,18 @@ class NavigationProvider with ChangeNotifier {
     String? noIdPortofolio;
     String? noIdVendor;
 
-    // Extract IDs for logging purposes
     if (page is SinglePostPage) noIdPortofolio = page.noId;
     if (page is VendorBioPage) noIdVendor = page.idVendor;
 
     debugPrint("═══════════════════════════════════════════════════");
     debugPrint(
         "[navigateToPage] 🎯 TARGET: $targetPage (Tab: $targetTabIndex)");
-    debugPrint("[navigateToPage] Current tab: $_selectedIndex");
 
-    // ✅ Cek login menggunakan AuthService
+    // ✅ Check auth
     final isAuth = await isAuthenticated();
 
     if (!isAuth && hrsLogin) {
-      debugPrint("[navigateToPage] 🔒 BELUM LOGIN, redirect ke UserLogin");
+      debugPrint("[navigateToPage] 🔒 Redirect to login");
 
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
@@ -276,69 +276,43 @@ class NavigationProvider with ChangeNotifier {
       return;
     }
 
-    debugPrint("[navigateToPage] ✅ SUDAH LOGIN or No login required");
-
     int targetIndex = targetTabIndex;
 
-    // ✅ FIX: Pindah tab dulu jika berbeda
-    final needsTabSwitch = _selectedIndex != targetIndex;
-
-    if (needsTabSwitch) {
+    // ✅ Switch tab if needed
+    if (_selectedIndex != targetIndex) {
       debugPrint(
-          "[navigateToPage] 🔄 Switching from tab $_selectedIndex to $targetIndex");
+          "[navigateToPage] 🔄 Switching tab $_selectedIndex → $targetIndex");
       _selectedIndex = targetIndex;
       notifyListeners();
 
-      // ✅ PENTING: Tunggu frame rebuild selesai
       await WidgetsBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 50));
-
-      debugPrint("[navigateToPage] ✅ Tab switched to $targetIndex");
     }
 
-    // ✅ Dapatkan navigator untuk target tab
+    // ✅ Get navigator
     final navigator = navigatorKeys[targetIndex].currentState;
 
     if (navigator != null) {
-      debugPrint("[navigateToPage] 📄 Pushing page to tab $targetIndex");
+      debugPrint("[navigateToPage] 📄 Pushing to tab $targetIndex");
 
-      // ✅ Hide bottom nav before navigation
-      hideBottomNav();
+      // ✅ Create route with observer
+      final route = _createPageRoute(page, transitionType);
 
-      // ✅ Increment navigation depth
-      _tabNavigationDepth[targetIndex] =
-          (_tabNavigationDepth[targetIndex] ?? 0) + 1;
+      // ✅ Push and let RouteObserver handle visibility
+      await navigator.push(route);
 
-      debugPrint(
-          "[navigateToPage] 📊 Tab $targetIndex depth: ${_tabNavigationDepth[targetIndex]}");
-
-      // ✅ Navigate with animation
-      await navigator.push(_createPageRoute(page, transitionType));
-
-      // ✅ Final notify to update UI
-      notifyListeners();
-
-      debugPrint("[navigateToPage] ✅ Navigation complete");
+      debugPrint("[navigateToPage] ✅ Complete");
     } else {
-      debugPrint(
-          "[navigateToPage] ❌ ERROR: Navigator null for tab $targetIndex!");
-      debugPrint("[navigateToPage] Current selected tab: $_selectedIndex");
-      debugPrint("[navigateToPage] Target tab: $targetIndex");
+      debugPrint("[navigateToPage] ❌ Navigator null, retrying...");
 
-      // ✅ Fallback: Coba sekali lagi setelah delay lebih lama
-      debugPrint("[navigateToPage] 🔄 Retrying after longer delay...");
       await Future.delayed(const Duration(milliseconds: 200));
-
       final retryNavigator = navigatorKeys[targetIndex].currentState;
+
       if (retryNavigator != null) {
-        debugPrint("[navigateToPage] ✅ Retry successful!");
-        hideBottomNav();
-        _tabNavigationDepth[targetIndex] =
-            (_tabNavigationDepth[targetIndex] ?? 0) + 1;
-        await retryNavigator.push(_createPageRoute(page, transitionType));
-        notifyListeners();
+        final route = _createPageRoute(page, transitionType);
+        await retryNavigator.push(route);
       } else {
-        debugPrint("[navigateToPage] ❌ Retry failed - Navigator still null");
+        debugPrint("[navigateToPage] ❌ Retry failed");
       }
     }
 
@@ -346,7 +320,7 @@ class NavigationProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 🎬 PAGE ROUTE WITH CUSTOM TRANSITIONS
+  // 🎬 PAGE ROUTES (unchanged)
   // =========================================================
   PageRoute _createPageRoute(Widget page, PageTransitionType type) {
     switch (type) {
@@ -431,7 +405,7 @@ class NavigationProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 📱 BOTTOM NAV METHODS
+  // 📱 BOTTOM NAV METHODS - SIMPLIFIED
   // =========================================================
 
   void setSelectedIndex(int index) {
@@ -448,13 +422,12 @@ class NavigationProvider with ChangeNotifier {
   }
 
   void onItemTapped(int index, BuildContext context) async {
-    debugPrint("🔘 [NavigationProvider] Tab tapped: $index");
+    debugPrint("🔘 [NavProvider] Tab tapped: $index");
 
     final isAuth = await isAuthenticated();
 
-    // ✅ Tab 0 (Home/Jelajah) bisa diakses tanpa login
     if (!isAuth && index != 0) {
-      debugPrint("🔒 [NavigationProvider] Belum login, redirect ke UserLogin");
+      debugPrint("🔒 [NavProvider] Redirect to login");
 
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
@@ -470,133 +443,79 @@ class NavigationProvider with ChangeNotifier {
       return;
     }
 
-    // ✅ Change tab and show bottom nav
     if (_selectedIndex != index) {
       _selectedIndex = index;
-      showBottomNav();
       resetExitTimer();
-      debugPrint("✅ [NavigationProvider] Navigasi ke tab $index");
+
+      // ✅ Auto-update visibility based on target tab's state
+      updateBottomNavVisibility();
+
+      debugPrint("✅ [NavProvider] Tab changed to $index");
       notifyListeners();
     } else {
-      // ✅ Tapping same tab - pop to root if not already there
+      // ✅ Same tab tapped - pop to root
       final navigator = navigatorKeys[index].currentState;
-      if (navigator != null && _tabNavigationDepth[index]! > 0) {
+      if (navigator != null && !isAtRoot(index)) {
         navigator.popUntil((route) => route.isFirst);
-        _tabNavigationDepth[index] = 0;
-        showBottomNav();
+        showBottomNav(); // Force show when back to root
         notifyListeners();
       }
     }
   }
 
-  /// ✅ Handle back button manual (dari AppBar/CustomBackButton)
-
+  /// ✅ SIMPLIFIED: Back button handler
   Future<bool> handleBackButton(BuildContext context) async {
     final currentNavigator = navigatorKeys[_selectedIndex].currentState;
 
     if (currentNavigator == null) return true;
 
+    // ✅ Try to pop - RouteObserver will auto-update visibility
     bool canPop = await currentNavigator.maybePop();
 
     if (canPop) {
-      // ✅ NULL-SAFE: Ambil current depth dengan default 0
-      final currentDepth = _tabNavigationDepth[_selectedIndex] ?? 0;
-
-      // ✅ Decrement jika > 0
-      if (currentDepth > 0) {
-        _tabNavigationDepth[_selectedIndex] = currentDepth - 1;
-      }
-
-      // ✅ Get new depth
-      final newDepth = _tabNavigationDepth[_selectedIndex] ?? 0;
-
-      // ✅ Set visibility
-      _isBottomNavVisible = (newDepth == 0);
-
-      debugPrint(
-          "[handleBackButton] Depth: $currentDepth → $newDepth, Visible: $_isBottomNavVisible");
-
-      notifyListeners();
+      // ✅ Let the route observer handle visibility update
+      // We just need to trigger a check
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        updateBottomNavVisibility();
+      });
     }
 
     return false;
   }
 
-  /// ✅ ALTERNATIVE: Versi simplified tanpa debug log
-  Future<bool> handleBackButtonClean(BuildContext context) async {
-    final currentNavigator = navigatorKeys[_selectedIndex].currentState;
-
-    if (currentNavigator == null) return true;
-
-    bool canPop = await currentNavigator.maybePop();
-
-    if (canPop) {
-      // ✅ Ensure key exists, initialize if not (defensive programming)
-      _tabNavigationDepth[_selectedIndex] ??= 0;
-
-      // ✅ Decrement safely
-      final currentDepth = _tabNavigationDepth[_selectedIndex]!;
-      if (currentDepth > 0) {
-        _tabNavigationDepth[_selectedIndex] = currentDepth - 1;
-      }
-
-      // ✅ Update visibility
-      final newDepth = _tabNavigationDepth[_selectedIndex]!;
-      _isBottomNavVisible = (newDepth == 0);
-
-      debugPrint(
-          "[handleBackButton] Tab $_selectedIndex: depth $currentDepth → $newDepth, visible: $_isBottomNavVisible");
-
-      notifyListeners();
-    }
-
-    return false;
-  }
-
-  /// ✅ Handle hardware back button (dari WillPopScope)
+  /// ✅ SIMPLIFIED: WillPop handler
   Future<bool> onWillPop(BuildContext context) async {
     final currentNavigator = navigatorKeys[_selectedIndex].currentState;
 
     if (currentNavigator == null) return true;
 
-    // 1️⃣ Try to pop current page in the tab
     bool didPop = await currentNavigator.maybePop();
 
-    debugPrint(
-        "🔙 [onWillPop] Tab: $_selectedIndex, didPop: $didPop, depth: ${_tabNavigationDepth[_selectedIndex]}");
+    debugPrint("🔙 [onWillPop] Tab: $_selectedIndex, didPop: $didPop");
 
     if (didPop) {
-      // ✅ Decrement navigation depth
-      if (_tabNavigationDepth[_selectedIndex]! > 0) {
-        _tabNavigationDepth[_selectedIndex] =
-            _tabNavigationDepth[_selectedIndex]! - 1;
-        debugPrint(
-            "📊 [onWillPop] Depth after pop: ${_tabNavigationDepth[_selectedIndex]}");
-      }
-
-      // ✅ Update bottom nav visibility based on depth
-      updateBottomNavVisibility();
-
-      return false; // Prevent system back
+      // ✅ Auto-update visibility
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        updateBottomNavVisibility();
+      });
+      return false;
     }
 
-    // 2️⃣ Can't pop (already at root) - check current tab
+    // ✅ Can't pop - check if we should switch to home
     if (_selectedIndex != 0) {
-      // ✅ Not on home tab - switch to home
-      debugPrint("🏠 [onWillPop] Pindah ke Home (tab 0)");
+      debugPrint("🏠 [onWillPop] Switch to home");
       _selectedIndex = 0;
       showBottomNav();
       resetExitTimer();
       notifyListeners();
-      return false; // Prevent exit
+      return false;
     }
 
-    // 3️⃣ Already on home tab root - show exit confirmation
+    // ✅ Exit confirmation
     showBottomNav();
     return await _handleExitConfirmation(context);
   }
 
-  /// ✅ Handle konfirmasi keluar dengan double-tap back
   Future<bool> _handleExitConfirmation(BuildContext context) async {
     final now = DateTime.now();
 
@@ -604,22 +523,16 @@ class NavigationProvider with ChangeNotifier {
         now.difference(_lastPressedAt!) > const Duration(seconds: 2)) {
       _lastPressedAt = now;
 
-      // Show snackbar
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tekan sekali lagi untuk keluar'),
-          duration: Duration(seconds: 2),
-        ),
+      CustomSnackbar.showExitAppSnackbar(
+        context,
+        'Tekan sekali lagi untuk keluar',
       );
-
-      return false; // Prevent exit
+      return false;
     }
 
-    // Second back press - allow exit
     return true;
   }
 
-  /// ✅ Reset timer jika user navigasi ke tempat lain
   void resetExitTimer() {
     _lastPressedAt = null;
   }
@@ -629,33 +542,26 @@ class NavigationProvider with ChangeNotifier {
   void changeTab(int index, BuildContext context, {bool popToRoot = false}) {
     if (popToRoot) {
       navigatorKeys[index].currentState?.popUntil((r) => r.isFirst);
-      _tabNavigationDepth[index] = 0;
     }
 
-    showBottomNav();
     onItemTapped(index, context);
   }
 
   Future<void> pushOnTab(int tabIndex, Route route) async {
     await navigatorKeys[tabIndex].currentState?.push(route);
-
-    // ✅ Increment depth and hide bottom nav
-    _tabNavigationDepth[tabIndex] = (_tabNavigationDepth[tabIndex] ?? 0) + 1;
-    hideBottomNav();
-    notifyListeners();
   }
 
   void popAllToRoot() {
     for (int i = 0; i < navigatorKeys.length; i++) {
       navigatorKeys[i].currentState?.popUntil((r) => r.isFirst);
-      _tabNavigationDepth[i] = 0;
     }
+    _activeRoutes.forEach((key, value) => value.clear());
     showBottomNav();
     notifyListeners();
   }
 
   // =========================================================
-  // 🛠️ UTILITY METHODS
+  // 🛠️ UTILITY METHODS (unchanged)
   // =========================================================
   String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
     final now = DateTime.now();
@@ -699,9 +605,6 @@ class NavigationProvider with ChangeNotifier {
   }
 }
 
-// =========================================================
-// 🎨 PAGE TRANSITION TYPES
-// =========================================================
 enum PageTransitionType {
   slideRight,
   slideUp,

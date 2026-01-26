@@ -174,13 +174,13 @@ class _PortofolioSectionState extends State<PortofolioSection> {
                   // ✅ FIXED: Safely get media URL
                   final String? mediaUrl = _getMediaUrl(p);
 
-                  debugPrint("[PortofolioSection] 📸 Portofolio ${index + 1}:");
-                  debugPrint("[PortofolioSection]   ID: ${p.noId}");
-                  debugPrint(
-                      "[PortofolioSection]   Vendor: ${p.usernameVendor}");
-                  debugPrint(
-                      "[PortofolioSection]   Media URLs count: ${p.mediaUrls?.length ?? 0}");
-                  debugPrint("[PortofolioSection]   Media URL: $mediaUrl");
+                  // debugPrint("[PortofolioSection] 📸 Portofolio ${index + 1}:");
+                  // debugPrint("[PortofolioSection]   ID: ${p.noId}");
+                  // debugPrint(
+                  //     "[PortofolioSection]   Vendor: ${p.usernameVendor}");
+                  // debugPrint(
+                  //     "[PortofolioSection]   Media URLs count: ${p.mediaUrls?.length ?? 0}");
+                  // debugPrint("[PortofolioSection]   Media URL: $mediaUrl");
 
                   // ✅ OPTIONAL: Skip portofolio tanpa media
                   // Uncomment jika tidak ingin menampilkan portofolio tanpa gambar

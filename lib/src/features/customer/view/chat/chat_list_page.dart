@@ -261,19 +261,23 @@ class _ChatListPageState extends State<ChatListPage> {
                 CircleAvatar(
                   radius: 26,
                   backgroundColor: Colors.grey.shade300,
-                  child: room.idMediaLawan != null &&
-                          room.idMediaLawan!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: room.idMediaLawan!,
-                          imageBuilder: (_, img) => CircleAvatar(
-                            radius: 26,
-                            backgroundImage: img,
-                          ),
-                          placeholder: (_, __) =>
-                              const CircleAvatar(radius: 26),
-                          errorWidget: (_, __, ___) => const Icon(Icons.person),
-                        )
-                      : const Icon(Icons.person, color: Colors.white),
+                  child:
+                      room.idMediaLawan != null && room.idMediaLawan!.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: room.idMediaLawan!,
+                              imageBuilder: (_, img) => CircleAvatar(
+                                radius: 26,
+                                backgroundImage: img,
+                                backgroundColor: Colors.transparent,
+                              ),
+                              placeholder: (_, __) =>
+                                  const CircleAvatar(radius: 26),
+                              errorWidget: (_, __, ___) => const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.person, color: Colors.white),
                 ),
               ],
             ),

@@ -30,13 +30,14 @@ class ChatMessageEntityAdapter extends TypeAdapter<ChatMessageEntity> {
       pesanan: fields[10] as PesananModel?,
       readAt: fields[11] as DateTime?,
       deliveredAt: fields[12] as DateTime?,
+      receiverIds: (fields[13] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, ChatMessageEntity obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.messageId)
       ..writeByte(1)
@@ -62,7 +63,9 @@ class ChatMessageEntityAdapter extends TypeAdapter<ChatMessageEntity> {
       ..writeByte(11)
       ..write(obj.readAt)
       ..writeByte(12)
-      ..write(obj.deliveredAt);
+      ..write(obj.deliveredAt)
+      ..writeByte(13)
+      ..write(obj.receiverIds);
   }
 
   @override

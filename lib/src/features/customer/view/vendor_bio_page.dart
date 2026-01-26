@@ -3,12 +3,12 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/portofolio_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
+import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
 import 'package:mpjnew/src/features/customer/widget/vendor_bio_card.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:provider/provider.dart';
 
 class VendorBioPage extends StatefulWidget {
@@ -101,154 +101,151 @@ class _VendorBioPageState extends State<VendorBioPage> {
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fetchData();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
+    if (isLoadingVendor)
+      return FullScreenPage(
+          child: Scaffold(
+        body: Center(
+          child: VendorBioShimmer(),
+        ),
+      ));
+    return FullScreenPage(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          title: Text(
+            vendor.username,
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
         backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        leading: isLoadingVendor
-            ? Padding(
-                padding: const EdgeInsets.all(10),
-                child: ShimmerPlaceholder(
-                  height: 20,
-                  width: 20,
-                  radius: 30,
-                ),
-              )
-            : CustomBackButton(),
-        title: isLoadingVendor
-            ? ShimmerPlaceholder(
-                height: 30,
-                width: 200,
-                radius: 5,
-              )
-            : Text(
-                vendor.username,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _fetchData,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Vendor Bio
+                  if (isLoadingVendor)
+                    VendorBioShimmer()
+                  else
+                    VendorBioCard(
+                      vendor: vendor,
+                      isListPackagePage: false,
+                    ),
+
+                  // Vendor Portofolio
+                  if (isLoadingPorto)
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: portofolioList.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 5,
+                        mainAxisSpacing: 5,
+                      ),
+                      itemBuilder: (context, index) {
+                        return ShimmerPlaceholder(
+                          radius: 5,
+                        );
+                      },
+                    )
+                  // const Center(
+                  //   child: Column(
+                  //     children: [
+                  //       Expanded(
+                  //         child: AspectRatio(
+                  //           aspectRatio: 1,
+                  //           child: ShimmerPlaceholder(
+                  //             radius: 10,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       Expanded(
+                  //         child: AspectRatio(
+                  //           aspectRatio: 1,
+                  //           child: ShimmerPlaceholder(
+                  //             radius: 10,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // )
+                  else if (portofolioList.isNotEmpty) ...[
+                    const Text(
+                      "Portofolio",
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    GridView.builder(
+                      padding: const EdgeInsets.only(top: 8),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: portofolioList.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 5,
+                        mainAxisSpacing: 5,
+                      ),
+                      itemBuilder: (context, index) {
+                        final p = portofolioList[index];
+                        final List<MediaUrlModel> mediaList = p.mediaUrls;
+                        final firstMedia =
+                            mediaList.isNotEmpty ? mediaList.first : null;
+                        final isVideo =
+                            (firstMedia?.contentType ?? '').startsWith('video');
+                        final String? mediaUrl = isVideo
+                            ? (firstMedia?.thumbUrl ?? firstMedia?.url)
+                            : firstMedia?.url;
+
+                        if (mediaUrl == null) {
+                          return const Icon(Icons.broken_image_outlined);
+                        }
+
+                        return GestureDetector(
+                          onTap: () {
+                            context.read<NavigationProvider>().navigateToPage(
+                                context,
+                                SinglePostPage(
+                                    noId: p.noId, idVendor: p.idVendor),
+                                targetTabIndex: 0);
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                color: Colors.grey.shade200,
+                                image: DecorationImage(
+                                  image: NetworkImage(mediaUrl),
+                                  fit: BoxFit.cover,
+                                )),
+                          ),
+                        );
+                      },
+                    ),
+                  ] else
+                    const Text("Belum ada portofolio."),
+                ],
               ),
-      ),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _fetchData,
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Vendor Bio
-                if (isLoadingVendor)
-                  VendorBioShimmer()
-                else
-                  VendorBioCard(
-                    vendor: vendor,
-                    isListPackagePage: false,
-                  ),
-
-                // Vendor Portofolio
-                if (isLoadingPorto)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: portofolioList.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 5,
-                      mainAxisSpacing: 5,
-                    ),
-                    itemBuilder: (context, index) {
-                      return ShimmerPlaceholder(
-                        radius: 5,
-                      );
-                    },
-                  )
-                // const Center(
-                //   child: Column(
-                //     children: [
-                //       Expanded(
-                //         child: AspectRatio(
-                //           aspectRatio: 1,
-                //           child: ShimmerPlaceholder(
-                //             radius: 10,
-                //           ),
-                //         ),
-                //       ),
-                //       Expanded(
-                //         child: AspectRatio(
-                //           aspectRatio: 1,
-                //           child: ShimmerPlaceholder(
-                //             radius: 10,
-                //           ),
-                //         ),
-                //       ),
-                //     ],
-                //   ),
-                // )
-                else if (portofolioList.isNotEmpty) ...[
-                  const Text(
-                    "Portofolio",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  GridView.builder(
-                    padding: const EdgeInsets.only(top: 8),
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: portofolioList.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 5,
-                      mainAxisSpacing: 5,
-                    ),
-                    itemBuilder: (context, index) {
-                      final p = portofolioList[index];
-                      final List<MediaUrlModel> mediaList = p.mediaUrls;
-                      final firstMedia =
-                          mediaList.isNotEmpty ? mediaList.first : null;
-                      final isVideo =
-                          (firstMedia?.contentType ?? '').startsWith('video');
-                      final String? mediaUrl = isVideo
-                          ? (firstMedia?.thumbUrl ?? firstMedia?.url)
-                          : firstMedia?.url;
-
-                      if (mediaUrl == null) {
-                        return const Icon(Icons.broken_image_outlined);
-                      }
-
-                      return GestureDetector(
-                        onTap: () {
-                          context.read<NavigationProvider>().navigateToPage(
-                              context,
-                              SinglePostPage(
-                                  noId: p.noId, idVendor: p.idVendor),
-                              targetTabIndex: 0);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(5),
-                              color: Colors.grey.shade200,
-                              image: DecorationImage(
-                                image: NetworkImage(mediaUrl),
-                                fit: BoxFit.cover,
-                              )),
-                        ),
-                      );
-                    },
-                  ),
-                ] else
-                  const Text("Belum ada portofolio."),
-              ],
             ),
           ),
         ),

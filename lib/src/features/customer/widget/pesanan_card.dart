@@ -185,7 +185,7 @@ class PesananCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              Icons.chat_bubble_outline_rounded,
+                              Icons.chat_outlined,
                               size: 20,
                               color: Constants.primaryColorVendor,
                             ),

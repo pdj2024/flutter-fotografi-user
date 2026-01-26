@@ -50,6 +50,9 @@ class ChatMessageEntity extends HiveObject {
   @HiveField(12)
   DateTime? deliveredAt;
 
+  @HiveField(13)
+  List<String>? receiverIds;
+
   ChatMessageEntity({
     required this.messageId,
     required this.roomId,
@@ -64,6 +67,7 @@ class ChatMessageEntity extends HiveObject {
     this.pesanan,
     this.readAt,
     this.deliveredAt,
+    this.receiverIds
   });
 
   // =========================================
@@ -103,6 +107,7 @@ class ChatMessageEntity extends HiveObject {
       pesanan: pesanan,
       readAt: model.readAt,
       deliveredAt: model.deliveredAt,
+      receiverIds: model.receiverIds,
     );
   }
 
@@ -130,6 +135,7 @@ class ChatMessageEntity extends HiveObject {
       deliveredAt: deliveredAt,
       readAt: readAt,
       userIds: userIds,
+      receiverIds: receiverIds ?? [],
       localId: localId,
     );
   }
@@ -159,6 +165,7 @@ class ChatMessageEntity extends HiveObject {
       penawaran: penawaran ?? this.penawaran,
       readAt: readAt ?? this.readAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
+      receiverIds: receiverIds,
     );
   }
 
