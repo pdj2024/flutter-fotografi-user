@@ -175,8 +175,7 @@ class ChatModel {
           : null,
       userIds: _parseUserIds(
           json["User_Ids"] ?? json["userIds"] ?? json["user_Ids"]),
-      receiverIds: _parseUserIds(
-          json["Receiver_Ids"]),
+      receiverIds: _parseUserIds(json["Receiver_Ids"]),
       localId: json["Local_Id"]?.toString() ?? json["localId"]?.toString(),
     );
   }
@@ -233,6 +232,18 @@ class ChatModel {
       "Sent_At": sentAt.toUtc().toIso8601String(),
       "Edited_At": editedAt?.toUtc().toIso8601String(),
       "user_Ids": userIds,
+      "receiver_Ids": receiverIds,
+    };
+  }
+
+  Map<String, dynamic> toJsonUpdate() {
+    return {
+      "message": message,
+      "status": status,
+      "send_status": sendStatus,
+      "id_Paket": idPaket,
+      "no_invoice": noInvoice,
+      "no_penawaran": noPenawaran,
       "receiver_Ids": receiverIds,
     };
   }

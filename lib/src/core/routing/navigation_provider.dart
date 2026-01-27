@@ -194,28 +194,16 @@ class NavigationProvider with ChangeNotifier {
       showBottomNav();
 
       userProv.clear();
-      // popAllToRoot();
+      popAllToRoot();
 
       debugPrint("✅ Semua data berhasil dihapus");
-
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const UserLogin()),
-          (_) => false,
-        );
-      }
 
       debugPrint("===== [handleLogout] selesai");
     } catch (e, stackTrace) {
       debugPrint("❌ Error saat handleLogout: $e");
       debugPrint(stackTrace.toString());
 
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const UserLogin()),
-          (_) => false,
-        );
-      }
+      popAllToRoot();
     }
   }
 

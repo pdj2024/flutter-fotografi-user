@@ -272,12 +272,6 @@ class HiveChatRepository {
     PenawaranModel? penawaran,
     PesananModel? pesanan,
   }) async {
-    debugPrint('[HiveRepo] 💾 Saving message with addons:');
-    debugPrint('   MessageId: ${model.messageId}');
-    debugPrint('   Paket: ${paket != null ? "✅" : "❌"}');
-    debugPrint('   Penawaran: ${penawaran != null ? "✅" : "❌"}');
-    debugPrint('   Pesanan: ${pesanan != null ? "✅" : "❌"}');
-
     await addMessage(ChatMessageEntity.fromChatModel(
       model,
       paket: paket,
@@ -346,6 +340,26 @@ class HiveChatRepository {
       _notifyMessagesUpdate(roomId);
       debugPrint('[HiveChatRepo] ✅ Status: $messageId → $newStatus');
     }
+  }
+
+  Future<void> storeLatest100Messages(
+      String roomId, List<ChatMessageEntity> messages) async {
+    final box = await _openMessagesBox(roomId);
+
+    // Clear existing messages in Hive
+    await box.clear();
+
+    // Store latest 100 (messages should already be sorted by sentAt ascending)
+    final messagesToStore = <String, ChatMessageEntity>{};
+    for (final message in messages) {
+      messagesToStore[message.messageId] = message;
+    }
+
+    await box.putAll(messagesToStore);
+    _notifyMessagesUpdate(roomId);
+
+    debugPrint(
+        '[HiveChatRepo] ✅ Stored latest ${messages.length} messages in Hive (max 100)');
   }
 
   Future<bool> replaceLocalEcho({

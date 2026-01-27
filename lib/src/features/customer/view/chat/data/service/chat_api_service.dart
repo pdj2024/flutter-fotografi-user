@@ -70,6 +70,8 @@ class ChatApiService {
       final queryParams = <String, dynamic>{
         'room_id': roomId,
         'status': 'aktif',
+        'orderBy': 'Sent_at',
+        'orderDir': 'desc',
         if (since != null) 'since': since.toUtc().toIso8601String(),
         if (limit != null) 'limit': limit.toString(),
       };
@@ -157,6 +159,56 @@ class ChatApiService {
     } catch (e) {
       debugPrint('[ChatApi] ❌ updateMessageStatus error: $e');
       return false;
+    }
+  }
+
+  Future<bool> updateMessage({
+    required ChatModel model,
+    required String status,
+  }) async {
+    try {
+      print("updaatteee statuss ${model.messageId} ${status}");
+      final response = await _client.put(
+        '/$_controller/update?message_id=${model.messageId}',
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[ChatApi] ❌ updateMessageStatus error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> update(ChatModel model) async {
+    try {
+      final requestBody = apiClient.toJsonSafe(model.toJsonUpdate());
+
+      final response = await apiClient.put(
+        '/$_controller/update',
+        queryParameters: {'message_id': model.messageId},
+        body: jsonEncode(requestBody),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      // Handle success responses
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final responseData = jsonDecode(response.body);
+          return responseData is Map<String, dynamic>
+              ? responseData
+              : {'success': true, 'data': responseData};
+        } catch (e) {
+          debugPrint('Error parsing response: $e');
+          return {'success': true, 'message': 'Update berhasil'};
+        }
+      } else {
+        debugPrint('Update failed with status code: ${response.statusCode}');
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      debugPrint('Update error: $e');
+      rethrow;
     }
   }
 
