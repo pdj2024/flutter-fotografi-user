@@ -61,6 +61,8 @@ class PortofolioProvider with ChangeNotifier {
         id_customer: userId,
         status: status,
         untuk_keperluan: untukKeperluan,
+        orderBy: 'Tgl_Created',
+        orderDir: 'desc',
       );
 
       _portofolioList = result;

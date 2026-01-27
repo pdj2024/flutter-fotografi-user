@@ -34,14 +34,8 @@ class HistoryOrderService {
 
   final ApiClient _client = apiClient;
 
-  // ✅ Notification plugin
-  final FlutterLocalNotificationsPlugin _notificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-  bool _notificationsInitialized = false;
-
   // ✅ Notification settings
   String? _activeOrderId; // Order yang sedang dibuka user
-  bool _showNotifications = true;
 
   // SignalR Connection
   HubConnection? _hubConnection;
@@ -65,93 +59,8 @@ class HistoryOrderService {
   // =========================================
   // ✅ NOTIFICATION INITIALIZATION
   // =========================================
-
   /// Initialize notifications (call this early, e.g., in splash screen)
-  Future<void> initNotifications() async {
-    if (_notificationsInitialized) {
-      debugPrint('[HistoryOrderService] ℹ️ Notifications already initialized');
-      return;
-    }
-
-    try {
-      debugPrint('[HistoryOrderService] 🔔 Initializing notifications...');
-
-      // ✅ STEP 1: Request permission (Android 13+)
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final status = await Permission.notification.request();
-
-        debugPrint('[HistoryOrderService] 📱 Permission status: $status');
-
-        if (status.isDenied || status.isPermanentlyDenied) {
-          debugPrint('[HistoryOrderService] ❌ Permission denied');
-          return;
-        }
-
-        debugPrint('[HistoryOrderService] ✅ Permission granted');
-      }
-
-      // ✅ STEP 2: Create notification channel
-      await _createNotificationChannel();
-
-      // ✅ STEP 3: Initialize plugin
-      const androidSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
-
-      const initSettings = InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      );
-
-      await _notificationsPlugin.initialize(
-        initSettings,
-        onDidReceiveNotificationResponse: _onNotificationTapped,
-      );
-
-      // iOS permission
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        await _notificationsPlugin
-            .resolvePlatformSpecificImplementation<
-                IOSFlutterLocalNotificationsPlugin>()
-            ?.requestPermissions(
-              alert: true,
-              badge: true,
-              sound: true,
-            );
-      }
-
-      _notificationsInitialized = true;
-      debugPrint('[HistoryOrderService] ✅ Notifications initialized');
-    } catch (e) {
-      debugPrint('[HistoryOrderService] ❌ Notification init error: $e');
-    }
-  }
-
-  /// Create notification channel (Android)
-  Future<void> _createNotificationChannel() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'history_order_channel',
-      'Pembaruan Pesanan',
-      description: 'Notifikasi untuk pembaruan status pesanan Anda',
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    debugPrint('[HistoryOrderService] ✅ Notification channel created');
-  }
-
+  
   // =========================================
   // ✅ SHOW NOTIFICATION (IMPROVED)
   // =========================================
@@ -171,13 +80,6 @@ class HistoryOrderService {
             '[HistoryOrderService] 🔔 Notifications enabled for all orders');
       }
     }
-  }
-
-  /// Enable/disable notifications globally
-  void setNotificationsEnabled(bool enabled) {
-    _showNotifications = enabled;
-    debugPrint(
-        '[HistoryOrderService] 🔔 Notifications: ${enabled ? 'ENABLED' : 'DISABLED'}');
   }
 
   // =========================================
@@ -353,174 +255,12 @@ class HistoryOrderService {
           '[HistoryOrderService] 📢 Calling onProgressReceived callback...');
       onProgressReceived?.call(progress);
 
-      // ✅ THEN show notification
-      debugPrint(
-          '[HistoryOrderService] 🔔 Checking if should show notification...');
-      _showMessageNotification(progress);
-
       debugPrint('[HistoryOrderService] ✅ Callback and notification handled');
     } catch (e, st) {
       debugPrint('[HistoryOrderService] ❌ PARSE PROGRESS ERROR');
       debugPrint('[HistoryOrderService] Error: $e');
       debugPrint('[HistoryOrderService] Stack: $st');
     }
-  }
-
-// ✅ IMPROVED: Show notification untuk history order
-  Future<void> _showMessageNotification(HistoryOrderModel historyOrder) async {
-    try {
-      // Check if notifications initialized
-      if (!_notificationsInitialized) {
-        debugPrint(
-            '[HistoryOrderService] ⚠️ Notifications not initialized, initializing now...');
-        await initNotifications();
-
-        if (!_notificationsInitialized) {
-          debugPrint(
-              '[HistoryOrderService] ❌ Failed to initialize notifications');
-          return;
-        }
-      }
-
-      // Don't show if notifications disabled
-      if (!_showNotifications) {
-        debugPrint('[HistoryOrderService] 🔕 Notifications disabled globally');
-        return;
-      }
-
-      // Don't show own updates (optional - bisa dikomentari jika mau notif semua)
-      if (historyOrder.senderId == _currentUserId) {
-        debugPrint('[HistoryOrderService] 🔕 Skip notification (own update)');
-        return;
-      }
-
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] 🔔 SHOWING NOTIFICATION');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-
-      // ✅ Build notification title based on status
-      String notificationTitle =
-          _getNotificationTitle(historyOrder.statusProgressPesanan);
-      debugPrint('[HistoryOrderService] 📌 Title: $notificationTitle');
-
-      // ✅ Build notification body
-      String notificationBody = historyOrder.deskripsi.isNotEmpty
-          ? historyOrder.deskripsi
-          : HistoryOrderService.getStatusDescription(
-              historyOrder.statusProgressPesanan);
-
-      // Truncate if too long
-      if (notificationBody.length > 100) {
-        notificationBody = '${notificationBody.substring(0, 97)}...';
-      }
-
-      debugPrint('[HistoryOrderService] 📝 Body: $notificationBody');
-      debugPrint('[HistoryOrderService] 📦 Order: ${historyOrder.noOrder}');
-
-      // ✅ Notification details
-      final androidDetails = AndroidNotificationDetails(
-        'history_order_channel', // Must match channel ID
-        'Progress Pesanan',
-        channelDescription: 'Notifikasi untuk update progress pesanan',
-        importance: Importance.high,
-        priority: Priority.high,
-        showWhen: true,
-        icon: 'ic_stat_pacific_data_jaya', // Pastikan icon ini ada
-        enableVibration: true,
-        playSound: true,
-        // ✅ Add actions for user interaction
-        styleInformation: BigTextStyleInformation(
-          notificationBody,
-          contentTitle: notificationTitle,
-        ),
-      );
-
-      const iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        subtitle: 'Update Pesanan',
-      );
-
-      final notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-
-      // ✅ Generate unique notification ID from order number
-      final notificationId = historyOrder.noOrder.hashCode;
-
-      // Show notification
-      await _notificationsPlugin.show(
-        notificationId,
-        notificationTitle,
-        notificationBody,
-        notificationDetails,
-        payload: historyOrder.noOrder, // For navigation when tapped
-      );
-
-      debugPrint('[HistoryOrderService] ✅ Notification shown successfully');
-      debugPrint('[HistoryOrderService] ID: $notificationId');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-    } catch (e, st) {
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] ❌ SHOW NOTIFICATION ERROR');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-      debugPrint('[HistoryOrderService] Error: $e');
-      debugPrint('[HistoryOrderService] Stack: $st');
-      debugPrint(
-          '[HistoryOrderService] ═══════════════════════════════════════');
-    }
-  }
-
-// ✅ NEW: Helper to get notification title based on status
-  String _getNotificationTitle(String status) {
-    switch (status.toLowerCase()) {
-      case 'menunggu bayar':
-        return '⏳ Menunggu Pembayaran';
-      case 'persiapan':
-        return '📋 Sedang Dipersiapkan';
-      case 'proses':
-        return '⚙️ Sedang Dikerjakan';
-      case 'review':
-        return '👀 Menunggu Review';
-      case 'revisi':
-        return '🔄 Sedang Direvisi';
-      case 'selesai':
-        return '✅ Pesanan Selesai';
-      case 'dibatalkan':
-        return '❌ Pesanan Dibatalkan';
-      default:
-        return '📦 Update Pesanan';
-    }
-  }
-
-// ✅ IMPROVED: Create notification channel with proper config
-  Future<void> createNotificationChannel() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'history_order_channel', // ✅ ID yang sama dengan di androidDetails
-      'Progress Pesanan',
-      description: 'Notifikasi untuk update progress pesanan',
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-      showBadge: true,
-    );
-
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    debugPrint(
-        '[HistoryOrderService] ✅ Notification channel created: ${channel.id}');
   }
 
 // ✅ IMPROVED: Handle notification tap to navigate to order

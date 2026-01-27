@@ -194,7 +194,7 @@ class NavigationProvider with ChangeNotifier {
       showBottomNav();
 
       userProv.clear();
-      popAllToRoot();
+      // popAllToRoot();
 
       debugPrint("✅ Semua data berhasil dihapus");
 
@@ -586,13 +586,6 @@ class NavigationProvider with ChangeNotifier {
     }
 
     return DateFormat("d MMM yyyy", "id_ID").format(date);
-  }
-
-  String ambilGambar(String img, {bool umum = false}) {
-    if (umum) {
-      return "https://fotoapi.pdj.web.id/api/files/umum@gmail.com/$img";
-    }
-    return "https://fotoapi.pdj.web.id/api/files/finance.pdj@gmail.com/$img";
   }
 
   String? getMediaUrl(dynamic p) {
