@@ -57,17 +57,21 @@ class _FullScreenPageState extends State<FullScreenPage> with RouteAware {
 
   @override
   void dispose() {
-    // ✅ FIXED: Don't use context in dispose
-    // Use cached provider reference instead
+    // ✅ FIXED: Schedule the show after the current frame
     if (widget.showBottomNavOnPop && _navProvider != null) {
       // ✅ Check if should show (only if at root)
       if (_navProvider!.isAtRoot(_navProvider!.selectedIndex)) {
-        // ✅ Direct call without post-frame callback
-        _navProvider!.showBottomNav();
-        debugPrint('📱 [FullScreenPage] Bottom nav shown (back to root)');
+        // ✅ Use post-frame callback to avoid calling setState during dispose
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // ✅ Double-check provider is still valid
+          if (_navProvider != null) {
+            _navProvider!.showBottomNav();
+            debugPrint('📱 [FullScreenPage] Bottom nav shown (back to root)');
+          }
+        });
       }
     }
-    
+
     _navProvider = null;
     super.dispose();
   }
@@ -178,7 +182,7 @@ class _AutoHideBottomNavPageState extends State<AutoHideBottomNavPage> {
     return WillPopScope(
       onWillPop: () async {
         if (!mounted) return true;
-        
+
         final navProvider = context.read<NavigationProvider>();
 
         // ✅ Let provider handle the back action
@@ -256,7 +260,7 @@ mixin BottomNavControlMixin<T extends StatefulWidget> on State<T> {
       icon: Icon(Icons.arrow_back, color: color),
       onPressed: () async {
         if (!mounted) return;
-        
+
         final navProvider = context.read<NavigationProvider>();
         await navProvider.handleBackButton(context);
       },

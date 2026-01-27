@@ -1,9 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:signalr_netcore/http_connection_options.dart';
 import 'package:signalr_netcore/hub_connection.dart';
 import 'package:signalr_netcore/hub_connection_builder.dart';
@@ -43,14 +41,8 @@ class ChatService {
   final Set<String> _joinedRooms = {};
   final Set<String> _joinedUserChannels = {};
 
-  // ✅ Notification plugin
-  final FlutterLocalNotificationsPlugin _notificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-  bool _notificationsInitialized = false;
-
   // ✅ Notification settings
   String? _activeRoomId; // Room yang sedang dibuka user
-  bool _showNotifications = true; // Toggle notifikasi
 
   // ✅ NEW: Callback to get sender name from ChatProvider
   String Function(String roomId, String senderId)? getSenderName;
@@ -77,208 +69,6 @@ class ChatService {
   // INITIALIZATION
   // =========================================
 
-  /// ✅ Initialize notifications
-  Future<void> initNotifications() async {
-    if (_notificationsInitialized) return;
-
-    try {
-      debugPrint('[ChatService] 🔔 Initializing notifications...');
-
-      // ✅ STEP 1: Request permission (Android 13+)
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final status = await Permission.notification.request();
-
-        debugPrint('[ChatService] 📱 Notification permission status: $status');
-
-        if (status.isDenied || status.isPermanentlyDenied) {
-          debugPrint('[ChatService] ❌ Notification permission denied');
-          debugPrint('[ChatService] ℹ️  User needs to enable it in Settings');
-          return; // Don't initialize if permission denied
-        }
-
-        debugPrint('[ChatService] ✅ Notification permission granted');
-      }
-
-      await createNotificationChannel();
-
-      // ✅ STEP 2: Initialize plugin
-      const androidSettings =
-          AndroidInitializationSettings('ic_stat_pacific_data_jaya');
-      const iosSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
-
-      const initSettings = InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      );
-
-      await _notificationsPlugin.initialize(
-        initSettings,
-        onDidReceiveNotificationResponse: _onNotificationTapped,
-      );
-
-      // iOS permission
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        await _notificationsPlugin
-            .resolvePlatformSpecificImplementation<
-                IOSFlutterLocalNotificationsPlugin>()
-            ?.requestPermissions(
-              alert: true,
-              badge: true,
-              sound: true,
-            );
-      }
-
-      _notificationsInitialized = true;
-      debugPrint('[ChatService] ✅ Notifications initialized');
-    } catch (e) {
-      debugPrint('[ChatService] ❌ Notification init error: $e');
-    }
-  }
-
-  Future<void> createNotificationChannel() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'chat_channel', // id
-      'Chat Messages', // name
-      description: 'Notifications for new chat messages',
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    debugPrint('[ChatService] ✅ Notification channel created');
-  }
-
-  /// Handle notification tap
-  void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('[ChatService] 🔔 Notification tapped: ${response.payload}');
-
-    // Parse payload (format: "roomId|messageId")
-    final payload = response.payload;
-    if (payload != null && payload.isNotEmpty) {
-      final parts = payload.split('|');
-      if (parts.length >= 1) {
-        final roomId = parts[0];
-        // TODO: Navigate to chat room
-        debugPrint('[ChatService] 📱 Should open room: $roomId');
-        // You can add navigation logic here or expose via callback
-      }
-    }
-  }
-
-  // =========================================
-  // NOTIFICATION METHODS
-  // =========================================
-
-  /// ✅ IMPROVED: Show notification with sender name
-  Future<void> _showMessageNotification(ChatModel message) async {
-    // Don't show if:
-    // 1. Notifications disabled
-    // 2. Message from self
-    // 3. User is viewing this room
-    if (!_showNotifications) {
-      debugPrint('[ChatService] 🔕 Notifications disabled globally');
-      return;
-    }
-
-    if (message.senderId == _currentUserId) {
-      debugPrint('[ChatService] 🔕 Skip notification (own message)');
-      return;
-    }
-
-    if (_activeRoomId == message.roomId) {
-      debugPrint('[ChatService] 🔕 Skip notification (room is active)');
-      return;
-    }
-
-    try {
-      debugPrint(
-          '[ChatService] 🔔 Preparing notification for: ${message.messageId}');
-
-      // ✅ Get sender name from callback or use default
-      String senderName = 'New Message';
-      if (getSenderName != null) {
-        try {
-          senderName = getSenderName!(message.roomId, message.senderId);
-          debugPrint('[ChatService] 👤 Sender name: $senderName');
-        } catch (e) {
-          debugPrint('[ChatService] ⚠️ Error getting sender name: $e');
-        }
-      }
-
-      // ✅ Format message content based on type
-      String messageContent;
-      if (message.message.isNotEmpty) {
-        messageContent = message.message;
-      } else if (message.idPaket != null && message.idPaket!.isNotEmpty) {
-        messageContent = '📦 Mengirim paket';
-      } else if (message.noPenawaran != null &&
-          message.noPenawaran!.isNotEmpty) {
-        messageContent = '💼 Mengirim penawaran';
-      } else if (message.noInvoice != null && message.noInvoice!.isNotEmpty) {
-        messageContent = '🧾 Mengirim pesanan';
-      } else {
-        messageContent = 'Pesan baru';
-      }
-
-      // Truncate long messages
-      if (messageContent.length > 100) {
-        messageContent = '${messageContent.substring(0, 97)}...';
-      }
-
-      debugPrint('[ChatService] 📝 Message content: $messageContent');
-
-      // Notification details
-      const androidDetails = AndroidNotificationDetails(
-        'chat_channel', // channel ID
-        'Chat Messages', // channel name
-        channelDescription: 'Notifications for new chat messages',
-        importance: Importance.high,
-        priority: Priority.high,
-        showWhen: true,
-        icon: 'ic_stat_pacific_data_jaya',
-        // largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-        // ✅ Enable notification actions
-        enableVibration: true,
-        playSound: true,
-      );
-
-      const iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
-
-      const notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-
-      // // Show notification
-      // await _notificationsPlugin.show(
-      //   message.messageId.hashCode, // Unique ID
-      //   senderName, // Title
-      //   messageContent, // Body
-      //   notificationDetails,
-      //   payload: '${message.roomId}|${message.messageId}', // For navigation
-      // );
-
-      debugPrint('[ChatService] ✅ Notification shown successfully');
-    } catch (e) {
-      debugPrint('[ChatService] ❌ Show notification error: $e');
-    }
-  }
-
   /// ✅ Set active room (suppress notifications for this room)
   void setActiveRoom(String? roomId) {
     if (_activeRoomId != roomId) {
@@ -292,13 +82,6 @@ class ChatService {
         debugPrint('[ChatService] 🔔 Notifications enabled for all rooms');
       }
     }
-  }
-
-  /// ✅ Enable/disable notifications globally
-  void setNotificationsEnabled(bool enabled) {
-    _showNotifications = enabled;
-    debugPrint(
-        '[ChatService] 🔔 Notifications globally: ${enabled ? 'ENABLED' : 'DISABLED'}');
   }
 
   // =========================================
@@ -378,9 +161,6 @@ class ChatService {
       debugPrint('  - Connection ID: ${_connection!.connectionId}');
 
       onConnectionChanged?.call(true, null);
-
-      // ✅ Initialize notifications on first connect
-      await initNotifications();
 
       await joinUserChannel(userId);
 
@@ -490,12 +270,6 @@ class ChatService {
       debugPrint('[ChatService] ✅ Message parsed: ${message.messageId}');
       debugPrint('[ChatService] 📍 Room: ${message.roomId}');
       debugPrint('[ChatService] 👤 Sender: ${message.senderId}');
-
-      // ✅ Show notification BEFORE calling callback
-      // This ensures notification is shown even if callback takes time
-      if (message.senderId != _currentUserId) {
-        _showMessageNotification(message);
-      }
 
       // Then trigger the callback
       onMessageReceived?.call(message);
@@ -640,34 +414,6 @@ class ChatService {
       debugPrint('[ChatService] ❌ Connection test failed: $e');
       return false;
     }
-  }
-
-  Map<String, dynamic> getDebugInfo() {
-    return {
-      'isConnected': isConnected,
-      'isConnecting': _isConnecting,
-      'currentUserId': _currentUserId,
-      'connectionId': _connection?.connectionId ?? 'null',
-      'state': _connection?.state.toString() ?? 'null',
-      'joinedRooms': _joinedRooms.length,
-      'joinedChannels': _joinedUserChannels.length,
-      'hasConfig': _config != null,
-      'notificationsEnabled': _showNotifications,
-      'notificationsInitialized': _notificationsInitialized,
-      'activeRoomId': _activeRoomId ?? 'none',
-      'hasSenderNameCallback': getSenderName != null,
-    };
-  }
-
-  void printDebugInfo() {
-    debugPrint('=== ChatService Debug Info ===');
-    final info = getDebugInfo();
-    info.forEach((key, value) {
-      debugPrint('  $key: $value');
-    });
-    debugPrint('  Joined rooms: ${_joinedRooms.join(", ")}');
-    debugPrint('  Joined channels: ${_joinedUserChannels.join(", ")}');
-    debugPrint('===============================');
   }
 
   void dispose() {

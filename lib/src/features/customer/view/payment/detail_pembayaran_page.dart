@@ -8,6 +8,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
@@ -19,16 +20,15 @@ import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 
 class DetailPembayaranPage extends StatefulWidget {
   final String penawaranId;
-  final String chatId;
+  final ChatModel message;
   const DetailPembayaranPage(
-      {super.key, required this.penawaranId, required this.chatId});
+      {super.key, required this.penawaranId, required this.message});
 
   @override
   State<DetailPembayaranPage> createState() => _DetailPembayaranPageState();
@@ -161,14 +161,38 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         senderId: pesanan.first.idCustomer,
       );
 
-      // await context.read<ChatProvider>().updatePenawaranToPesanan(roomId, noPenawaran, noPesanan);
-
       await historyOrderService.create(historyMenungguBayar);
 
-      CustomSnackbar.showSuccessSnackbar(
-        context,
-        "Pesanan berhasil dibuat, segera selesaikan pembayaran",
-      );
+      bool chatUpdated = false;
+      try {
+        chatUpdated =
+            await context.read<ChatProvider>().updatePenawaranToPesanan(
+                  message: widget.message,
+                  pesananId: pesanan.first.noBukti,
+                );
+
+        if (!chatUpdated) {
+          debugPrint('Warning: Chat message tidak berhasil diupdate');
+        }
+      } catch (e) {
+        debugPrint('Error updating chat: $e');
+        // Tidak menampilkan error ke user karena pesanan sudah berhasil dibuat
+      }
+
+      // Step 5: Show success message
+      if (mounted) {
+        CustomSnackbar.showSuccessSnackbar(
+          context,
+          "Pesanan berhasil dibuat, segera selesaikan pembayaran",
+        );
+
+        // Step 6: Navigate to payment page
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              targetTabIndex: 2,
+              WaitingPaymentPage(paymentData: pesanan.first),
+            );
+      }
 
       /// 🔥 NAVIGASI DARI DATA NYATA
       context.read<NavigationProvider>().navigateToPage(
@@ -226,7 +250,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 ),
               );
             }
-      
+
             /// =======================
             /// 2️⃣ ERROR STATE
             /// =======================
@@ -235,7 +259,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
                     const SizedBox(height: 12),
                     Text(
                       errorMessage!,
@@ -250,7 +275,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 ),
               );
             }
-      
+
             /// =======================
             /// 3️⃣ EMPTY STATE
             /// =======================
@@ -259,14 +284,14 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 child: Text("Data penawaran tidak tersedia"),
               );
             }
-      
+
             /// =======================
             /// 4️⃣ SUCCESS STATE
             /// =======================
             final tanggal = DateFormat("dd MMM yyyy", "id_ID")
                 .format(penawaran!.tglRealisasi);
             final waktu = Helper.toLocalTime(penawaran!.tglRealisasi);
-      
+
             return Column(
               children: [
                 Expanded(
@@ -309,7 +334,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                             ],
                           ),
                         ),
-      
+
                         /// =======================
                         /// 💳 METODE PEMBAYARAN
                         /// =======================
@@ -372,7 +397,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                         ),
                                         const SizedBox(width: 12),
                                         Text(
-                                          textMetode ?? "Pilih Metode Pembayaran",
+                                          textMetode ??
+                                              "Pilih Metode Pembayaran",
                                           style: TextStyle(
                                             fontWeight: FontWeight.w600,
                                             color: kodeMetode == null
@@ -392,7 +418,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                               ),
                             ),
                           ),
-      
+
                         /// =======================
                         /// 📦 DETAIL PAKET (Expandable)
                         /// =======================
@@ -413,8 +439,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Constants.primaryColor.withOpacity(0.1),
+                                      color: Constants.primaryColor
+                                          .withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: const Icon(
@@ -438,7 +464,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          Helper.formatCurrency(penawaran!.harga),
+                                          Helper.formatCurrency(
+                                              penawaran!.harga),
                                           style: TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
@@ -474,7 +501,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                             ],
                           ),
                         ),
-      
+
                         /// =======================
                         /// 📍 LOKASI & JADWAL
                         /// =======================
@@ -542,11 +569,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                     ),
                   ),
                 ),
-      
+
                 /// =======================
                 /// 💰 BOTTOM BAR - RINGKASAN
                 /// =======================
-      
+
                 _buildExpandableBottomBar(),
               ],
             );
