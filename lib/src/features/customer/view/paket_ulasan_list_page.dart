@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
+import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 
 class PaketUlasanListPage extends StatefulWidget {
@@ -120,209 +121,211 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
   Widget build(BuildContext context) {
     final displayedUlasan = filteredUlasan;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        leading: const CustomBackButton(),
-        title: const Text(
-          "Ulasan Paket",
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: Column(
-        children: [
-          // Header Info Paket
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.paket.nama_paket,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  Helper.formatCurrency(widget.paket.harga),
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Constants.primaryColor,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.star_rounded,
-                      color: Colors.amber,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      averageRating
-                          .toStringAsFixed(1), // ✅ Use calculated rating
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      "dari ${ulasanList.length} ulasan", // ✅ Use actual count
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+    return FullScreenPage(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          title: const Text(
+            "Ulasan Paket",
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
             ),
           ),
-
-          // Filter Rating
-          if (!isLoading && ulasanList.isNotEmpty)
+        ),
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: Column(
+          children: [
+            // Header Info Paket
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(16),
               color: Colors.white,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildFilterChip('Semua', null),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('⭐ 5', 5),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('⭐ 4', 4),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('⭐ 3', 3),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('⭐ 2', 2),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('⭐ 1', 1),
-                  ],
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.paket.nama_paket,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    Helper.formatCurrency(widget.paket.harga),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Constants.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        color: Colors.amber,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        averageRating
+                            .toStringAsFixed(1), // ✅ Use calculated rating
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "dari ${ulasanList.length} ulasan", // ✅ Use actual count
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
-          const Divider(height: 1),
+            // Filter Rating
+            if (!isLoading && ulasanList.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: Colors.white,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip('Semua', null),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('⭐ 5', 5),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('⭐ 4', 4),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('⭐ 3', 3),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('⭐ 2', 2),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('⭐ 1', 1),
+                    ],
+                  ),
+                ),
+              ),
 
-          // List Ulasan
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _fetchUlasan,
-              child: isLoading
-                  ? ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: 5,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: const ShimmerPlaceholder(
-                          height: 180,
-                          radius: 12,
-                        ),
-                      ),
-                    )
-                  : errorMessage != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                size: 64,
-                                color: Colors.red.shade300,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                "Gagal memuat ulasan",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 32),
-                                child: Text(
-                                  errorMessage!,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: _fetchUlasan,
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Coba Lagi'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Constants.primaryColor,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ],
+            const Divider(height: 1),
+
+            // List Ulasan
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _fetchUlasan,
+                child: isLoading
+                    ? ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: 5,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: const ShimmerPlaceholder(
+                            height: 180,
+                            radius: 12,
                           ),
-                        )
-                      : displayedUlasan.isEmpty
-                          ? ListView(
+                        ),
+                      )
+                    : errorMessage != null
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                SizedBox(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.5,
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.rate_review_outlined,
-                                          size: 64,
-                                          color: Colors.grey.shade300,
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          selectedRatingFilter == null
-                                              ? "Belum ada ulasan"
-                                              : "Tidak ada ulasan dengan rating ini",
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        ),
-                                      ],
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 64,
+                                  color: Colors.red.shade300,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Gagal memuat ulasan",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 32),
+                                  child: Text(
+                                    errorMessage!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500,
                                     ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _fetchUlasan,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Coba Lagi'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Constants.primaryColor,
+                                    foregroundColor: Colors.white,
                                   ),
                                 ),
                               ],
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: displayedUlasan.length,
-                              itemBuilder: (context, index) {
-                                final ulasan = displayedUlasan[index];
-                                return _buildUlasanCard(ulasan);
-                              },
                             ),
+                          )
+                        : displayedUlasan.isEmpty
+                            ? ListView(
+                                children: [
+                                  SizedBox(
+                                    height: MediaQuery.of(context).size.height *
+                                        0.5,
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.rate_review_outlined,
+                                            size: 64,
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            selectedRatingFilter == null
+                                                ? "Belum ada ulasan"
+                                                : "Tidak ada ulasan dengan rating ini",
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: displayedUlasan.length,
+                                itemBuilder: (context, index) {
+                                  final ulasan = displayedUlasan[index];
+                                  return _buildUlasanCard(ulasan);
+                                },
+                              ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

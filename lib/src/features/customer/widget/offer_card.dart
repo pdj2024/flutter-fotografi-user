@@ -152,7 +152,6 @@ class OfferCard extends StatelessWidget {
                 initialUlasanList: ulasanList,
               ),
               hrsLogin: true,
-              targetTabIndex: 3,
             );
       },
       borderRadius: BorderRadius.circular(10),
