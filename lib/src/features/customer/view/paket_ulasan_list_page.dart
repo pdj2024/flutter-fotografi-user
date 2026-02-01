@@ -5,7 +5,6 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 
 class PaketUlasanListPage extends StatefulWidget {
   final PaketModel paket;
@@ -124,7 +123,6 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        leading: const CustomBackButton(),
         title: const Text(
           "Ulasan Paket",
           style: TextStyle(
@@ -190,12 +188,13 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
               ],
             ),
           ),
-
+    
           // Filter Rating
           if (!isLoading && ulasanList.isNotEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.white,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -216,9 +215,9 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
                 ),
               ),
             ),
-
+    
           const Divider(height: 1),
-
+    
           // List Ulasan
           Expanded(
             child: RefreshIndicator(
@@ -256,8 +255,8 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
                               ),
                               const SizedBox(height: 8),
                               Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 32),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 32),
                                 child: Text(
                                   errorMessage!,
                                   style: TextStyle(
@@ -284,8 +283,8 @@ class _PaketUlasanListPageState extends State<PaketUlasanListPage> {
                           ? ListView(
                               children: [
                                 SizedBox(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.5,
+                                  height: MediaQuery.of(context).size.height *
+                                      0.5,
                                   child: Center(
                                     child: Column(
                                       mainAxisAlignment:

@@ -14,11 +14,20 @@ import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+
+/// ============================================
+/// 🔐 UserLogin - FIXED VERSION
+/// ============================================
+/// Changes:
+/// 1. ✅ Compatible with new AuthService API
+/// 2. ✅ Removed forceRefresh parameter
+/// 3. ✅ Better error handling
+/// 4. ✅ Cleaner initialization flow
+/// ============================================
 
 class UserLogin extends StatefulWidget {
   const UserLogin({super.key});
@@ -68,6 +77,7 @@ class _UserLoginState extends State<UserLogin>
     super.dispose();
   }
 
+  /// ✅ Handle Google Login - Compatible with new AuthService
   Future<void> handleLoginGoogle(
     BuildContext context,
     String targetPage,
@@ -80,11 +90,14 @@ class _UserLoginState extends State<UserLogin>
     setState(() => _isLoading = true);
 
     try {
+      print("═══════════════════════════════════════");
+      print("🔐 [UserLogin] Starting Google login...");
+
       final provider = context.read<UserProvider>();
       final navigationProvider = context.read<NavigationProvider>();
       final chatProv = context.read<ChatProvider>();
 
-      // Login dengan Google
+      // ✅ Login with Google (uses new AuthService.signIn())
       final result = await provider.checkLoginGoogle(
         role: Constants.customer,
         silent: false,
@@ -92,140 +105,57 @@ class _UserLoginState extends State<UserLogin>
 
       if (!mounted) return;
 
-      // Cek hasil login
+      print("📊 [UserLogin] Login result: ${result.name}");
+
+      // ==========================================
+      // CHECK LOGIN RESULT
+      // ==========================================
+
       if (result.name == 'aktif') {
-        print("[UserLogin] ✅ Login successful, initializing services...");
+        print("✅ [UserLogin] Login successful!");
+        print("   User: ${provider.customer?.namaDisplay}");
 
         // ==========================================
-        // REQUEST PERMISSION (Android 13+)
+        // 1️⃣ REQUEST NOTIFICATION PERMISSION (Android 13+)
         // ==========================================
-        if (Platform.isAndroid) {
-          final status = await Permission.notification.request();
-
-          if (status.isDenied && mounted) {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: Text('Izin Notifikasi'),
-                content: Text(
-                  'Aplikasi membutuhkan izin notifikasi untuk '
-                  'memberi tahu Anda tentang pesan baru.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('Nanti'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      openAppSettings();
-                      Navigator.pop(context);
-                    },
-                    child: Text('Buka Pengaturan'),
-                  ),
-                ],
-              ),
-            );
-          } else if (status.isPermanentlyDenied && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Izin notifikasi ditolak. '
-                  'Buka Pengaturan untuk mengaktifkannya.',
-                ),
-                action: SnackBarAction(
-                  label: 'Pengaturan',
-                  onPressed: () => openAppSettings(),
-                ),
-              ),
-            );
-          }
-        }
+        await _requestNotificationPermission(context);
 
         // ==========================================
-        // 1️⃣ Initialize ChatProvider
+        // 2️⃣ INITIALIZE ChatProvider
         // ==========================================
-        try {
-          chatProv.chatService.getSenderName = (roomId, senderId) {
-            final room = chatProv.getRoom(roomId);
-            if (room != null && senderId == room.partnerId) {
-              return room.usernameLawan ?? 'Unknown User';
-            }
-            return 'New Message';
-          };
-
-          await chatProv.initWithApiClient(
-            userId: provider.customer!.noId,
-            userType: Constants.customer,
-            hubUrl: "${Constants.baseUrlHub}/api/chathub",
-            getToken: () async =>
-                await authService.getIdToken(forceRefresh: false),
-          );
-          print("[UserLogin] ✅ ChatProvider initialized");
-        } catch (e) {
-          print("[UserLogin] ⚠️ ChatProvider init error: $e");
-        }
+        await _initializeChatProvider(context, provider, chatProv);
 
         // ==========================================
-        // 2️⃣ Initialize HistoryOrderProvider
+        // 3️⃣ INITIALIZE HistoryOrderProvider
         // ==========================================
-        try {
-          final historyOrderProvider = context.read<HistoryOrderProvider>();
-          final pesananProvider = context.read<PesananProvider>();
-
-          historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
-            debugPrint("📨 Status update: $noOrder → $newStatus");
-            pesananProvider.updateOrderStatus(noOrder, newStatus);
-          };
-
-          final historyConnected = await historyOrderProvider.initialize(
-            config: HistoryOrderServiceConfig(
-              hubUrl: "${Constants.baseUrlHub}/api/chathub",
-              role: Constants.customer,
-              getToken: () async =>
-                  await authService.getIdToken(forceRefresh: true),
-            ),
-            userId: provider.customer!.noId,
-          );
-
-          if (historyConnected) {
-            print("[UserLogin] ✅ HistoryOrderProvider initialized");
-          } else {
-            print("[UserLogin] ⚠️ HistoryOrderProvider connection failed");
-          }
-        } catch (e) {
-          print("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
-        }
+        await _initializeHistoryOrderProvider(context, provider);
 
         // ==========================================
-        // 3️⃣ Load Kota List
+        // 4️⃣ LOAD KOTA LIST
         // ==========================================
-        try {
-          await context.read<KotaProvider>().getAllKotaList();
-          print("[UserLogin] ✅ Kota list loaded");
-        } catch (e) {
-          print("[UserLogin] ⚠️ Kota list load error: $e");
-        }
+        await _loadKotaList(context);
 
         if (!mounted) return;
 
-        // ✅ Pop login page dengan success = true
+        print("✅ [UserLogin] All services initialized");
+        print("═══════════════════════════════════════");
+
+        // ✅ Pop login page with success = true
         Navigator.pop(context, true);
 
-        // ✅ Navigate ke target page
+        // ✅ Navigate to target page
         final targetWidget = getPageFromString(
           targetPage,
           noIdPortofolio: noIdPortofolio,
           noIdVendor: noIdVendor,
         );
 
-        // ✅ Jika target adalah tab page, switch tab
+        // ✅ If target is tab page, switch tab
         if (targetPage.startsWith('Tab')) {
           navigationProvider.setSelectedIndex(tabIndex);
           navigationProvider.showBottomNav();
-          navigationProvider.notifyListeners();
         } else {
-          // ✅ Jika target adalah detail page, navigate
+          // ✅ If target is detail page, navigate
           await navigationProvider.navigateToPage(
             context,
             targetWidget,
@@ -234,36 +164,46 @@ class _UserLoginState extends State<UserLogin>
           );
         }
 
-        print("[UserLogin] ✅ Navigation completed");
+        print("✅ [UserLogin] Navigation completed");
       } else if (result.name == 'nonaktif') {
+        print("⚠️  [UserLogin] Account inactive");
+
         if (!mounted) return;
 
         CustomSnackbar.showErrorSnackbar(
           context,
           "Akun Anda tidak aktif. Silakan hubungi admin.",
         );
+
         await provider.logout();
 
-        // ✅ Pop dengan false (login failed)
+        // ✅ Pop with false (login failed)
         if (mounted) {
           Navigator.pop(context, false);
         }
       } else {
+        print("❌ [UserLogin] Login failed: ${result.name}");
+
         if (!mounted) return;
 
         CustomSnackbar.showErrorSnackbar(
           context,
           "Login gagal. Silakan coba lagi.",
         );
+
         await provider.logout();
 
-        // ✅ Pop dengan false (login failed)
+        // ✅ Pop with false (login failed)
         if (mounted) {
           Navigator.pop(context, false);
         }
       }
     } catch (e, st) {
-      print("❌ Error handleLoginGoogle: $e\n$st");
+      print("═══════════════════════════════════════");
+      print("❌ [UserLogin] Error during login");
+      print("═══════════════════════════════════════");
+      print("Error: $e");
+      print("Stack: $st");
 
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(
@@ -271,11 +211,155 @@ class _UserLoginState extends State<UserLogin>
           "Terjadi kesalahan saat login: $e",
         );
 
-        // ✅ Pop dengan false (error)
+        // ✅ Pop with false (error)
         Navigator.pop(context, false);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// ✅ Request notification permission (Android 13+)
+  Future<void> _requestNotificationPermission(BuildContext context) async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      print("[UserLogin] 🔔 Requesting notification permission...");
+
+      final status = await Permission.notification.request();
+      print("[UserLogin] Permission status: $status");
+
+      if (status.isDenied && mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Izin Notifikasi'),
+            content: const Text(
+              'Aplikasi membutuhkan izin notifikasi untuk '
+              'memberi tahu Anda tentang pesan baru, update pesanan, '
+              'dan aktivitas lainnya.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Nanti'),
+              ),
+              TextButton(
+                onPressed: () {
+                  openAppSettings();
+                  Navigator.pop(context);
+                },
+                child: const Text('Buka Pengaturan'),
+              ),
+            ],
+          ),
+        );
+      } else if (status.isPermanentlyDenied && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Izin notifikasi ditolak. '
+              'Buka Pengaturan untuk mengaktifkannya.',
+            ),
+            action: SnackBarAction(
+              label: 'Pengaturan',
+              onPressed: () => openAppSettings(),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else if (status.isGranted) {
+        print("[UserLogin] ✅ Notification permission granted");
+      }
+    } catch (e) {
+      print("[UserLogin] ⚠️  Notification permission error: $e");
+    }
+  }
+
+  /// ✅ Initialize ChatProvider
+  Future<void> _initializeChatProvider(
+    BuildContext context,
+    UserProvider provider,
+    ChatProvider chatProv,
+  ) async {
+    try {
+      print("[UserLogin] 🔧 Initializing ChatProvider...");
+
+      // Setup getSenderName callback
+      chatProv.chatService.getSenderName = (roomId, senderId) {
+        final room = chatProv.getRoom(roomId);
+        if (room != null && senderId == room.partnerId) {
+          return room.usernameLawan ?? 'Unknown User';
+        }
+        return 'New Message';
+      };
+
+      // ✅ Changed: Removed forceRefresh parameter
+      await chatProv.initWithApiClient(
+        userId: provider.customer!.noId,
+        userType: Constants.customer,
+        hubUrl: "${Constants.baseUrlHub}/api/chathub",
+        getToken: () async => await authService.getIdToken(),
+      );
+
+      print("[UserLogin] ✅ ChatProvider initialized");
+    } catch (e) {
+      print("[UserLogin] ⚠️  ChatProvider init error: $e");
+      // Don't throw - allow app to continue without chat
+    }
+  }
+
+  /// ✅ Initialize HistoryOrderProvider
+  Future<void> _initializeHistoryOrderProvider(
+    BuildContext context,
+    UserProvider provider,
+  ) async {
+    try {
+      print("[UserLogin] 🔧 Initializing HistoryOrderProvider...");
+
+      final historyOrderProvider = context.read<HistoryOrderProvider>();
+      final pesananProvider = context.read<PesananProvider>();
+
+      await pesananProvider.loadOrder(userId: provider.customer!.noId);
+
+      // Connect HistoryOrder → Pesanan
+      historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
+        print("[UserLogin] 📨 Order status update: $noOrder → $newStatus");
+        pesananProvider.updateOrderStatus(noOrder, newStatus);
+      };
+
+      // ✅ Changed: Removed forceRefresh parameter
+      final historyConnected = await historyOrderProvider.initialize(
+        config: HistoryOrderServiceConfig(
+          hubUrl: "${Constants.baseUrlHub}/api/chathub",
+          role: Constants.customer,
+          getToken: () async => await authService.getIdToken(),
+        ),
+        userId: provider.customer!.noId,
+      );
+
+      if (historyConnected) {
+        print("[UserLogin] ✅ HistoryOrderProvider initialized");
+      } else {
+        print("[UserLogin] ⚠️  HistoryOrderProvider connection failed");
+      }
+    } catch (e) {
+      print("[UserLogin] ⚠️  HistoryOrderProvider init error: $e");
+      // Don't throw - allow app to continue
+    }
+  }
+
+  /// ✅ Load Kota list
+  Future<void> _loadKotaList(BuildContext context) async {
+    try {
+      print("[UserLogin] 🔧 Loading Kota list...");
+
+      await context.read<KotaProvider>().getAllKotaList();
+
+      print("[UserLogin] ✅ Kota list loaded");
+    } catch (e) {
+      print("[UserLogin] ⚠️  Kota list load error: $e");
+      // Don't throw - allow app to continue
     }
   }
 
@@ -296,14 +380,14 @@ class _UserLoginState extends State<UserLogin>
         return false;
       },
       child: Scaffold(
-        backgroundColor: Color(0xFFF9F9F9),
+        backgroundColor: const Color(0xFFF9F9F9),
         body: SafeArea(
           child: Stack(
             children: [
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: CustomScrollView(
-                  physics: NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   slivers: [
                     SliverFillRemaining(
                       hasScrollBody: false,
@@ -346,7 +430,7 @@ class _UserLoginState extends State<UserLogin>
                             position: _slideAnimation,
                             child: Column(
                               children: [
-                                Text(
+                                const Text(
                                   'Selamat Datang di',
                                   style: TextStyle(
                                     color: Colors.black,
@@ -421,7 +505,7 @@ class _UserLoginState extends State<UserLogin>
                                     ),
                                   ),
                                   child: _isLoading
-                                      ? SizedBox(
+                                      ? const SizedBox(
                                           height: 24,
                                           width: 24,
                                           child: CircularProgressIndicator(
@@ -485,7 +569,7 @@ class _UserLoginState extends State<UserLogin>
                 top: 16,
                 left: 16,
                 child: IconButton(
-                  icon: Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back),
                   onPressed: () {
                     Navigator.pop(context, false);
                   },
@@ -498,9 +582,14 @@ class _UserLoginState extends State<UserLogin>
     );
   }
 
-  Widget getPageFromString(String targetPage,
-      {String? noIdPortofolio, String? noIdVendor}) {
-    print("===== TARGET: $targetPage");
+  /// Get page widget from string identifier
+  Widget getPageFromString(
+    String targetPage, {
+    String? noIdPortofolio,
+    String? noIdVendor,
+  }) {
+    print("[UserLogin] 🎯 Target page: $targetPage");
+
     switch (targetPage) {
       case 'SinglePostPage':
         return SinglePostPage(
@@ -511,11 +600,11 @@ class _UserLoginState extends State<UserLogin>
           idVendor: noIdVendor ?? 'ven_2',
         );
       case 'Tab1':
-        return ChatListPage();
+        return const ChatListPage();
       case 'Tab2':
-        return MainOrderPage();
+        return const MainOrderPage();
       case 'Tab3':
-        return CustomerAccountPage();
+        return const CustomerAccountPage();
       default:
         return SinglePostPage(
           noId: noIdPortofolio ?? 'porto_6',

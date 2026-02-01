@@ -14,7 +14,7 @@ class CustomBackButton extends StatelessWidget {
 
   Future<void> _handleBack(BuildContext context) async {
     final navProvider = context.read<NavigationProvider>();
-    final didPop = await navProvider.handleBackButton(context);
+    final didPop = await navProvider.onWillPop(context);
 
     print("bisa back? $didPop");
 

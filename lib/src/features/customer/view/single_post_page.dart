@@ -7,7 +7,6 @@ import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
-import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
@@ -230,121 +229,119 @@ class _SinglePostPageState extends State<SinglePostPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FullScreenPage(
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFFF9F9F9),
-          elevation: 1,
-          title: const Text(
-            "Portofolio",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-          ),
+        elevation: 1,
+        title: const Text(
+          "Portofolio",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        body: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : error != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(error!),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _fetchData,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Coba Lagi'),
-                        ),
-                      ],
-                    ),
-                  )
-                : portofolio == null
-                    ? const Center(child: Text('Data tidak ditemukan'))
-                    : RefreshIndicator(
-                        onRefresh: _fetchData,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          controller: _scrollController,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              PostHeader(portofolio: portofolio!),
-                              ImagePost(mediaUrl: portofolio!.mediaUrls),
-                              _buildLikeSaveRow(),
-                              if (isLoadingPaket)
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(32),
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                )
-                              else if (errorPaket != null)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
-                                  ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.red.shade200,
-                                      ),
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(error!),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _fetchData,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Coba Lagi'),
+                      ),
+                    ],
+                  ),
+                )
+              : portofolio == null
+                  ? const Center(child: Text('Data tidak ditemukan'))
+                  : RefreshIndicator(
+                      onRefresh: _fetchData,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        controller: _scrollController,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            PostHeader(portofolio: portofolio!),
+                            ImagePost(mediaUrl: portofolio!.mediaUrls),
+                            _buildLikeSaveRow(),
+                            if (isLoadingPaket)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else if (errorPaket != null)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 16,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.red.shade200,
                                     ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.error_outline,
-                                            color: Colors.red.shade700),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            errorPaket!,
-                                            style: TextStyle(
-                                              color: Colors.red.shade900,
-                                            ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.error_outline,
+                                          color: Colors.red.shade700),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          errorPaket!,
+                                          style: TextStyle(
+                                            color: Colors.red.shade900,
                                           ),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                )
-                              else if (paketList.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.all(32),
-                                  child: Center(
-                                    child: Text(
-                                      "Belum ada paket tersedia",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
+                                ),
+                              )
+                            else if (paketList.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Center(
+                                  child: Text(
+                                    "Belum ada paket tersedia",
+                                    style: TextStyle(color: Colors.grey),
                                   ),
-                                )
-                              else
-                                ...paketList.map((paket) {
-                                  final ulasanList =
-                                      _ulasanByPaket[paket.no_id] ?? [];
-                                  return OfferCard(
-                                    vendorId: portofolio!.idVendor,
-                                    paket: paket,
-                                    ulasanList: ulasanList,
-                                    onSend: () => _handleSendOffer(paket),
-                                  );
-                                }),
-                              const SizedBox(height: 20),
-                            ],
-                          ),
+                                ),
+                              )
+                            else
+                              ...paketList.map((paket) {
+                                final ulasanList =
+                                    _ulasanByPaket[paket.no_id] ?? [];
+                                return OfferCard(
+                                  vendorId: portofolio!.idVendor,
+                                  paket: paket,
+                                  ulasanList: ulasanList,
+                                  onSend: () => _handleSendOffer(paket),
+                                );
+                              }),
+                            const SizedBox(height: 20),
+                          ],
                         ),
                       ),
-        floatingActionButton: (!isLoading && portofolio != null)
-            ? FloatingActionButton(
-                onPressed: _fetchData,
-                backgroundColor: Constants.primaryColor,
-                child: const Icon(Icons.refresh, color: Colors.white),
-                tooltip: 'Refresh Paket',
-              )
-            : null,
-      ),
+                    ),
+      floatingActionButton: (!isLoading && portofolio != null)
+          ? FloatingActionButton(
+              onPressed: _fetchData,
+              backgroundColor: Constants.primaryColor,
+              child: const Icon(Icons.refresh, color: Colors.white),
+              tooltip: 'Refresh Paket',
+            )
+          : null,
     );
   }
 

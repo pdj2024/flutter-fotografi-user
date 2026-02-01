@@ -65,26 +65,43 @@ class _ChatListPageState extends State<ChatListPage> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Tooltip(
-              message: chatProv.isLoading
-                  ? 'Mengecek koneksi chat...'
-                  : chatProv.isConnected
-                      ? 'Chat terhubung'
-                      : 'Chat terputus',
-              triggerMode: TooltipTriggerMode.tap, // ⬅️ klik, bukan long press
-              child: Icon(
-                Icons.square_rounded,
-                color: chatProv.isLoading
-                    ? Colors.blue
-                    : chatProv.isConnected
-                        ? Colors.green
-                        : Colors.red,
-                size: 20,
+          if (chatProv.isLoading)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Tooltip(
+                message: 'Mengecek koneksi chat...',
+                triggerMode: TooltipTriggerMode.tap,
+                child: Icon(
+                  Icons.circle,
+                  color: Colors.blue,
+                  size: 20,
+                ),
+              ),
+            )
+          else if (chatProv.isConnected)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Tooltip(
+                message: 'Chat terhubung',
+                triggerMode: TooltipTriggerMode.tap,
+                child: Icon(
+                  Icons.circle,
+                  color: Colors.green,
+                  size: 20,
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Tooltip(
+                message: "Mencoba menghubungkan kembali",
+                triggerMode: TooltipTriggerMode.tap,
+                child: CircularProgressIndicator(
+                  color: Constants.primaryColorVendor,
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: Column(
