@@ -203,7 +203,7 @@ class ApiClient {
       print("🔄 [ApiClient] Requesting token refresh...");
 
       // AuthService will handle queue if multiple requests come in
-      final newToken = await authService.getIdToken(forceRefresh: true);
+      final newToken = await authService.getIdToken();
 
       if (newToken != null && newToken.isNotEmpty) {
         print("✅ [ApiClient] Token refreshed successfully");
@@ -282,12 +282,12 @@ class ApiClient {
   }
 
   Future<bool> isAuthenticated() async {
-    final token = await authService.getIdToken(forceRefresh: false);
+    final token = await authService.getIdToken();
     return token != null && token.isNotEmpty;
   }
 
   Future<void> logout() async {
-    await authService.logout();
+    await authService.signOut();
     clearRole();
   }
 }

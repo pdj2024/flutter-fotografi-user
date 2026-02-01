@@ -24,7 +24,9 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection> {
       isLoading = true;
     });
     await context.read<UserProvider>().checkLoginGoogle(role: 'customer');
-    await context.read<PortofolioProvider>().loadPortofolio(context);
+    await context
+        .read<PortofolioProvider>()
+        .loadPortofolio(context, untukKeperluan: "customer");
     setState(() {
       isLoading = false;
     });

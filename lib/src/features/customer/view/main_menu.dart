@@ -170,6 +170,7 @@ class _MainMenuState extends State<MainMenu> {
 
     switch (index) {
       case 0: // Home
+        await context.read<PortofolioProvider>().loadPortofolio(context);
         break;
 
       case 1: // Chat
@@ -179,12 +180,12 @@ class _MainMenuState extends State<MainMenu> {
           userType: Constants.customer,
           hubUrl: "${Constants.baseUrlHub}/api/chathub",
           getToken: () async =>
-              await authService.getIdToken(forceRefresh: true),
+              await authService.getIdToken(),
         );
         break;
 
       case 2: // Order
-        context.read<PesananProvider>().loadOrder(userId: user.noId);
+        context.read<PesananProvider>().loadOrder(userId: user.noId, status: "aktif");
         break;
 
       case 3: // Profile
@@ -217,9 +218,8 @@ class _MainMenuState extends State<MainMenu> {
 }
 
 // =========================================================
-// ✨ CUSTOM ROUTE OBSERVER - AUTO BOTTOM NAV CONTROL
+// ✨ ROUTE OBSERVER - AUTO HIDE/SHOW BOTTOM NAV
 // =========================================================
-
 class _BottomNavRouteObserver extends NavigatorObserver {
   final NavigationProvider provider;
   final int tabIndex;
@@ -229,59 +229,59 @@ class _BottomNavRouteObserver extends NavigatorObserver {
   @override
   void didPush(Route route, Route? previousRoute) {
     super.didPush(route, previousRoute);
-    _updateVisibility();
+    _updateVisibilityAfterPop();
     debugPrint('📍 [Observer] Tab $tabIndex - PUSH: ${route.settings.name}');
   }
 
   @override
   void didPop(Route route, Route? previousRoute) {
     super.didPop(route, previousRoute);
-    _updateVisibility();
+    _updateVisibilityAfterPop();
     debugPrint('📍 [Observer] Tab $tabIndex - POP: ${route.settings.name}');
   }
 
   @override
   void didRemove(Route route, Route? previousRoute) {
     super.didRemove(route, previousRoute);
-    _updateVisibility();
+    _updateVisibilityAfterPop();
     debugPrint('📍 [Observer] Tab $tabIndex - REMOVE: ${route.settings.name}');
   }
 
   @override
   void didReplace({Route? newRoute, Route? oldRoute}) {
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-    _updateVisibility();
+    _updateVisibilityAfterPop();
     debugPrint('📍 [Observer] Tab $tabIndex - REPLACE');
   }
 
   /// ✅ AUTO UPDATE: Check route stack and update visibility
-  void _updateVisibility() {
-    // Only update if this is the active tab
+  void _updateVisibilityAfterPop() {
     if (provider.selectedIndex != tabIndex) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (navigator == null) return;
-
-      // ✅ Count routes in stack
-      int routeCount = 0;
-      navigator!.popUntil((route) {
-        routeCount++;
-        return true;
-      });
-
-      // ✅ Show bottom nav only if at root (1 route = root page)
-      final shouldShow = routeCount <= 1;
-
-      debugPrint(
-          '📊 [Observer] Tab $tabIndex: $routeCount routes, bottomNav: ${shouldShow ? "SHOW" : "HIDE"}');
-
-      if (provider.isBottomNavVisible != shouldShow) {
-        if (shouldShow) {
-          provider.showBottomNav();
-        } else {
-          provider.hideBottomNav();
-        }
-      }
+      _checkAndUpdateVisibility();
     });
+  }
+
+  /// ✅ Accurate route counting using canPop
+  void _checkAndUpdateVisibility() {
+    if (navigator == null) return;
+
+    final canPop = navigator!.canPop();
+    final shouldShow = !canPop; // At root = show bottom nav
+
+    debugPrint(
+        '📊 [Observer] Tab $tabIndex: canPop=$canPop, shouldShow=$shouldShow');
+
+    if (provider.isBottomNavVisible != shouldShow) {
+      if (shouldShow) {
+        provider.showBottomNav();
+        debugPrint('📱 [Observer] Tab $tabIndex - Bottom nav SHOWN (at root)');
+      } else {
+        provider.hideBottomNav();
+        debugPrint(
+            '🙈 [Observer] Tab $tabIndex - Bottom nav HIDDEN (has stack)');
+      }
+    }
   }
 }

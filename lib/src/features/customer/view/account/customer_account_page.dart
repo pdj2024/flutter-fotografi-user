@@ -151,7 +151,8 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
                                                             .customer!.email[0]
                                                             .toUpperCase()
                                                         : userProvider.customer
-                                                            ?.namaDisplay) ??
+                                                            ?.namaDisplay[0]
+                                                            .toUpperCase()) ??
                                                     "C".toUpperCase(),
                                                 style: const TextStyle(
                                                   color: Colors.white,

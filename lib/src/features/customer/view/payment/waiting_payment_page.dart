@@ -9,10 +9,8 @@ import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
-import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/qris_payment_cart.dart';
@@ -214,222 +212,220 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     final int grandTotal = widget.paymentData.grandTotal;
     final int subtotal = widget.paymentData.subtotal;
 
-    return FullScreenPage(
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF9F9F9),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          title: const Text(
-            "Menunggu Pembayaran",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-          ),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          "Menunggu Pembayaran",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        body: Column(
-          children: [
-            // Timer Warning
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade400, Colors.orange.shade600],
-                ),
+      ),
+      body: Column(
+        children: [
+          // Timer Warning
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.orange.shade400, Colors.orange.shade600],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child:
-                        const Icon(Icons.timer, color: Colors.white, size: 24),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
+                  child:
+                      const Icon(Icons.timer, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Selesaikan pembayaran dalam",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        Helper.formatDuration(remainingTime),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+    
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildPaymentCodeSection(),
+    
+                  const SizedBox(height: 16),
+    
+                  _buildCardSection(
+                    title: "Detail Pesanan",
+                    content: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Selesaikan pembayaran dalam",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
+                        _buildInfoRow(
+                          icon: Icons.timeline_outlined,
+                          label: "No. Tracking",
+                          copyable: true,
+                          value: widget.paymentData.noTrackingPesanan ?? "-",
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.inventory_2_outlined,
+                          label: "Paket",
+                          value: widget.paymentData.namaPaket,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: "Tanggal",
+                          value: DateFormat("dd MMM yyyy", "id_ID")
+                              .format(widget.paymentData.tglRealisasi),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.access_time,
+                          label: "Waktu",
+                          value: Helper.toLocalTime(
+                              widget.paymentData.tglRealisasi),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          icon: Icons.location_city_outlined,
+                          label: "Kota",
+                          value: widget.paymentData.namaKota ?? "",
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Alamat Lengkap",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.paymentData.lokasi,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+    
+                  const SizedBox(height: 16),
+    
+                  // Payment Summary
+                  _buildCardSection(
+                    title: "Ringkasan Pembayaran",
+                    content: Column(
+                      children: [
+                        _buildPriceRow("Subtotal (termasuk PPN)",
+                            Helper.formatCurrency(subtotal)),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        _buildPriceRow(
+                          "Total Pembayaran",
+                          Helper.formatCurrency(grandTotal),
+                          isBold: true,
+                          valueColor: Constants.primaryColorVendor,
+                          fontSize: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+    
+                  const SizedBox(height: 24),
+    
+                  // Loading Indicator
+                  Center(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Constants.primaryColorVendor,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Menunggu pembayaran...",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          Helper.formatDuration(remainingTime),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
+                          "Halaman akan otomatis terbarui\nsetelah pembayaran berhasil",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
                           ),
                         ),
                       ],
                     ),
                   ),
+    
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
-
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPaymentCodeSection(),
-
-                    const SizedBox(height: 16),
-
-                    _buildCardSection(
-                      title: "Detail Pesanan",
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildInfoRow(
-                            icon: Icons.timeline_outlined,
-                            label: "No. Tracking",
-                            copyable: true,
-                            value: widget.paymentData.noTrackingPesanan ?? "-",
-                          ),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(
-                            icon: Icons.inventory_2_outlined,
-                            label: "Paket",
-                            value: widget.paymentData.namaPaket,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(
-                            icon: Icons.calendar_today_outlined,
-                            label: "Tanggal",
-                            value: DateFormat("dd MMM yyyy", "id_ID")
-                                .format(widget.paymentData.tglRealisasi),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(
-                            icon: Icons.access_time,
-                            label: "Waktu",
-                            value: Helper.toLocalTime(
-                                widget.paymentData.tglRealisasi),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(
-                            icon: Icons.location_city_outlined,
-                            label: "Kota",
-                            value: widget.paymentData.namaKota ?? "",
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.location_on_outlined,
-                                size: 20,
-                                color: Colors.black54,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      "Alamat Lengkap",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      widget.paymentData.lokasi,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Payment Summary
-                    _buildCardSection(
-                      title: "Ringkasan Pembayaran",
-                      content: Column(
-                        children: [
-                          _buildPriceRow("Subtotal (termasuk PPN)",
-                              Helper.formatCurrency(subtotal)),
-                          const SizedBox(height: 12),
-                          const Divider(),
-                          const SizedBox(height: 12),
-                          _buildPriceRow(
-                            "Total Pembayaran",
-                            Helper.formatCurrency(grandTotal),
-                            isBold: true,
-                            valueColor: Constants.primaryColorVendor,
-                            fontSize: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Loading Indicator
-                    Center(
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            width: 30,
-                            height: 30,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Constants.primaryColorVendor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            "Menunggu pembayaran...",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Halaman akan otomatis terbarui\nsetelah pembayaran berhasil",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

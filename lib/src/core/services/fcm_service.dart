@@ -23,6 +23,7 @@ enum NotificationType {
   chat,
   like,
   progress,
+  roomChat,
   unknown;
 
   static NotificationType fromString(String? type) {
@@ -34,6 +35,8 @@ enum NotificationType {
       case 'progress':
       case 'progres':
         return NotificationType.progress;
+      case 'room_chat':
+        return NotificationType.roomChat;
       default:
         return NotificationType.unknown;
     }
@@ -450,6 +453,9 @@ class FCMService {
         case NotificationType.progress:
           await _handleProgressMessage(message);
           break;
+        // case NotificationType.roomChat:
+        //   await _handleRoomCreated(message);
+        //   break;
         default:
           debugPrint(
               '[FCM Foreground] ⚠️ Unknown message type: ${message.data['type']}');
@@ -552,8 +558,11 @@ class FCMService {
   }
 
   // =========================================
-  // CHAT MESSAGE HANDLING
+  // CHAT MESSAGE HANDLING - FIXED GROUPING
   // =========================================
+
+  // ✅ Add this at class level to track messages per sender
+  final Map<String, List<String>> _messagesBySender = {};
 
   Future<void> _handleChatMessage(RemoteMessage message) async {
     debugPrint('[FCM] 💬 Handling chat message...');
@@ -582,7 +591,7 @@ class FCMService {
     }
   }
 
-  /// ✅ Show chat notification with GROUPING
+  /// ✅ Show chat notification with PROPER SENDER GROUPING
   Future<void> _showChatNotification(RemoteMessage message) async {
     try {
       final detail = _parseDetail(message.data['detail']);
@@ -623,14 +632,70 @@ class FCMService {
       // ✅ Format message content
       String content = _formatMessageContent(messageText, jenisPesan, detail);
 
-      // ✅ GROUPING: Use roomId + senderId as group key
-      final groupKey = '${roomId}_$senderId';
-      final summaryId = groupKey.hashCode;
+      // ✅ CRITICAL: Use senderId as group key (not roomId + senderId)
+      // This groups all messages from the same sender together
+      final groupKey = 'sender_$senderId';
+      final summaryId = senderId.hashCode;
 
       debugPrint('[FCM] 📦 Group key: $groupKey');
       debugPrint('[FCM] 📝 Content: $content');
 
-      // ✅ Create notification with grouping
+      // ✅ Add message to sender's list
+      if (!_messagesBySender.containsKey(senderId)) {
+        _messagesBySender[senderId] = [];
+      }
+      _messagesBySender[senderId]!.add(content);
+
+      // ✅ Keep only last 5 messages per sender
+      if (_messagesBySender[senderId]!.length > 5) {
+        _messagesBySender[senderId] = _messagesBySender[senderId]!
+            .sublist(_messagesBySender[senderId]!.length - 5);
+      }
+
+      debugPrint(
+          '[FCM] 📊 Messages from $senderName: ${_messagesBySender[senderId]!.length}');
+
+      // ✅ Show grouped notification
+      await _showGroupedNotification(
+        senderId: senderId,
+        senderName: senderName,
+        groupKey: groupKey,
+        summaryId: summaryId,
+        messageId: messageId,
+        roomId: roomId,
+      );
+
+      debugPrint('[FCM] ✅ Chat notification shown');
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Show chat notification error: $e');
+      debugPrint('[FCM] Stack: $st');
+    }
+  }
+
+  /// ✅ Show grouped notification for sender
+  Future<void> _showGroupedNotification({
+    required String senderId,
+    required String senderName,
+    required String groupKey,
+    required int summaryId,
+    required String messageId,
+    required String roomId,
+  }) async {
+    try {
+      final messages = _messagesBySender[senderId] ?? [];
+      final messageCount = messages.length;
+
+      debugPrint('[FCM] 📬 Creating grouped notification for $senderName');
+      debugPrint('[FCM]   Total messages: $messageCount');
+
+      // ✅ Create InboxStyle with all messages
+      final inboxStyle = InboxStyleInformation(
+        messages, // List of message contents
+        contentTitle: senderName,
+        summaryText:
+            messageCount == 1 ? 'Pesan baru' : '$messageCount pesan baru',
+      );
+
       final androidDetails = AndroidNotificationDetails(
         'chat_messages',
         'Chat Messages',
@@ -642,22 +707,22 @@ class FCMService {
         enableVibration: true,
         playSound: true,
 
-        // ✅ GROUPING CONFIGURATION
+        // ✅ Group by sender
         groupKey: groupKey,
-        setAsGroupSummary: false, // Individual message
+        setAsGroupSummary: false,
 
-        // ✅ Styling
-        styleInformation: BigTextStyleInformation(
-          content,
-          contentTitle: senderName,
-        ),
+        // ✅ Use InboxStyle for grouped messages
+        styleInformation: inboxStyle,
+
+        // ✅ Auto-cancel when tapped
+        autoCancel: true,
       );
 
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
-        threadIdentifier: null, // Will use groupKey for grouping
+        threadIdentifier: null,
       );
 
       final notificationDetails = NotificationDetails(
@@ -669,73 +734,38 @@ class FCMService {
         'type': 'chat',
         'roomId': roomId,
         'messageId': messageId,
+        'senderId': senderId,
       });
 
-      // ✅ Show individual notification
+      // ✅ CRITICAL: Use same notification ID for same sender
+      // This updates the notification instead of creating new ones
+      final notificationId = senderId.hashCode;
+
       await _notificationsPlugin.show(
-        messageId.hashCode,
+        notificationId,
         senderName,
-        content,
+        messageCount == 1 ? messages.first : '$messageCount pesan baru',
         notificationDetails,
         payload: payload,
       );
 
-      // ✅ Show summary notification for group
-      await _showGroupSummary(groupKey, summaryId, senderName);
-
-      debugPrint('[FCM] ✅ Chat notification shown');
+      debugPrint('[FCM] ✅ Grouped notification shown (ID: $notificationId)');
     } catch (e, st) {
-      debugPrint('[FCM] ❌ Show chat notification error: $e');
+      debugPrint('[FCM] ❌ Show grouped notification error: $e');
       debugPrint('[FCM] Stack: $st');
     }
   }
 
-  /// ✅ Show group summary notification
-  Future<void> _showGroupSummary(
-    String groupKey,
-    int summaryId,
-    String senderName,
-  ) async {
-    try {
-      final androidDetails = AndroidNotificationDetails(
-        'chat_messages',
-        'Chat Messages',
-        channelDescription: 'Notifications for new chat messages',
-        importance: Importance.high,
-        priority: Priority.high,
-        groupKey: groupKey,
-        setAsGroupSummary: true, // This is the summary
+  /// ✅ Clear messages for sender (call when notification is tapped or room opened)
+  void clearMessagesForSender(String senderId) {
+    _messagesBySender.remove(senderId);
+    debugPrint('[FCM] 🗑️ Cleared messages for sender: $senderId');
+  }
 
-        // ✅ Inbox style for summary
-        styleInformation: InboxStyleInformation(
-          [],
-          contentTitle: senderName,
-          summaryText: 'New messages',
-        ),
-      );
-
-      const iosDetails = DarwinNotificationDetails(
-        presentAlert: false, // Don't show summary on iOS
-        presentBadge: false,
-        presentSound: false,
-      );
-
-      final notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-
-      await _notificationsPlugin.show(
-        summaryId,
-        senderName,
-        'New messages',
-        notificationDetails,
-      );
-
-      debugPrint('[FCM] ✅ Group summary shown for: $groupKey');
-    } catch (e) {
-      debugPrint('[FCM] ⚠️ Show group summary error: $e');
-    }
+  /// ✅ Clear all message groups (call on logout or app reset)
+  void clearAllMessageGroups() {
+    _messagesBySender.clear();
+    debugPrint('[FCM] 🗑️ Cleared all message groups');
   }
 
   String _formatMessageContent(

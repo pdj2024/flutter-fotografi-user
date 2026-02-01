@@ -11,13 +11,14 @@ import 'package:mpjnew/src/features/customer/services/device_token_service.dart'
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 
 /// ============================================
-/// 👤 UserProvider - FIXED VERSION
+/// 👤 UserProvider - COMPATIBLE WITH NEW AuthService
 /// ============================================
-/// Improvements:
-/// 1. Hive storage untuk user data persistence
-/// 2. Better session restore logic
-/// 3. Auto-refresh expired tokens
-/// 4. Cleaner state management
+/// Changes:
+/// 1. ✅ Use authService.signIn() instead of login()
+/// 2. ✅ Use authService.getIdToken() without forceRefresh by default
+/// 3. ✅ Use authService.signOut() instead of logout()
+/// 4. ✅ Use authService.disconnect() for account switching
+/// 5. ✅ Remove all token caching logic
 /// ============================================
 
 class UserProvider with ChangeNotifier {
@@ -65,8 +66,17 @@ class UserProvider with ChangeNotifier {
   
   Future<void> initialize() async {
     try {
+      print("🔧 [UserProvider] Initializing...");
+      
+      if (Hive.isBoxOpen(_userBoxName)) {
+        await Hive.box(_userBoxName).close();
+      }
+      
       _userBox = await Hive.openBox(_userBoxName);
       print("✅ [UserProvider] Hive box opened");
+      
+      // Load user data immediately
+      await loadUserData();
     } catch (e) {
       print("❌ [UserProvider] Hive init error: $e");
     }
@@ -89,8 +99,11 @@ class UserProvider with ChangeNotifier {
         _keyLastSync: DateTime.now().toIso8601String(),
       });
 
+      await _userBox!.flush();
+
       print("💾 [UserProvider] Customer data saved");
-      print("👤 User: ${_customer!.namaDisplay}");
+      print("   User: ${_customer!.namaDisplay}");
+      print("   Role: $_role");
     } catch (e) {
       print("❌ [UserProvider] Save error: $e");
     }
@@ -118,6 +131,7 @@ class UserProvider with ChangeNotifier {
           _customer = null;
         }
       } else {
+        print("ℹ️  [UserProvider] No customer data in storage");
         _customer = null;
       }
 
@@ -126,6 +140,7 @@ class UserProvider with ChangeNotifier {
       if (savedRole != null && savedRole.isNotEmpty) {
         _role = savedRole;
         apiClient.setRole(_role);
+        print("✅ [UserProvider] Role loaded: $_role");
       }
 
       _isInitialized = true;
@@ -142,7 +157,8 @@ class UserProvider with ChangeNotifier {
   Future<void> _clearUserData() async {
     try {
       await _userBox?.clear();
-      print("🗑️ [UserProvider] User data cleared");
+      await _userBox?.flush();
+      print("🗑️  [UserProvider] User data cleared");
     } catch (e) {
       print("❌ [UserProvider] Clear error: $e");
     }
@@ -152,6 +168,8 @@ class UserProvider with ChangeNotifier {
   // 🔐 AUTHENTICATION
   // =========================================================
   
+  /// Login with Google
+  /// ✅ Uses new AuthService.signIn()
   Future<GoogleLoginStatus> checkLoginGoogle({
     required String role,
     bool silent = false,
@@ -160,13 +178,28 @@ class UserProvider with ChangeNotifier {
     _error = null;
 
     try {
-      print("🔐 [UserProvider] checkLoginGoogle | role: $role, silent: $silent");
+      print("═══════════════════════════════════════");
+      print("🔐 [UserProvider] checkLoginGoogle");
+      print("   Role: $role");
+      print("   Silent: $silent");
+      print("═══════════════════════════════════════");
 
-      // 1️⃣ Login to Google
-      final idToken = await authService.login(silent: silent);
+      // 1️⃣ Sign in with Google
+      String? idToken;
+      
+      if (silent) {
+        // Try silent restore
+        final restored = await authService.restoreSession();
+        if (restored) {
+          idToken = await authService.getIdToken();
+        }
+      } else {
+        // Interactive sign-in
+        idToken = await authService.signIn();
+      }
 
       if (idToken == null) {
-        print("❌ [UserProvider] Login failed, token null");
+        print("❌ [UserProvider] Sign-in failed, token null");
         if (!silent) {
           await _clearUserData();
           clear();
@@ -174,13 +207,17 @@ class UserProvider with ChangeNotifier {
         return GoogleLoginStatus.tokenInvalid;
       }
 
-      print("✅ [UserProvider] Token obtained, checking backend status...");
+      print("✅ [UserProvider] Token obtained (${idToken.length} chars)");
+      print("🔄 [UserProvider] Checking backend status...");
 
       // 2️⃣ Check status on backend
       final result = await _customerService.checkGoogleLogin();
 
-      // 3️⃣ Handle CREATED status
+      print("📊 [UserProvider] Backend response: ${result.status}");
+
+      // 3️⃣ Handle CREATED status (new user)
       if (result.status == GoogleLoginStatus.created) {
+        print("✅ [UserProvider] New user created");
         setRole(role);
         _customer = result.customer;
         await _saveCustomerData();
@@ -188,25 +225,28 @@ class UserProvider with ChangeNotifier {
         return GoogleLoginStatus.created;
       }
 
-      // 4️⃣ Handle AKTIF status
+      // 4️⃣ Handle AKTIF status (existing user)
       if (result.status == GoogleLoginStatus.aktif && result.customer != null) {
         _customer = result.customer!;
+        print("✅ [UserProvider] User active: ${_customer!.namaDisplay}");
+        
         await _saveCustomerData();
 
         // Register device token
         try {
           await deviceTokenService.addDeviceToken(_customer!.noId);
+          print("✅ [UserProvider] Device token registered");
         } catch (e) {
-          print("⚠️ [UserProvider] Device token registration failed: $e");
+          print("⚠️  [UserProvider] Device token registration failed: $e");
         }
 
         setRole(role);
-        print("✅ [UserProvider] User active: ${_customer!.namaDisplay}");
         notifyListeners();
         return GoogleLoginStatus.aktif;
       }
 
-      print("⚠️ [UserProvider] Status: ${result.status}");
+      // 5️⃣ Other statuses
+      print("⚠️  [UserProvider] Status: ${result.status}");
       return result.status;
       
     } catch (e, stackTrace) {
@@ -217,6 +257,7 @@ class UserProvider with ChangeNotifier {
       return GoogleLoginStatus.error;
     } finally {
       _setLoading(false);
+      print("═══════════════════════════════════════");
     }
   }
 
@@ -224,11 +265,14 @@ class UserProvider with ChangeNotifier {
   // 🔄 SESSION RESTORE
   // =========================================================
   
+  /// Restore user session
+  /// ✅ Uses new AuthService.restoreSession()
   Future<bool> restoreSession() async {
     try {
+      print("═══════════════════════════════════════");
       print("🔄 [UserProvider] Restoring session...");
 
-      // 1️⃣ Restore auth session
+      // 1️⃣ Restore auth session (Google Sign-In)
       final sessionRestored = await authService.restoreSession();
 
       if (!sessionRestored) {
@@ -239,28 +283,49 @@ class UserProvider with ChangeNotifier {
         return false;
       }
 
-      // 2️⃣ Load user data from storage
+      print("✅ [UserProvider] Auth session restored");
+      print("   Email: ${authService.email}");
+
+      // 2️⃣ Load user data from local storage
       await loadUserData();
 
-      // 3️⃣ If no customer data, try to fetch from backend
+      // 3️⃣ If no customer data, fetch from backend
       if (_customer == null) {
-        print("⚠️ [UserProvider] No local customer data, fetching from backend...");
-        return await _refreshCustomerFromBackend();
+        print("⚠️  [UserProvider] No local customer data");
+        print("🔄 [UserProvider] Fetching from backend...");
+        
+        final fetched = await _refreshCustomerFromBackend();
+        
+        if (!fetched) {
+          print("❌ [UserProvider] Failed to fetch customer data");
+          await authService.signOut();
+          return false;
+        }
       }
 
       // 4️⃣ Check if data is stale (older than 24 hours)
       final lastSync = _userBox?.get(_keyLastSync);
       if (lastSync != null) {
-        final lastSyncDate = DateTime.parse(lastSync);
-        final hoursSinceSync = DateTime.now().difference(lastSyncDate).inHours;
-        
-        if (hoursSinceSync > 24) {
-          print("⚠️ [UserProvider] Data stale (${hoursSinceSync}h old), refreshing...");
-          await _refreshCustomerFromBackend();
+        try {
+          final lastSyncDate = DateTime.parse(lastSync);
+          final hoursSinceSync = DateTime.now().difference(lastSyncDate).inHours;
+          
+          print("ℹ️  [UserProvider] Last sync: ${hoursSinceSync}h ago");
+          
+          if (hoursSinceSync > 24) {
+            print("🔄 [UserProvider] Data stale, refreshing...");
+            await _refreshCustomerFromBackend();
+          }
+        } catch (e) {
+          print("⚠️  [UserProvider] Last sync parse error: $e");
         }
       }
 
-      print("✅ [UserProvider] Session restored: ${_customer!.namaDisplay}");
+      print("✅ [UserProvider] Session restored successfully");
+      print("   User: ${_customer!.namaDisplay}");
+      print("   Role: $_role");
+      print("═══════════════════════════════════════");
+      
       return true;
       
     } catch (e, stackTrace) {
@@ -273,19 +338,29 @@ class UserProvider with ChangeNotifier {
   }
 
   /// Refresh customer data from backend
+  /// ✅ Uses fresh token from AuthService
   Future<bool> _refreshCustomerFromBackend() async {
     try {
+      print("🔄 [UserProvider] Refreshing customer from backend...");
+      
+      // Verify token is valid
+      final token = await authService.getIdToken();
+      if (token == null) {
+        print("❌ [UserProvider] No valid token");
+        return false;
+      }
+
       final result = await _customerService.checkGoogleLogin();
       
       if (result.customer != null) {
         _customer = result.customer;
         await _saveCustomerData();
         notifyListeners();
-        print("✅ [UserProvider] Customer data refreshed: ${_customer!.namaDisplay}");
+        print("✅ [UserProvider] Customer refreshed: ${_customer!.namaDisplay}");
         return true;
       }
       
-      print("❌ [UserProvider] Failed to get customer from backend");
+      print("❌ [UserProvider] No customer data from backend");
       return false;
       
     } catch (e) {
@@ -298,28 +373,35 @@ class UserProvider with ChangeNotifier {
   // 🚪 LOGOUT
   // =========================================================
   
+  /// Normal logout
+  /// ✅ Uses new AuthService.signOut()
   Future<void> logout() async {
     try {
+      print("═══════════════════════════════════════");
       print("🚪 [UserProvider] Logging out...");
 
       // 1️⃣ Remove device token
       if (_customer != null) {
         try {
           await deviceTokenService.removeDeviceToken(_customer!.noId);
+          print("✅ [UserProvider] Device token removed");
         } catch (e) {
-          print("⚠️ [UserProvider] Device token removal failed: $e");
+          print("⚠️  [UserProvider] Device token removal failed: $e");
         }
       }
 
-      // 2️⃣ Logout from AuthService
-      await authService.logout();
+      // 2️⃣ Sign out from Google
+      await authService.signOut();
+      print("✅ [UserProvider] Google sign-out complete");
 
-      // 3️⃣ Clear all data
+      // 3️⃣ Clear all local data
       await _clearUserData();
       clear();
       apiClient.clearRole();
 
       print("✅ [UserProvider] Logout complete");
+      print("═══════════════════════════════════════");
+      
       notifyListeners();
     } catch (e) {
       print("❌ [UserProvider] Logout error: $e");
@@ -328,24 +410,35 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  /// Logout and switch account
+  /// ✅ Uses new AuthService.disconnect()
   Future<void> logoutAndSwitchAccount() async {
     try {
+      print("═══════════════════════════════════════");
       print("🔄 [UserProvider] Switching account...");
 
+      // 1️⃣ Remove device token
       if (_customer != null) {
         try {
           await deviceTokenService.removeDeviceToken(_customer!.noId);
+          print("✅ [UserProvider] Device token removed");
         } catch (e) {
-          print("⚠️ [UserProvider] Device token removal failed: $e");
+          print("⚠️  [UserProvider] Device token removal failed: $e");
         }
       }
 
-      await authService.logoutAndRevoke();
+      // 2️⃣ Disconnect Google account (revoke access)
+      await authService.disconnect();
+      print("✅ [UserProvider] Google account disconnected");
+
+      // 3️⃣ Clear all local data
       await _clearUserData();
       clear();
       apiClient.clearRole();
 
       print("✅ [UserProvider] Account switch complete");
+      print("═══════════════════════════════════════");
+      
       notifyListeners();
     } catch (e) {
       print("❌ [UserProvider] Switch account error: $e");
@@ -355,12 +448,14 @@ class UserProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 🛠️ UTILITIES
+  // 🛠️  UTILITIES
   // =========================================================
   
   void setRole(String role) {
     _role = role;
     apiClient.setRole(role);
+    _userBox?.put(_keyRole, role);
+    print("✅ [UserProvider] Role set: $role");
     notifyListeners();
   }
 
@@ -383,7 +478,32 @@ class UserProvider with ChangeNotifier {
   }
 
   /// Force refresh user data from backend
+  /// ✅ Uses fresh token from AuthService
   Future<void> refreshUserData() async {
+    print("🔄 [UserProvider] Force refresh user data...");
     await _refreshCustomerFromBackend();
+  }
+
+  /// Get current auth state
+  void printDebugState() {
+    print("═══ UserProvider State ═══");
+    print("Customer: ${_customer?.namaDisplay ?? 'null'}");
+    print("Role: $_role");
+    print("Is logged in: $isLoggedIn");
+    print("Is loading: $_isLoading");
+    print("Error: $_error");
+    print("Initialized: $_isInitialized");
+    
+    if (_userBox != null) {
+      print("Storage:");
+      print("  Is logged in: ${_userBox!.get(_keyIsLoggedIn)}");
+      print("  Role: ${_userBox!.get(_keyRole)}");
+      print("  Last sync: ${_userBox!.get(_keyLastSync)}");
+    }
+    
+    print("═══════════════════════════");
+    
+    // Also print auth state
+    authService.printDebugState();
   }
 }

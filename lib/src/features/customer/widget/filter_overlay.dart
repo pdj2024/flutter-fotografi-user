@@ -298,6 +298,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
     try {
       final photographerRes = await VendorService().getAll(
         orderBy: 'username',
+        status: "aktif",
         username: query,
         namaDisplay: query,
         no_id: noId, // kalau kosong, kirim null
@@ -572,7 +573,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
               // ✅ Navigasi tetap seperti CustomBackButton
               final provider =
                   Provider.of<NavigationProvider>(context, listen: false);
-              bool allowPop = await provider.handleBackButton(context);
+              bool allowPop = await provider.onWillPop(context);
               if (allowPop) {
                 Navigator.of(context).pop();
               }
@@ -774,7 +775,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
                   )
                 : filteredPhotographers.isEmpty
                     ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
                           Icon(Icons.list_alt_rounded,
                               size: 50, color: Colors.grey),

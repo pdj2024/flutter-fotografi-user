@@ -10,7 +10,6 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
-import 'package:mpjnew/src/features/customer/view/page_wrapper.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -178,92 +177,90 @@ class _RoomChatPageState extends State<RoomChatPage>
     final String imgUrl =
         roomChatProv.roomInfo?.idMediaLawan ?? widget.partnerAvatarUrl ?? '';
 
-    return FullScreenPage(
-      child: Scaffold(
-        appBar: _buildAppBar(roomChatProv, imgUrl),
-        backgroundColor: const Color(0xFFF9F9F9),
-        body: Container(
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage(
-                'assets/chat_background.png',
-              ),
-              fit: BoxFit.cover,
-              colorFilter: ColorFilter.mode(
-                Color(0xFFF9F9F9).withOpacity(0.95),
-                BlendMode.srcATop,
-              ),
+    return Scaffold(
+      appBar: _buildAppBar(roomChatProv, imgUrl),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(
+              'assets/chat_background.png',
+            ),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Color(0xFFF9F9F9).withOpacity(0.95),
+              BlendMode.srcATop,
             ),
           ),
-          child: Column(
-            children: [
-              // Background sync indicator
-              if (chatProv.isLoading)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  color: Colors.blue.shade50,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation(Colors.blue.shade600),
+        ),
+        child: Column(
+          children: [
+            // Background sync indicator
+            if (chatProv.isLoading)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                color: Colors.blue.shade50,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation(Colors.blue.shade600),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Memuat pesan terbaru...',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue.shade700,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          'Memuat pesan terbaru...',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.blue.shade700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-
-              // Messages stream
-              Expanded(
-                child: roomChatProv.activeRoomId == null
-                    ? const Center(child: Text('Memuat pesan...'))
-                    : StreamBuilder<List<ChatMessageEntity>>(
-                        stream: chatProv.repository
-                            .getMessagesStream(roomChatProv.activeRoomId!),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData && chatProv.isLoading) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
-
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return _buildEmptyState();
-                          }
-
-                          final entities = snapshot.data!;
-                          return _buildMessagesList(
-                            context,
-                            entities,
-                            chatProv,
-                            roomChatProv,
-                            userProv,
-                          );
-                        },
-                      ),
               ),
-
-              // Input area
-              _buildInputArea(roomChatProv, userProv),
-            ],
-          ),
+    
+            // Messages stream
+            Expanded(
+              child: roomChatProv.activeRoomId == null
+                  ? const Center(child: Text('Memuat pesan...'))
+                  : StreamBuilder<List<ChatMessageEntity>>(
+                      stream: chatProv.repository
+                          .getMessagesStream(roomChatProv.activeRoomId!),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData && chatProv.isLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+    
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return _buildEmptyState();
+                        }
+    
+                        final entities = snapshot.data!;
+                        return _buildMessagesList(
+                          context,
+                          entities,
+                          chatProv,
+                          roomChatProv,
+                          userProv,
+                        );
+                      },
+                    ),
+            ),
+    
+            // Input area
+            _buildInputArea(roomChatProv, userProv),
+          ],
         ),
       ),
     );
@@ -635,36 +632,34 @@ class _RoomChatPageState extends State<RoomChatPage>
   }
 
   Widget _buildLoadingScaffold() {
-    return FullScreenPage(
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: const Color(0xFFF9F9F9),
-          elevation: 2,
-          shadowColor: Colors.black12,
-          title: Row(
-            children: [
-              ShimmerPlaceholder(width: 36, height: 36, radius: 18),
-              const SizedBox(width: 12),
-              ShimmerPlaceholder(width: 120, height: 20, radius: 4),
-            ],
-          ),
-          toolbarHeight: 72,
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F9F9),
+        elevation: 2,
+        shadowColor: Colors.black12,
+        title: Row(
+          children: [
+            ShimmerPlaceholder(width: 36, height: 36, radius: 18),
+            const SizedBox(width: 12),
+            ShimmerPlaceholder(width: 120, height: 20, radius: 4),
+          ],
         ),
-        backgroundColor: const Color.fromARGB(255, 242, 242, 242),
-        body: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: 8,
-          itemBuilder: (context, index) {
-            final isMe = index % 2 == 0;
-            return Align(
-              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ShimmerPlaceholder(width: 250, height: 60, radius: 12),
-              ),
-            );
-          },
-        ),
+        toolbarHeight: 72,
+      ),
+      backgroundColor: const Color.fromARGB(255, 242, 242, 242),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 8,
+        itemBuilder: (context, index) {
+          final isMe = index % 2 == 0;
+          return Align(
+            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ShimmerPlaceholder(width: 250, height: 60, radius: 12),
+            ),
+          );
+        },
       ),
     );
   }

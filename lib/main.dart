@@ -77,8 +77,7 @@ void main() async {
     // ✅ Initialize FCM Service
     await FCMService.instance.initialize();
     debugPrint("✅ FCM Service initialized");
-    debugPrint(
-        "   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
+    debugPrint("   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
 
     // ✅ Initialize Hive
     await Hive.initFlutter();
@@ -305,7 +304,7 @@ class MyApp extends StatelessWidget {
           return name;
         }
 
-        debugPrint("   ⚠️ Room not found, using default");
+        debugPrint("   ⚠️  Room not found, using default");
         return 'New Message';
       };
 
@@ -339,7 +338,7 @@ class MyApp extends StatelessWidget {
             transitionType: PageTransitionType.slideRight,
           );
         } else {
-          debugPrint("   ⚠️ Navigator context not available");
+          debugPrint("   ⚠️  Navigator context not available");
         }
       };
 
@@ -347,7 +346,7 @@ class MyApp extends StatelessWidget {
       // 4️⃣ SETUP onLikeReceived CALLBACK (Optional)
       // ═══════════════════════════════════════════════════
       FCMService.instance.onLikeReceived = (portofolioId, userId) {
-        debugPrint("[Main] ❤️ Like received");
+        debugPrint("[Main] ❤️  Like received");
         debugPrint("   Portfolio: $portofolioId");
         debugPrint("   User: $userId");
 
@@ -429,32 +428,34 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       };
 
       // 1️⃣ Try to restore session
+      debugPrint("🔄 [Main] Attempting to restore session...");
       bool sessionRestored = await authService.restoreSession();
-      debugPrint("Session restored: $sessionRestored");
+      debugPrint("   Session restored: $sessionRestored");
 
       if (sessionRestored) {
-        debugPrint("✅ Session found, restoring user data...");
+        debugPrint("✅ [Main] Auth session found, restoring user data...");
 
         // 2️⃣ Restore user session
         final userRestored = await userProv.restoreSession();
 
         if (userRestored && userProv.customer != null) {
-          debugPrint("✅ User restored: ${userProv.customer!.namaDisplay}");
+          debugPrint("✅ [Main] User restored: ${userProv.customer!.namaDisplay}");
 
           // 3️⃣ Load role from storage
           String? role = await nav.getRole();
           if (role != null) {
             userProv.setRole(role);
-            debugPrint("✅ Role set: $role");
+            debugPrint("✅ [Main] Role set: $role");
           }
 
           // 4️⃣ Verify token is still valid
           try {
-            debugPrint("🔄 Verifying token...");
-            final token = await authService.getIdToken(forceRefresh: false);
+            debugPrint("🔄 [Main] Verifying token...");
+            // ✅ Changed: Use getIdToken() without forceRefresh parameter
+            final token = await authService.getIdToken();
 
             if (token != null) {
-              debugPrint("✅ Token valid");
+              debugPrint("✅ [Main] Token valid (${token.length} chars)");
 
               // 5️⃣ Request notification permission (Android 13+)
               await _requestNotificationPermission();
@@ -463,9 +464,9 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
               try {
                 await userProv.deviceTokenService
                     .addDeviceToken(userProv.customer!.noId);
-                debugPrint("✅ Device token registered");
+                debugPrint("✅ [Main] Device token registered");
               } catch (e) {
-                debugPrint("⚠️ Device token registration failed: $e");
+                debugPrint("⚠️  [Main] Device token registration failed: $e");
               }
 
               // 7️⃣ Initialize ChatProvider
@@ -474,22 +475,21 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
               // 8️⃣ Initialize HistoryOrderProvider
               await _initializeHistoryOrderProvider(userProv);
 
-              debugPrint("✅ User logged in, going to MainMenu");
+              debugPrint("✅ [Main] User logged in, going to MainMenu");
             } else {
-              debugPrint("⚠️ Token verification failed, need re-login");
+              debugPrint("⚠️  [Main] Token verification failed, need re-login");
               await nav.handleLogout(context);
             }
           } catch (e) {
-            debugPrint("❌ Token verification error: $e");
+            debugPrint("❌ [Main] Token verification error: $e");
             await nav.handleLogout(context);
           }
         } else {
-          debugPrint(
-              "⚠️ Session exists but user data incomplete, need re-login");
+          debugPrint("⚠️  [Main] Session exists but user data incomplete, need re-login");
           await nav.handleLogout(context);
         }
       } else {
-        debugPrint("ℹ️ No session found, user not logged in");
+        debugPrint("ℹ️  [Main] No session found, user not logged in");
         // Set default role for new users
         await nav.saveRole(Constants.customer);
       }
@@ -571,7 +571,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         debugPrint("[Main] ✅ Notification permission granted");
       }
     } catch (e) {
-      debugPrint("[Main] ⚠️ Error requesting notification permission: $e");
+      debugPrint("[Main] ⚠️  Error requesting notification permission: $e");
     }
   }
 
@@ -591,12 +591,13 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         return 'New Message';
       };
 
+      // ✅ Changed: Use getIdToken() without forceRefresh parameter
       // Initialize ChatProvider
       await chatProv.initWithApiClient(
         userId: userProv.customer!.noId,
         userType: Constants.customer,
         hubUrl: "${Constants.baseUrlHub}/api/chathub",
-        getToken: () async => await authService.getIdToken(forceRefresh: true),
+        getToken: () async => await authService.getIdToken(),
       );
 
       debugPrint("[Main] ✅ ChatProvider initialized");
@@ -625,13 +626,13 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
       debugPrint("[Main] ✅ HistoryOrderProvider ↔ PesananProvider connected");
 
+      // ✅ Changed: Use getIdToken() without forceRefresh parameter
       // Initialize
       final historyConnected = await historyOrderProvider.initialize(
         config: HistoryOrderServiceConfig(
           hubUrl: "${Constants.baseUrlHub}/api/chathub",
           role: Constants.customer,
-          getToken: () async =>
-              await authService.getIdToken(forceRefresh: true),
+          getToken: () async => await authService.getIdToken(),
         ),
         userId: userProv.customer!.noId,
       );
@@ -639,7 +640,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       if (historyConnected) {
         debugPrint("[Main] ✅ HistoryOrderProvider initialized");
       } else {
-        debugPrint("[Main] ⚠️ HistoryOrderProvider connection failed");
+        debugPrint("[Main] ⚠️  HistoryOrderProvider connection failed");
       }
     } catch (e, stackTrace) {
       debugPrint("[Main] ❌ HistoryOrderProvider init failed: $e");
