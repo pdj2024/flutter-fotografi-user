@@ -205,27 +205,6 @@ class _ChatListPageState extends State<ChatListPage> {
                   },
                 ),
               ),
-
-              // Unread badge
-              if (unreadCount > 0) ...[
-                const SizedBox(width: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '$unreadCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         );

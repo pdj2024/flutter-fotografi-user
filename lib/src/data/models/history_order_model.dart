@@ -38,6 +38,20 @@ class HistoryOrderModel {
     );
   }
 
+  factory HistoryOrderModel.fromFCM(Map<String, dynamic> json) {
+    return HistoryOrderModel(
+      noId: json['no_id'] ?? '',
+      noOrder: json['no_order'] ?? '',
+      tglProgress: DateTime.parse(json['tgl_progress']),
+      deskripsi: json['deskripsi'] ?? '',
+      senderId: json['sender_id'] ?? '',
+      tipeUser: json['tipe_user'] ?? '',
+      namaSender: json['Nama_Sender'] ?? '',
+      status: json['status'] ?? '',
+      statusProgressPesanan: json['status_progress_pesanan'] ?? '',
+    );
+  }
+
   // =====================================================
   // 🔁 TO JSON
   // =====================================================

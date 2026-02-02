@@ -23,7 +23,6 @@ enum NotificationType {
   chat,
   like,
   progress,
-  roomChat,
   unknown;
 
   static NotificationType fromString(String? type) {
@@ -35,8 +34,6 @@ enum NotificationType {
       case 'progress':
       case 'progres':
         return NotificationType.progress;
-      case 'room_chat':
-        return NotificationType.roomChat;
       default:
         return NotificationType.unknown;
     }
@@ -438,10 +435,12 @@ class FCMService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     debugPrint('[FCM Foreground] 🔄 Processing message...');
+    debugPrint('[FCM Foreground] Full data: ${message.data}');
 
     try {
-      final type = NotificationType.fromString(message.data['type']);
-      debugPrint('[FCM Foreground] Type: $type');
+      // ✅ IMPROVED: Infer type from data structure
+      final type = _inferNotificationType(message.data);
+      debugPrint('[FCM Foreground] Inferred type: $type');
 
       switch (type) {
         case NotificationType.chat:
@@ -453,12 +452,10 @@ class FCMService {
         case NotificationType.progress:
           await _handleProgressMessage(message);
           break;
-        // case NotificationType.roomChat:
-        //   await _handleRoomCreated(message);
-        //   break;
         default:
           debugPrint(
-              '[FCM Foreground] ⚠️ Unknown message type: ${message.data['type']}');
+              '[FCM Foreground] ⚠️ Unknown message type, showing generic notification');
+          await _showGenericNotification(message);
       }
     } catch (e, st) {
       debugPrint('[FCM Foreground] ❌ Error: $e');
@@ -468,10 +465,11 @@ class FCMService {
 
   Future<void> handleBackgroundMessage(RemoteMessage message) async {
     debugPrint('[FCM Background] 🔄 Processing message...');
+    debugPrint('[FCM Background] Full data: ${message.data}');
 
     try {
-      final type = NotificationType.fromString(message.data['type']);
-      debugPrint('[FCM Background] Type: $type');
+      final type = _inferNotificationType(message.data);
+      debugPrint('[FCM Background] Inferred type: $type');
 
       switch (type) {
         case NotificationType.chat:
@@ -484,11 +482,142 @@ class FCMService {
           await _showProgressNotification(message);
           break;
         default:
-          debugPrint('[FCM Background] ⚠️ Unknown message type');
+          await _showGenericNotification(message);
       }
     } catch (e, st) {
       debugPrint('[FCM Background] ❌ Error: $e');
       debugPrint('[FCM Background] Stack: $st');
+    }
+  }
+
+  /// ✅ NEW: Infer notification type from data structure
+  NotificationType _inferNotificationType(Map<String, dynamic> data) {
+    debugPrint('[FCM] 🔍 Inferring notification type from data...');
+
+    // Method 1: Check explicit 'type' field
+    if (data.containsKey('type')) {
+      final typeStr = data['type']?.toString();
+      debugPrint('[FCM]   Found explicit type: $typeStr');
+      return NotificationType.fromString(typeStr);
+    }
+
+    // Method 2: Check 'detail' field for type
+    if (data.containsKey('detail')) {
+      try {
+        final detail = _parseDetail(data['detail']);
+        if (detail.containsKey('type')) {
+          final typeStr = detail['type']?.toString();
+          debugPrint('[FCM]   Found type in detail: $typeStr');
+          return NotificationType.fromString(typeStr);
+        }
+
+        // Infer from detail structure
+        if (detail.containsKey('room_id') || detail.containsKey('message_id')) {
+          debugPrint('[FCM]   Inferred: CHAT (has room_id/message_id)');
+          return NotificationType.chat;
+        }
+
+        if (detail.containsKey('status_progress_pesanan') ||
+            detail.containsKey('no_order')) {
+          debugPrint('[FCM]   Inferred: PROGRESS (has order fields)');
+          return NotificationType.progress;
+        }
+
+        if (detail.containsKey('portofolio_id')) {
+          debugPrint('[FCM]   Inferred: LIKE (has portofolio_id)');
+          return NotificationType.like;
+        }
+      } catch (e) {
+        debugPrint('[FCM]   Error parsing detail: $e');
+      }
+    }
+
+    // Method 3: Infer from root data structure
+    if (data.containsKey('room_id') ||
+        data.containsKey('message_id') ||
+        data.containsKey('sender_id')) {
+      debugPrint('[FCM]   Inferred: CHAT (has chat fields in root)');
+      return NotificationType.chat;
+    }
+
+    if (data.containsKey('id_paket') || data.containsKey('tipe_pengirim')) {
+      debugPrint('[FCM]   Inferred: CHAT (has paket/sender fields)');
+      return NotificationType.chat;
+    }
+
+    if (data.containsKey('status_progress_pesanan') ||
+        data.containsKey('no_order') ||
+        data.containsKey('no_id')) {
+      debugPrint('[FCM]   Inferred: PROGRESS (has order fields in root)');
+      return NotificationType.progress;
+    }
+
+    if (data.containsKey('portofolio_id')) {
+      debugPrint('[FCM]   Inferred: LIKE (has portofolio_id in root)');
+      return NotificationType.like;
+    }
+
+    debugPrint('[FCM]   ⚠️ Could not infer type, returning UNKNOWN');
+    return NotificationType.unknown;
+  }
+
+  Future<void> _showGenericNotification(RemoteMessage message) async {
+    try {
+      debugPrint('[FCM] 🔔 Showing generic notification...');
+      debugPrint('[FCM] Data: ${message.data}');
+
+      // Try to extract meaningful info
+      String title = 'Notifikasi Baru';
+      String body = 'Anda memiliki notifikasi baru';
+
+      // Check for common title/body fields
+      if (message.notification != null) {
+        title = message.notification!.title ?? title;
+        body = message.notification!.body ?? body;
+      } else {
+        // Try to build from data
+        if (message.data.containsKey('title')) {
+          title = message.data['title'].toString();
+        }
+        if (message.data.containsKey('body')) {
+          body = message.data['body'].toString();
+        } else if (message.data.containsKey('message')) {
+          body = message.data['message'].toString();
+        }
+      }
+
+      const androidDetails = AndroidNotificationDetails(
+        'default_channel',
+        'Notifications',
+        channelDescription: 'General notifications',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: 'ic_stat_pacific_data_jaya',
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      const notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await _notificationsPlugin.show(
+        DateTime.now().millisecondsSinceEpoch % 100000,
+        title,
+        body,
+        notificationDetails,
+        payload: jsonEncode(message.data),
+      );
+
+      debugPrint('[FCM] ✅ Generic notification shown');
+    } catch (e, st) {
+      debugPrint('[FCM] ❌ Show generic notification error: $e');
+      debugPrint('[FCM] Stack: $st');
     }
   }
 
@@ -875,7 +1004,7 @@ class FCMService {
       debugPrint('[FCM] Parsed detail: $detail');
 
       // ✅ Parse ke HistoryOrderModel model
-      final progressData = HistoryOrderModel.fromJson(detail);
+      final progressData = HistoryOrderModel.fromFCM(detail);
 
       debugPrint('[FCM] ✅ Progress data parsed:');
       debugPrint('[FCM]   Order: ${progressData.noOrder}');

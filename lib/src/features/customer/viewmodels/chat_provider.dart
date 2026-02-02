@@ -895,8 +895,7 @@ class ChatProvider extends ChangeNotifier {
 
     await _repository.updateRoomWithMessage(
       roomId: message.roomId,
-      lastMessage:
-          message.message.isEmpty ? '📦 Paket ditawarkan' : message.message,
+      lastMessage: _buildLastMessage(message),
       lastMessageAt: message.sentAt,
       incrementUnread: false,
     );
@@ -966,8 +965,7 @@ class ChatProvider extends ChangeNotifier {
 
       await _repository.updateRoomWithMessage(
         roomId: message.roomId,
-        lastMessage:
-            message.message.isEmpty ? '📦 Paket ditawarkan' : message.message,
+        lastMessage: _buildLastMessage(message),
         lastMessageAt: message.sentAt,
         incrementUnread: shouldIncrementUnread,
       );
@@ -1155,8 +1153,7 @@ class ChatProvider extends ChangeNotifier {
       // Step 7: Update room last message (optional)
       await _repository.updateRoomWithMessage(
         roomId: message.roomId,
-        lastMessage:
-            message.message.isEmpty ? '📋 Pesanan dibuat' : message.message,
+        lastMessage: _buildLastMessage(message),
         lastMessageAt: message.sentAt,
         incrementUnread: false,
       );
@@ -1171,6 +1168,22 @@ class ChatProvider extends ChangeNotifier {
       debugPrint('StackTrace: $stackTrace');
       return false;
     }
+  }
+
+  String _buildLastMessage(ChatModel message) {
+    if (message.message.isNotEmpty) {
+      return message.message;
+    }
+
+    if (message.noInvoice?.isNotEmpty == true) {
+      return "🧾 Customer menerima pesanan";
+    }
+
+    if (message.noPenawaran?.isNotEmpty == true) {
+      return "💰 Penawaran baru";
+    }
+
+    return "📦 Paket ditawarkan";
   }
 
   // ✅ NEW: Clear in-memory storage for a room
