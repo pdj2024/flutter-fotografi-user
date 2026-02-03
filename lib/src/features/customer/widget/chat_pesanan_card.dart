@@ -506,7 +506,7 @@ class ChatPesananCard extends StatelessWidget {
       } else if (progressStatus == 'review' || progressStatus == 'revisi') {
         return 'Cek Progress';
       } else {
-        return 'Pantau Progress';
+        return 'Lihat Progress';
       }
     } else if (progressStatus == 'dibatalkan') {
       return 'Lihat Detail';

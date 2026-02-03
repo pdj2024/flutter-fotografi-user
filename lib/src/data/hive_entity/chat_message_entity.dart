@@ -6,7 +6,8 @@ import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 
 part 'chat_message_entity.g.dart';
 
-/// Hive entity untuk chat message
+/// ✅ FIXED: Hive entity untuk chat message
+/// Changed: deliveredAt → receivedAt
 /// Field minimal untuk hemat storage
 @HiveType(typeId: 0)
 class ChatMessageEntity extends HiveObject {
@@ -23,7 +24,7 @@ class ChatMessageEntity extends HiveObject {
   String message;
 
   @HiveField(4)
-  String sendStatus; // pending, sending, sent, delivered, read, failed
+  String sendStatus; // pending, sent, received (not delivered), read, failed
 
   @HiveField(5)
   DateTime sentAt;
@@ -48,7 +49,7 @@ class ChatMessageEntity extends HiveObject {
   DateTime? readAt;
 
   @HiveField(12)
-  DateTime? deliveredAt;
+  DateTime? receivedAt; // ✅ Changed from deliveredAt
 
   @HiveField(13)
   List<String>? receiverIds;
@@ -66,8 +67,8 @@ class ChatMessageEntity extends HiveObject {
     this.penawaran,
     this.pesanan,
     this.readAt,
-    this.deliveredAt,
-    this.receiverIds
+    this.receivedAt, // ✅ Changed
+    this.receiverIds,
   });
 
   // =========================================
@@ -78,6 +79,13 @@ class ChatMessageEntity extends HiveObject {
   bool get hasPaket => paket != null;
   bool get hasPenawaran => penawaran != null;
   bool get hasPesanan => pesanan != null;
+
+  // ✅ Status helpers
+  bool get isPending => sendStatus == 'pending';
+  bool get isSent => sendStatus == 'sent';
+  bool get isReceived => sendStatus == 'received'; // ✅ Changed from isDelivered
+  bool get isRead => sendStatus == 'read';
+  bool get isFailed => sendStatus == 'failed';
 
   String get resolvedJenisPesan {
     if (hasPesanan) return 'pesanan';
@@ -90,9 +98,13 @@ class ChatMessageEntity extends HiveObject {
   // CONVERTERS
   // =========================================
 
-  /// Convert dari ChatModel (existing model)
-  factory ChatMessageEntity.fromChatModel(ChatModel model,
-      {PaketModel? paket, PenawaranModel? penawaran, PesananModel? pesanan}) {
+  /// ✅ Convert dari ChatModel (existing model)
+  factory ChatMessageEntity.fromChatModel(
+    ChatModel model, {
+    PaketModel? paket,
+    PenawaranModel? penawaran,
+    PesananModel? pesanan,
+  }) {
     return ChatMessageEntity(
       messageId: model.messageId,
       roomId: model.roomId,
@@ -106,12 +118,12 @@ class ChatMessageEntity extends HiveObject {
       penawaran: penawaran,
       pesanan: pesanan,
       readAt: model.readAt,
-      deliveredAt: model.deliveredAt,
+      receivedAt: model.receivedAt, // ✅ Changed from deliveredAt
       receiverIds: model.receiverIds,
     );
   }
 
-  /// Convert ke ChatModel (untuk kompatibilitas UI)
+  /// ✅ Convert ke ChatModel (untuk kompatibilitas UI)
   ChatModel toChatModel({
     required String tipeUser,
     required String roomType,
@@ -124,15 +136,15 @@ class ChatMessageEntity extends HiveObject {
       tipeUser: tipeUser,
       message: message,
       jenisPesan: resolvedJenisPesan,
-      idPaket: paket?.no_id ?? "",
-      noInvoice: pesanan?.noBukti ?? "",
-      noPenawaran: penawaran?.noId ?? "",
+      idPaket: paket?.no_id,
+      noInvoice: pesanan?.noBukti,
+      noPenawaran: penawaran?.noId,
       status: 'aktif',
       sendStatus: sendStatus,
       roomType: roomType,
       sentAt: sentAt,
       editedAt: null,
-      deliveredAt: deliveredAt,
+      receivedAt: receivedAt, // ✅ Changed from deliveredAt
       readAt: readAt,
       userIds: userIds,
       receiverIds: receiverIds ?? [],
@@ -140,7 +152,7 @@ class ChatMessageEntity extends HiveObject {
     );
   }
 
-  /// Copy with
+  /// ✅ Copy with
   ChatMessageEntity copyWith({
     String? messageId,
     String? sendStatus,
@@ -149,7 +161,7 @@ class ChatMessageEntity extends HiveObject {
     PesananModel? pesanan,
     PenawaranModel? penawaran,
     DateTime? readAt,
-    DateTime? deliveredAt,
+    DateTime? receivedAt, // ✅ Changed from deliveredAt
   }) {
     return ChatMessageEntity(
       messageId: messageId ?? this.messageId,
@@ -164,7 +176,7 @@ class ChatMessageEntity extends HiveObject {
       pesanan: pesanan ?? this.pesanan,
       penawaran: penawaran ?? this.penawaran,
       readAt: readAt ?? this.readAt,
-      deliveredAt: deliveredAt ?? this.deliveredAt,
+      receivedAt: receivedAt ?? this.receivedAt, // ✅ Changed
       receiverIds: receiverIds,
     );
   }
@@ -174,4 +186,8 @@ class ChatMessageEntity extends HiveObject {
     return 'ChatMessageEntity(id: $messageId, room: $roomId, '
         'status: $sendStatus, localId: $localId)';
   }
+
+  // ✅ Backward compatibility getter
+  @Deprecated('Use receivedAt instead')
+  DateTime? get deliveredAt => receivedAt;
 }

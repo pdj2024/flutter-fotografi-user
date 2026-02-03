@@ -252,14 +252,59 @@ class HiveChatRepository {
   /// ✅ UPSERT: Add or update message
   Future<void> addMessage(ChatMessageEntity message) async {
     final box = await _openMessagesBox(message.roomId);
-    final exists = box.containsKey(message.messageId);
+    final existing = box.get(message.messageId);
 
-    await box.put(message.messageId, message);
-    _notifyMessagesUpdate(message.roomId);
+    bool shouldUpdate = false;
 
-    // debugPrint(exists
-    //     ? '[HiveChatRepo] 🔄 Updated: ${message.messageId}'
-    //     : '[HiveChatRepo] ✅ Added: ${message.messageId}');
+    if (existing == null) {
+      // New message - always add
+      shouldUpdate = true;
+      debugPrint('[HiveChatRepo] ➕ Adding new: ${message.messageId}');
+    } else {
+      // Check if nested data changed
+      final paketChanged = _hasNestedDataChanged(
+        existing.paket,
+        message.paket,
+      );
+      final penawaranChanged = _hasNestedDataChanged(
+        existing.penawaran,
+        message.penawaran,
+      );
+      final pesananChanged = _hasNestedDataChanged(
+        existing.pesanan,
+        message.pesanan,
+      );
+      final statusChanged = existing.sendStatus != message.sendStatus;
+
+      if (paketChanged || penawaranChanged || pesananChanged || statusChanged) {
+        shouldUpdate = true;
+        debugPrint('[HiveChatRepo] 🔄 Updating: ${message.messageId}');
+        debugPrint('  - Paket changed: $paketChanged');
+        debugPrint('  - Penawaran changed: $penawaranChanged');
+        debugPrint('  - Pesanan changed: $pesananChanged');
+        debugPrint('  - Status changed: $statusChanged');
+      } else {
+        debugPrint('[HiveChatRepo] ⏭️ No changes: ${message.messageId}');
+      }
+    }
+
+    if (shouldUpdate) {
+      await box.put(message.messageId, message);
+      _notifyMessagesUpdate(message.roomId);
+    }
+  }
+
+  /// ✅ NEW: Deep comparison helper
+  bool _hasNestedDataChanged<T>(T? oldData, T? newData) {
+    // Both null - no change
+    if (oldData == null && newData == null) return false;
+
+    // One is null, other isn't - changed
+    if (oldData == null || newData == null) return true;
+
+    // Both exist - compare (implement equality check based on type)
+    // For now, treat any existence as changed if they differ
+    return oldData.toString() != newData.toString();
   }
 
   Future<void> addMessageFromModel(ChatModel model) async {
@@ -330,16 +375,75 @@ class HiveChatRepository {
     final message = box.get(messageId);
 
     if (message != null) {
+      DateTime? readAt;
+      DateTime? receivedAt;
+
+      // ✅ Set timestamps based on status
+      if (newStatus == 'read') {
+        readAt = DateTime.now();
+        receivedAt = message.receivedAt ?? DateTime.now(); // Preserve or set
+      } else if (newStatus == 'received') {
+        receivedAt = DateTime.now();
+      }
+
       await box.put(
           messageId,
           message.copyWith(
             sendStatus: newStatus,
-            readAt: newStatus == 'read' ? DateTime.now() : null,
-            deliveredAt: newStatus == 'delivered' ? DateTime.now() : null,
+            readAt: readAt,
+            receivedAt: receivedAt, // ✅ Changed from deliveredAt
           ));
       _notifyMessagesUpdate(roomId);
+
       debugPrint('[HiveChatRepo] ✅ Status: $messageId → $newStatus');
+    } else {
+      debugPrint('[HiveChatRepo] ⚠️ Message not found: $messageId');
     }
+  }
+
+  Future<void> smartUpdateMessage({
+    required String roomId,
+    required String messageId,
+    String? newStatus,
+    PaketModel? paket,
+    PenawaranModel? penawaran,
+    PesananModel? pesanan,
+  }) async {
+    final box = await _openMessagesBox(roomId);
+    final existing = box.get(messageId);
+
+    if (existing == null) {
+      debugPrint(
+          '[HiveChatRepo] ⚠️ Message not found for smart update: $messageId');
+      return;
+    }
+
+    DateTime? readAt = existing.readAt;
+    DateTime? receivedAt = existing.receivedAt;
+
+    // ✅ Update timestamps based on new status
+    if (newStatus != null) {
+      if (newStatus == 'read') {
+        readAt = DateTime.now();
+        receivedAt = receivedAt ?? DateTime.now();
+      } else if (newStatus == 'received') {
+        receivedAt = DateTime.now();
+      }
+    }
+
+    final updated = existing.copyWith(
+      sendStatus: newStatus ?? existing.sendStatus,
+      paket: paket ?? existing.paket,
+      penawaran: penawaran ?? existing.penawaran,
+      pesanan: pesanan ?? existing.pesanan,
+      readAt: readAt,
+      receivedAt: receivedAt, // ✅ Changed from deliveredAt
+    );
+
+    await box.put(messageId, updated);
+    _notifyMessagesUpdate(roomId);
+
+    debugPrint('[HiveChatRepo] ✅ Smart update completed for: $messageId');
   }
 
   Future<void> storeLatest100Messages(
@@ -399,7 +503,10 @@ class HiveChatRepository {
       return true;
     }
 
-    debugPrint('[HiveChatRepo] ⚠️ Local echo not found');
+    debugPrint('[HiveChatRepo] ⚠️ Local echo not found, adding as new message');
+    // ✅ FIXED: Even if local echo not found, add the message
+    await box.put(serverMessage.messageId, serverMessage);
+    _notifyMessagesUpdate(roomId);
     return false;
   }
 
@@ -411,10 +518,13 @@ class HiveChatRepository {
     final updatedMessages = <String, ChatMessageEntity>{};
 
     for (final message in box.values) {
+      // Only update messages from others that aren't already read
       if (message.senderId != currentUserId && message.sendStatus != 'read') {
         updatedMessages[message.messageId] = message.copyWith(
           sendStatus: 'read',
           readAt: DateTime.now(),
+          receivedAt:
+              message.receivedAt ?? DateTime.now(), // Ensure receivedAt is set
         );
       }
     }
@@ -422,7 +532,8 @@ class HiveChatRepository {
     if (updatedMessages.isNotEmpty) {
       await box.putAll(updatedMessages);
       _notifyMessagesUpdate(roomId);
-      debugPrint('[HiveChatRepo] ✅ Marked ${updatedMessages.length} as read');
+      debugPrint(
+          '[HiveChatRepo] ✅ Marked ${updatedMessages.length} messages as read');
     }
   }
 

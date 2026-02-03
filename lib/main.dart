@@ -77,7 +77,8 @@ void main() async {
     // ✅ Initialize FCM Service
     await FCMService.instance.initialize();
     debugPrint("✅ FCM Service initialized");
-    debugPrint("   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
+    debugPrint(
+        "   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
 
     // ✅ Initialize Hive
     await Hive.initFlutter();
@@ -439,7 +440,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         final userRestored = await userProv.restoreSession();
 
         if (userRestored && userProv.customer != null) {
-          debugPrint("✅ [Main] User restored: ${userProv.customer!.namaDisplay}");
+          debugPrint(
+              "✅ [Main] User restored: ${userProv.customer!.namaDisplay}");
 
           // 3️⃣ Load role from storage
           String? role = await nav.getRole();
@@ -485,7 +487,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
             await nav.handleLogout(context);
           }
         } else {
-          debugPrint("⚠️  [Main] Session exists but user data incomplete, need re-login");
+          debugPrint(
+              "⚠️  [Main] Session exists but user data incomplete, need re-login");
           await nav.handleLogout(context);
         }
       } else {

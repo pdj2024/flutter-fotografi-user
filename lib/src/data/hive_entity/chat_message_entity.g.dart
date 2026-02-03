@@ -29,7 +29,7 @@ class ChatMessageEntityAdapter extends TypeAdapter<ChatMessageEntity> {
       penawaran: fields[9] as PenawaranModel?,
       pesanan: fields[10] as PesananModel?,
       readAt: fields[11] as DateTime?,
-      deliveredAt: fields[12] as DateTime?,
+      receivedAt: fields[12] as DateTime?,
       receiverIds: (fields[13] as List?)?.cast<String>(),
     );
   }
@@ -63,7 +63,7 @@ class ChatMessageEntityAdapter extends TypeAdapter<ChatMessageEntity> {
       ..writeByte(11)
       ..write(obj.readAt)
       ..writeByte(12)
-      ..write(obj.deliveredAt)
+      ..write(obj.receivedAt)
       ..writeByte(13)
       ..write(obj.receiverIds);
   }
