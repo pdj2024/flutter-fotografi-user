@@ -381,7 +381,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         ),
                         const SizedBox(height: 12),
                         _buildInfoRow(
-                          label: "No. Bukti",
+                          label: "Nomor Bukti",
                           value: pesanan!.noTrackingPesanan ?? "-",
                           icon: Icons.local_shipping_outlined,
                           copyable: true,

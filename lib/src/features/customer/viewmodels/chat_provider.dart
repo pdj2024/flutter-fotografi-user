@@ -45,7 +45,7 @@ class ChatProvider extends ChangeNotifier {
   String? _activeRoomId;
 
   // ✅ IN-MEMORY STORAGE: Map<roomId, List<ChatMessageEntity>>
-  // This stores ALL messages from API in memory
+  // Stores ALL messages from API in memory
   final Map<String, List<ChatMessageEntity>> _allMessagesInMemory = {};
 
   // ✅ Room info cache for notifications
@@ -107,12 +107,12 @@ class ChatProvider extends ChangeNotifier {
 
   int get totalUnreadCount => _repository.getTotalUnreadCount();
 
-  // ✅ NEW: Get ALL messages in memory for a room
+  /// Get ALL messages in memory for a room
   List<ChatMessageEntity> getAllMessagesInMemory(String roomId) {
     return _allMessagesInMemory[roomId] ?? [];
   }
 
-  // ✅ Get sender name for notifications
+  /// Get sender name for notifications
   String _getSenderName(String roomId) {
     final room = _roomInfoCache[roomId] ?? getRoom(roomId);
     if (room != null) {
@@ -194,7 +194,7 @@ class ChatProvider extends ChangeNotifier {
     _currentUserId = null;
     _activeRoomId = null;
     _roomInfoCache.clear();
-    _allMessagesInMemory.clear(); // Clear in-memory storage
+    _allMessagesInMemory.clear();
     notifyListeners();
   }
 
@@ -230,7 +230,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // =========================================
-  // ROOMS
+  // ROOMS MANAGEMENT
   // =========================================
 
   Future<List<RoomChatModel>> loadRooms({bool forceRefresh = false}) async {
@@ -276,7 +276,6 @@ class ChatProvider extends ChangeNotifier {
       if (roomId == null && idLawan == null) {
         await _repository.setRoomsFromModels(roomModels);
 
-        // ✅ Cache room info
         for (final room in roomModels) {
           _roomInfoCache[room.roomId] = room;
         }
@@ -289,7 +288,6 @@ class ChatProvider extends ChangeNotifier {
       } else {
         for (final room in roomModels) {
           await _repository.upsertRoomFromModel(room);
-          // ✅ Cache room info
           _roomInfoCache[room.roomId] = room;
         }
       }
@@ -315,7 +313,6 @@ class ChatProvider extends ChangeNotifier {
 
     if (cached.isNotEmpty) {
       final roomModel = cached.first.toRoomChatModel();
-      // ✅ Cache room info
       _roomInfoCache[roomModel.roomId] = roomModel;
       return roomModel;
     }
@@ -328,7 +325,6 @@ class ChatProvider extends ChangeNotifier {
     if (roomModels.isNotEmpty) {
       await _repository.upsertRoomFromModel(roomModels.first);
       await _chatService.joinRoom(roomModels.first.roomId);
-      // ✅ Cache room info
       _roomInfoCache[roomModels.first.roomId] = roomModels.first;
       return roomModels.first;
     }
@@ -337,7 +333,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // =========================================
-  // ✅ MESSAGES - DUAL STORAGE
+  // MESSAGES - DUAL STORAGE
   // =========================================
 
   Future<List<ChatModel>> loadMessages(String roomId,
@@ -363,7 +359,7 @@ class ChatProvider extends ChangeNotifier {
           '[ChatProvider] 📥 Fetched ${messageModels.length} messages from API');
 
       if (messageModels.isNotEmpty) {
-        // ✅ STEP 1: Enrich and save to BOTH storages
+        // ✅ Enrich and save to BOTH storages
         await _enrichAndSaveToDualStorage(roomId, messageModels);
       }
 
@@ -385,7 +381,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // =========================================
-  // ✅ ENRICH AND SAVE - DUAL STORAGE
+  // ENRICH AND SAVE - DUAL STORAGE
   // =========================================
 
   Future<void> _enrichAndSaveToDualStorage(
@@ -456,6 +452,10 @@ class ChatProvider extends ChangeNotifier {
     debugPrint('[ChatProvider] ✅ Dual storage complete');
   }
 
+  // =========================================
+  // BATCH FETCH DATA
+  // =========================================
+
   Future<Map<String, PaketModel>> _batchFetchPaket(List<String> ids) async {
     if (ids.isEmpty) return {};
 
@@ -490,7 +490,6 @@ class ChatProvider extends ChangeNotifier {
       final pesananService = PesananService();
       final Map<String, PesananModel> result = {};
 
-      // ✅ Fetch semua pesanan secara parallel
       final futures = ids.map((id) async {
         try {
           final list =
@@ -631,9 +630,13 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // =========================================
-  // SEND MESSAGE
+  // ✅ SEND MESSAGE - COMPLETE WITH CORRECT FLOW
   // =========================================
 
+  /// Send message with correct status flow:
+  /// 1. LOCAL: Create with "pending"
+  /// 2. API: Send with "sent"
+  /// 3. LOCAL: Update to "sent" if success, "failed" if error
   Future<bool> sendMessage({
     required String roomId,
     required String message,
@@ -657,6 +660,7 @@ class ChatProvider extends ChangeNotifier {
       jenisPesan = 'penawaran';
     }
 
+    // ✅ STEP 1: Create LOCAL message with status "pending"
     final localMessage = ChatModel(
       messageId: localId,
       roomId: roomId,
@@ -667,7 +671,7 @@ class ChatProvider extends ChangeNotifier {
       idPaket: idPaket,
       noPenawaran: noPenawaran,
       status: 'aktif',
-      sendStatus: 'sending',
+      sendStatus: 'pending', // ✅ LOCAL: pending
       roomType: 'direct',
       sentAt: now,
       userIds: userIds,
@@ -675,10 +679,11 @@ class ChatProvider extends ChangeNotifier {
       localId: localId,
       noInvoice: null,
       editedAt: null,
-      deliveredAt: null,
+      receivedAt: null, // ✅ Changed from deliveredAt
       readAt: null,
     );
 
+    // ✅ Load nested data
     final paket = await _loadPaketModel(idPaket);
     final penawaran = await _loadPenawaranModel(noPenawaran);
 
@@ -688,7 +693,7 @@ class ChatProvider extends ChangeNotifier {
       penawaran: penawaran,
     );
 
-    // ✅ Add to both storages
+    // ✅ Add to BOTH storages with "pending" status
     await _repository.addMessage(localEntity);
 
     // Add to in-memory storage
@@ -696,8 +701,11 @@ class ChatProvider extends ChangeNotifier {
       _allMessagesInMemory[roomId]!.add(localEntity);
       _allMessagesInMemory[roomId]!
           .sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    } else {
+      _allMessagesInMemory[roomId] = [localEntity];
     }
 
+    // ✅ Update room with message
     await _repository.updateRoomWithMessage(
       roomId: roomId,
       lastMessage: message.isEmpty ? '📦 Paket ditawarkan' : message,
@@ -705,26 +713,86 @@ class ChatProvider extends ChangeNotifier {
       incrementUnread: false,
     );
 
+    // ✅ STEP 2: Send to API with status "sent"
     try {
-      final result = await _apiService!.sendMessage(message: localMessage);
+      final apiMessage = localMessage.copyWith(
+        sendStatus: 'sent', // ✅ API: always "sent"
+      );
 
+      debugPrint('[ChatProvider] 📤 Sending to API...');
+      debugPrint('[ChatProvider]   Local status: pending');
+      debugPrint('[ChatProvider]   API status: sent');
+
+      final result = await _apiService!.sendMessage(message: apiMessage);
+
+      // ✅ STEP 3: Update local status based on API response
       if (result != null) {
+        debugPrint('[ChatProvider] ✅ API success (200)');
+
+        // Update to "sent" in local storage
+        await _repository.updateMessageStatus(
+          roomId: roomId,
+          messageId: localId,
+          newStatus: 'sent',
+        );
+
+        // Update in-memory storage
+        if (_allMessagesInMemory.containsKey(roomId)) {
+          final index = _allMessagesInMemory[roomId]!
+              .indexWhere((m) => m.messageId == localId);
+          if (index != -1) {
+            _allMessagesInMemory[roomId]![index] =
+                _allMessagesInMemory[roomId]![index]
+                    .copyWith(sendStatus: 'sent');
+          }
+        }
+
+        debugPrint('[ChatProvider] ✅ Local status updated: pending → sent');
         return true;
       } else {
+        debugPrint('[ChatProvider] ❌ API returned null');
+
+        // Mark as failed
         await _repository.updateMessageStatus(
           roomId: roomId,
           messageId: localId,
           newStatus: 'failed',
         );
+
+        // Update in-memory storage
+        if (_allMessagesInMemory.containsKey(roomId)) {
+          final index = _allMessagesInMemory[roomId]!
+              .indexWhere((m) => m.messageId == localId);
+          if (index != -1) {
+            _allMessagesInMemory[roomId]![index] =
+                _allMessagesInMemory[roomId]![index]
+                    .copyWith(sendStatus: 'failed');
+          }
+        }
+
         return false;
       }
     } catch (e) {
-      debugPrint('[ChatProvider] ❌ Send error: $e');
+      debugPrint('[ChatProvider] ❌ API error: $e');
+
+      // Mark as failed
       await _repository.updateMessageStatus(
         roomId: roomId,
         messageId: localId,
         newStatus: 'failed',
       );
+
+      // Update in-memory storage
+      if (_allMessagesInMemory.containsKey(roomId)) {
+        final index = _allMessagesInMemory[roomId]!
+            .indexWhere((m) => m.messageId == localId);
+        if (index != -1) {
+          _allMessagesInMemory[roomId]![index] =
+              _allMessagesInMemory[roomId]![index]
+                  .copyWith(sendStatus: 'failed');
+        }
+      }
+
       return false;
     }
   }
@@ -736,7 +804,10 @@ class ChatProvider extends ChangeNotifier {
     if (failed.isEmpty) return false;
 
     final msg = failed.first;
+
+    // Remove from both storages
     await _repository.deleteMessage(roomId, localId);
+    _removeFromInMemory(roomId, localId);
 
     return sendMessage(
       roomId: roomId,
@@ -749,6 +820,7 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> removeFailedMessage(String roomId, String localId) async {
     await _repository.deleteMessage(roomId, localId);
+    _removeFromInMemory(roomId, localId);
   }
 
   // =========================================
@@ -819,13 +891,20 @@ class ChatProvider extends ChangeNotifier {
   bool isRoomActive(String roomId) => _activeRoomId == roomId;
 
   // =========================================
-  // REALTIME HANDLERS
+  // ✅ REALTIME HANDLERS - COMPLETE VERSION
+  // Combines: Customer's "received" + Vendor's smart update
   // =========================================
 
   Future<void> _handleIncomingMessage(ChatModel message) async {
     final isFromMe = message.senderId == _currentUserId;
     final isActiveRoom = _activeRoomId == message.roomId;
 
+    debugPrint('[ChatProvider] 📩 Incoming: ${message.messageId}');
+    debugPrint('  - From me: $isFromMe');
+    debugPrint('  - Active room: $isActiveRoom');
+    debugPrint('  - Status: ${message.sendStatus}');
+
+    // ✅ ALWAYS enrich message with latest data
     final paket = await _loadPaketModel(message.idPaket);
     final penawaran = await _loadPenawaranModel(message.noPenawaran);
     final pesanan = await _loadPesananModel(message.noInvoice);
@@ -839,12 +918,16 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  /// Handle messages sent by current user (local echo replacement)
   Future<void> _handleOwnMessage(
     ChatModel message, {
     PaketModel? paket,
     PenawaranModel? penawaran,
     PesananModel? pesanan,
   }) async {
+    debugPrint('[ChatProvider] 📤 Handling own message: ${message.messageId}');
+
+    // Try to replace local echo
     final replaced = await _repository.replaceLocalEcho(
       roomId: message.roomId,
       serverMessage: ChatMessageEntity.fromChatModel(
@@ -856,25 +939,36 @@ class ChatProvider extends ChangeNotifier {
     );
 
     if (replaced) {
-      if (message.sendStatus == 'sending' || message.sendStatus == '') {
+      debugPrint('[ChatProvider] ✅ Replaced local echo with server message');
+
+      // ✅ Ensure status is "sent" for own messages from server
+      if (message.sendStatus != 'sent') {
         await _repository.updateMessageStatus(
           roomId: message.roomId,
           messageId: message.messageId,
           newStatus: 'sent',
         );
-
-        _apiService?.updateMessageStatus(
-            messageId: message.messageId, status: 'sent');
       }
+
+      // ✅ Update in-memory storage
+      final updatedEntity = ChatMessageEntity.fromChatModel(
+        message.copyWith(sendStatus: 'sent'),
+        paket: paket,
+        penawaran: penawaran,
+        pesanan: pesanan,
+      );
+      _updateInMemoryMessage(message.roomId, updatedEntity);
     } else {
+      // Message doesn't exist as local echo, check if it exists at all
       final exists =
           await _repository.messageExists(message.roomId, message.messageId);
 
       if (!exists) {
-        final messageToAdd =
-            message.sendStatus == 'sending' || message.sendStatus == ''
-                ? message.copyWith(sendStatus: 'sent')
-                : message;
+        debugPrint(
+            '[ChatProvider] 🆕 New message from server (not local echo)');
+
+        // New message from server, add it
+        final messageToAdd = message.copyWith(sendStatus: 'sent');
 
         final entity = ChatMessageEntity.fromChatModel(
           messageToAdd,
@@ -884,24 +978,47 @@ class ChatProvider extends ChangeNotifier {
         );
 
         await _repository.addMessage(entity);
+
+        // ✅ Add to in-memory
+        _addToInMemory(message.roomId, entity);
       } else {
+        debugPrint('[ChatProvider] 🔄 Message exists, updating status');
+
+        // Message exists, just update status if needed
         await _repository.updateMessageStatus(
           roomId: message.roomId,
           messageId: message.messageId,
-          newStatus: message.sendStatus,
+          newStatus:
+              message.sendStatus == 'pending' ? 'sent' : message.sendStatus,
         );
+
+        // ✅ Update in-memory
+        final updatedEntity = ChatMessageEntity.fromChatModel(
+          message.copyWith(
+              sendStatus: message.sendStatus == 'pending'
+                  ? 'sent'
+                  : message.sendStatus),
+          paket: paket,
+          penawaran: penawaran,
+          pesanan: pesanan,
+        );
+        _updateInMemoryMessage(message.roomId, updatedEntity);
       }
     }
 
+    // Update room
     await _repository.updateRoomWithMessage(
       roomId: message.roomId,
-      lastMessage:
-          message.message.isEmpty ? '📦 Paket ditawarkan' : message.message,
+      lastMessage: _buildLastMessage(message),
       lastMessageAt: message.sentAt,
       incrementUnread: false,
     );
   }
 
+  /// ✅ COMPLETE: Handle messages from others
+  /// Combines:
+  /// - Customer's "received" terminology
+  /// - Vendor's smart update (check for nested data changes)
   Future<void> _handleMessageFromOthers(
     ChatModel message,
     bool isActiveRoom, {
@@ -909,6 +1026,9 @@ class ChatProvider extends ChangeNotifier {
     PenawaranModel? penawaran,
     PesananModel? pesanan,
   }) async {
+    debugPrint(
+        '[ChatProvider] 📥 Handling message from others: ${message.messageId}');
+
     final exists =
         await _repository.messageExists(message.roomId, message.messageId);
 
@@ -916,27 +1036,103 @@ class ChatProvider extends ChangeNotifier {
     bool shouldIncrementUnread;
 
     if (exists) {
-      if (isActiveRoom) {
-        finalStatus = 'read';
-        shouldIncrementUnread = false;
+      debugPrint('[ChatProvider] ♻️ Message exists, checking for updates...');
 
-        await _repository.clearRoomUnread(message.roomId);
-        await _repository.markAllMessagesAsRead(
-          roomId: message.roomId,
-          currentUserId: _currentUserId!,
-        );
-      } else {
-        finalStatus =
-            message.sendStatus == 'sent' ? 'delivered' : message.sendStatus;
-        shouldIncrementUnread = false;
-      }
-
-      await _repository.updateMessageStatus(
-        roomId: message.roomId,
-        messageId: message.messageId,
-        newStatus: finalStatus,
+      // ✅ VENDOR FEATURE: Get existing message to compare
+      final existing = await _repository.getMessage(
+        message.roomId,
+        message.messageId,
       );
+
+      // ✅ VENDOR FEATURE: Check if nested data needs update
+      final needsUpdate = existing != null &&
+          (existing.paket == null && paket != null ||
+              existing.penawaran == null && penawaran != null ||
+              existing.pesanan == null && pesanan != null ||
+              existing.sendStatus != message.sendStatus);
+
+      if (needsUpdate) {
+        debugPrint(
+            '[ChatProvider] 🔄 Updating existing message with new data...');
+
+        if (isActiveRoom) {
+          finalStatus = 'read';
+          shouldIncrementUnread = false;
+
+          await _repository.clearRoomUnread(message.roomId);
+          await _repository.markAllMessagesAsRead(
+            roomId: message.roomId,
+            currentUserId: _currentUserId!,
+          );
+        } else {
+          // ✅ CUSTOMER FEATURE: "received" instead of "delivered"
+          finalStatus = message.sendStatus == 'sent'
+              ? 'received' // ✅ Changed from "delivered"
+              : message.sendStatus;
+          shouldIncrementUnread = false;
+        }
+
+        // ✅ VENDOR FEATURE: Smart update with new data (if available)
+        if (_repository.smartUpdateMessage != null) {
+          await _repository.smartUpdateMessage(
+            roomId: message.roomId,
+            messageId: message.messageId,
+            newStatus: finalStatus,
+            paket: paket,
+            penawaran: penawaran,
+            pesanan: pesanan,
+          );
+        } else {
+          // Fallback to manual update
+          await _repository.updateMessageStatus(
+            roomId: message.roomId,
+            messageId: message.messageId,
+            newStatus: finalStatus,
+          );
+        }
+
+        // ✅ CUSTOMER FEATURE: Update in-memory
+        final updatedEntity = ChatMessageEntity.fromChatModel(
+          message.copyWith(sendStatus: finalStatus),
+          paket: paket,
+          penawaran: penawaran,
+          pesanan: pesanan,
+        );
+        _updateInMemoryMessage(message.roomId, updatedEntity);
+      } else {
+        debugPrint('[ChatProvider] ⏭️ No update needed');
+
+        if (isActiveRoom) {
+          finalStatus = 'read';
+          shouldIncrementUnread = false;
+
+          await _repository.updateMessageStatus(
+            roomId: message.roomId,
+            messageId: message.messageId,
+            newStatus: finalStatus,
+          );
+        } else {
+          // ✅ CUSTOMER FEATURE: "received"
+          finalStatus = message.sendStatus == 'sent'
+              ? 'received' // ✅ Changed from "delivered"
+              : message.sendStatus;
+          shouldIncrementUnread = false;
+        }
+
+        // ✅ Update in-memory even if no Hive update
+        if (_allMessagesInMemory.containsKey(message.roomId)) {
+          final index = _allMessagesInMemory[message.roomId]!
+              .indexWhere((m) => m.messageId == message.messageId);
+          if (index != -1) {
+            _allMessagesInMemory[message.roomId]![index] =
+                _allMessagesInMemory[message.roomId]![index]
+                    .copyWith(sendStatus: finalStatus);
+          }
+        }
+      }
     } else {
+      debugPrint('[ChatProvider] 🆕 New incoming message');
+
       if (isActiveRoom) {
         finalStatus = 'read';
         shouldIncrementUnread = false;
@@ -950,24 +1146,30 @@ class ChatProvider extends ChangeNotifier {
 
         await _repository.addMessage(entity);
         await _repository.clearRoomUnread(message.roomId);
+
+        // ✅ CUSTOMER FEATURE: Add to in-memory
+        _addToInMemory(message.roomId, entity);
       } else {
-        finalStatus = 'delivered';
+        // ✅ CUSTOMER FEATURE: "received" instead of "delivered"
+        finalStatus = 'received'; // ✅ Changed from "delivered"
         shouldIncrementUnread = true;
 
         final entity = ChatMessageEntity.fromChatModel(
-          message.copyWith(sendStatus: 'delivered'),
+          message.copyWith(sendStatus: 'received'), // ✅ Changed
           paket: paket,
           penawaran: penawaran,
           pesanan: pesanan,
         );
 
         await _repository.addMessage(entity);
+
+        // ✅ CUSTOMER FEATURE: Add to in-memory
+        _addToInMemory(message.roomId, entity);
       }
 
       await _repository.updateRoomWithMessage(
         roomId: message.roomId,
-        lastMessage:
-            message.message.isEmpty ? '📦 Paket ditawarkan' : message.message,
+        lastMessage: _buildLastMessage(message),
         lastMessageAt: message.sentAt,
         incrementUnread: shouldIncrementUnread,
       );
@@ -977,15 +1179,22 @@ class ChatProvider extends ChangeNotifier {
       }
     }
 
+    // ✅ Sync status to API if status changed
     if (message.sendStatus != finalStatus) {
+      debugPrint(
+          '[ChatProvider] 🔄 Syncing status to API: ${message.sendStatus} → $finalStatus');
       _apiService?.updateMessageStatus(
-          messageId: message.messageId, status: finalStatus);
+        messageId: message.messageId,
+        status: finalStatus,
+      );
     }
   }
 
   Future<void> _handleRoomCreated(
       String roomId, String roomName, DateTime createdAt) async {
     if (_apiService == null || _currentUserId == null) return;
+
+    debugPrint('[ChatProvider] 🆕 Room created: $roomId');
 
     final roomModels = await _apiService!.fetchRooms(
       userId: _currentUserId!,
@@ -997,6 +1206,164 @@ class ChatProvider extends ChangeNotifier {
       _roomInfoCache[roomModels.first.roomId] = roomModels.first;
       await _chatService.joinRoom(roomId);
       onRoomUpdated?.call(roomId);
+    }
+  }
+
+  // =========================================
+  // ✅ IN-MEMORY SYNC HELPERS
+  // These methods keep in-memory storage in sync with Hive
+  // =========================================
+
+  /// Add or update message in in-memory storage
+  void _addToInMemory(String roomId, ChatMessageEntity entity) {
+    if (!_allMessagesInMemory.containsKey(roomId)) {
+      _allMessagesInMemory[roomId] = [];
+    }
+
+    // Check if already exists
+    final existingIndex = _allMessagesInMemory[roomId]!
+        .indexWhere((m) => m.messageId == entity.messageId);
+
+    if (existingIndex >= 0) {
+      // Replace existing
+      _allMessagesInMemory[roomId]![existingIndex] = entity;
+      debugPrint('[ChatProvider] 🔄 Updated in-memory: ${entity.messageId}');
+    } else {
+      // Add new
+      _allMessagesInMemory[roomId]!.add(entity);
+      debugPrint('[ChatProvider] ➕ Added to in-memory: ${entity.messageId}');
+    }
+
+    // Keep sorted
+    _allMessagesInMemory[roomId]!.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+  }
+
+  /// Update existing message in in-memory storage
+  void _updateInMemoryMessage(String roomId, ChatMessageEntity entity) {
+    if (!_allMessagesInMemory.containsKey(roomId)) {
+      _allMessagesInMemory[roomId] = [entity];
+      return;
+    }
+
+    final index = _allMessagesInMemory[roomId]!
+        .indexWhere((m) => m.messageId == entity.messageId);
+
+    if (index >= 0) {
+      _allMessagesInMemory[roomId]![index] = entity;
+      debugPrint('[ChatProvider] 🔄 Updated in-memory: ${entity.messageId}');
+    } else {
+      _allMessagesInMemory[roomId]!.add(entity);
+      _allMessagesInMemory[roomId]!
+          .sort((a, b) => a.sentAt.compareTo(b.sentAt));
+      debugPrint('[ChatProvider] ➕ Added to in-memory: ${entity.messageId}');
+    }
+  }
+
+  /// Remove message from in-memory storage
+  void _removeFromInMemory(String roomId, String messageId) {
+    if (_allMessagesInMemory.containsKey(roomId)) {
+      _allMessagesInMemory[roomId]!
+          .removeWhere((m) => m.messageId == messageId);
+      debugPrint('[ChatProvider] 🗑️ Removed from in-memory: $messageId');
+    }
+  }
+
+  // =========================================
+  // SPECIAL UPDATES
+  // =========================================
+
+  /// Update penawaran to pesanan (Customer only - untuk menerima pesanan)
+  /// Vendor provider tidak perlu method ini karena vendor yang create offer
+  Future<bool> updatePenawaranToPesanan({
+    required ChatModel message,
+    required String pesananId,
+  }) async {
+    try {
+      if (pesananId.isEmpty) {
+        debugPrint('[ChatProvider] ❌ Pesanan ID kosong');
+        return false;
+      }
+
+      if (_apiService == null) {
+        debugPrint('[ChatProvider] ❌ API Service tidak tersedia');
+        return false;
+      }
+
+      debugPrint('[ChatProvider] 🔄 Updating penawaran to pesanan...');
+      debugPrint('  Room ID: ${message.roomId}');
+      debugPrint('  Message ID: ${message.messageId}');
+      debugPrint('  Pesanan ID: $pesananId');
+
+      // Step 1: Update via API
+      final newMessage = message.copyWith(noInvoice: pesananId);
+      final result = await _apiService!.update(newMessage);
+
+      if (result.isEmpty) {
+        debugPrint('[ChatProvider] ⚠️ API returned empty result');
+        return false;
+      }
+
+      debugPrint('[ChatProvider] ✅ API update successful');
+
+      // Step 2: Load pesanan data
+      final pesanan = await _loadPesananModel(pesananId);
+
+      if (pesanan == null) {
+        debugPrint('[ChatProvider] ⚠️ Pesanan not found: $pesananId');
+      }
+
+      // Step 3: Get current message from Hive to preserve existing data
+      final currentMessage =
+          await _repository.getMessage(message.roomId, message.messageId);
+
+      if (currentMessage == null) {
+        debugPrint('[ChatProvider] ⚠️ Current message not found in Hive');
+        return false;
+      }
+
+      // Step 4: Create updated entity with all data preserved
+      final updatedEntity = currentMessage.copyWith(
+        pesanan: pesanan,
+        paket: currentMessage.paket,
+        penawaran: currentMessage.penawaran,
+      );
+
+      // Step 5: Update in Hive (using upsert pattern)
+      await _repository.addMessage(updatedEntity);
+
+      debugPrint('[ChatProvider] ✅ Hive message updated');
+
+      // Step 6: Update in-memory storage
+      if (_allMessagesInMemory.containsKey(message.roomId)) {
+        final messages = _allMessagesInMemory[message.roomId]!;
+        final index =
+            messages.indexWhere((m) => m.messageId == message.messageId);
+
+        if (index != -1) {
+          _allMessagesInMemory[message.roomId]![index] = updatedEntity;
+          debugPrint('[ChatProvider] ✅ In-memory message updated');
+        } else {
+          debugPrint('[ChatProvider] ⚠️ Message not found in memory');
+        }
+      }
+
+      // Step 7: Update room last message
+      await _repository.updateRoomWithMessage(
+        roomId: message.roomId,
+        lastMessage: _buildLastMessage(message),
+        lastMessageAt: message.sentAt,
+        incrementUnread: false,
+      );
+
+      // Step 8: Notify listeners
+      notifyListeners();
+
+      debugPrint('[ChatProvider] ✅ Update complete');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('[ChatProvider] ❌ Error updating penawaran to pesanan: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
     }
   }
 
@@ -1079,107 +1446,29 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
-  Future<bool> updatePenawaranToPesanan({
-    required ChatModel message,
-    required String pesananId,
-  }) async {
-    try {
-      if (pesananId.isEmpty) {
-        debugPrint('[ChatProvider] ❌ Pesanan ID kosong');
-        return false;
-      }
-
-      if (_apiService == null) {
-        debugPrint('[ChatProvider] ❌ API Service tidak tersedia');
-        return false;
-      }
-
-      debugPrint('[ChatProvider] 🔄 Updating penawaran to pesanan...');
-      debugPrint('  Room ID: ${message.roomId}');
-      debugPrint('  Message ID: ${message.messageId}');
-      debugPrint('  Pesanan ID: $pesananId');
-
-      // Step 1: Update via API
-      final newMessage = message.copyWith(noInvoice: pesananId);
-      final result = await _apiService!.update(newMessage);
-
-      if (result.isEmpty) {
-        debugPrint('[ChatProvider] ⚠️ API returned empty result');
-        return false;
-      }
-
-      debugPrint('[ChatProvider] ✅ API update successful');
-
-      // Step 2: Load pesanan data
-      final pesanan = await _loadPesananModel(pesananId);
-
-      if (pesanan == null) {
-        debugPrint('[ChatProvider] ⚠️ Pesanan not found: $pesananId');
-      }
-
-      // Step 3: Get current message from Hive to preserve existing data
-      final currentMessage =
-          await _repository.getMessage(message.roomId, message.messageId);
-
-      if (currentMessage == null) {
-        debugPrint('[ChatProvider] ⚠️ Current message not found in Hive');
-        return false;
-      }
-
-      // Step 4: Create updated entity with all data preserved
-      final updatedEntity = currentMessage.copyWith(
-        pesanan: pesanan,
-        paket: currentMessage.paket,
-        penawaran: currentMessage.penawaran,
-      );
-
-      // Step 5: Update in Hive (using upsert pattern)
-      await _repository.addMessage(updatedEntity);
-
-      debugPrint('[ChatProvider] ✅ Hive message updated');
-
-      // Step 6: Update in-memory storage
-      if (_allMessagesInMemory.containsKey(message.roomId)) {
-        final messages = _allMessagesInMemory[message.roomId]!;
-        final index =
-            messages.indexWhere((m) => m.messageId == message.messageId);
-
-        if (index != -1) {
-          _allMessagesInMemory[message.roomId]![index] = updatedEntity;
-          debugPrint('[ChatProvider] ✅ In-memory message updated');
-        } else {
-          debugPrint('[ChatProvider] ⚠️ Message not found in memory');
-        }
-      }
-
-      // Step 7: Update room last message (optional)
-      await _repository.updateRoomWithMessage(
-        roomId: message.roomId,
-        lastMessage:
-            message.message.isEmpty ? '📋 Pesanan dibuat' : message.message,
-        lastMessageAt: message.sentAt,
-        incrementUnread: false,
-      );
-
-      // Step 8: Notify listeners
-      notifyListeners();
-
-      debugPrint('[ChatProvider] ✅ Update complete');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('[ChatProvider] ❌ Error updating penawaran to pesanan: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
+  String _buildLastMessage(ChatModel message) {
+    if (message.message.isNotEmpty) {
+      return message.message;
     }
+
+    if (message.noInvoice?.isNotEmpty == true) {
+      return "🧾 Customer menerima pesanan";
+    }
+
+    if (message.noPenawaran?.isNotEmpty == true) {
+      return "💰 Penawaran baru";
+    }
+
+    return "📦 Paket ditawarkan";
   }
 
-  // ✅ NEW: Clear in-memory storage for a room
+  /// Clear in-memory storage for a specific room
   void clearInMemoryMessages(String roomId) {
     _allMessagesInMemory.remove(roomId);
     debugPrint('[ChatProvider] 🧹 Cleared in-memory messages for: $roomId');
   }
 
-  // ✅ NEW: Clear all in-memory storage
+  /// Clear all in-memory storage
   void clearAllInMemoryMessages() {
     _allMessagesInMemory.clear();
     debugPrint('[ChatProvider] 🧹 Cleared all in-memory messages');

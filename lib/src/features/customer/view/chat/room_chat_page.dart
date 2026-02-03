@@ -168,9 +168,7 @@ class _RoomChatPageState extends State<RoomChatPage>
 
     // Empty state
     if (roomChatProv.activeRoomId == null && widget.partnerId == null) {
-      return const Scaffold(
-        body: Center(child: Text("Tidak ada chat")),
-      );
+      return _buildEmptyState();
     }
 
     // Main UI
@@ -227,11 +225,11 @@ class _RoomChatPageState extends State<RoomChatPage>
                   ],
                 ),
               ),
-    
+
             // Messages stream
             Expanded(
               child: roomChatProv.activeRoomId == null
-                  ? const Center(child: Text('Memuat pesan...'))
+                  ? _buildEmptyState()
                   : StreamBuilder<List<ChatMessageEntity>>(
                       stream: chatProv.repository
                           .getMessagesStream(roomChatProv.activeRoomId!),
@@ -241,11 +239,11 @@ class _RoomChatPageState extends State<RoomChatPage>
                             child: CircularProgressIndicator(),
                           );
                         }
-    
+
                         if (!snapshot.hasData || snapshot.data!.isEmpty) {
                           return _buildEmptyState();
                         }
-    
+
                         final entities = snapshot.data!;
                         return _buildMessagesList(
                           context,
@@ -257,7 +255,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                       },
                     ),
             ),
-    
+
             // Input area
             _buildInputArea(roomChatProv, userProv),
           ],
@@ -431,6 +429,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                       ChatPackageCard(
                         paket: paket,
                         isMe: isMe,
+                        onTap: () {},
                       ),
                     if (message.message.isNotEmpty)
                       ChatBubble(

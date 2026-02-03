@@ -319,62 +319,87 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
     final missingFields = _getMissingFields(customer);
 
     return Container(
-      margin: const EdgeInsets.only(
-        top: 16,
-      ),
+      margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        border: Border.all(color: Colors.orange.shade200),
+        color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.blue.shade100,
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.orange.shade700,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.person_outline,
+                  color: Colors.blue.shade700,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Profil Anda Belum Lengkap',
-                  style: TextStyle(
-                    color: Colors.orange.shade900,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Lengkapi Profil Anda',
+                      style: TextStyle(
+                        color: Colors.grey.shade900,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${missingFields.length} informasi belum dilengkapi',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            'Lengkapi data berikut untuk pengalaman yang lebih baik:',
+            'Data yang masih perlu dilengkapi:',
             style: TextStyle(
-              color: Colors.orange.shade800,
+              color: Colors.grey.shade700,
               fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 8),
           ...missingFields.map((field) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.circle,
-                    size: 6,
-                    color: Colors.orange.shade700,
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade400,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Text(
                     field,
                     style: TextStyle(
-                      color: Colors.orange.shade800,
+                      color: Colors.grey.shade700,
                       fontSize: 13,
                     ),
                   ),
@@ -382,10 +407,10 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
               ),
             );
           }).toList(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
-            child: TextButton(
+            child: OutlinedButton(
               onPressed: () {
                 context.read<NavigationProvider>().navigateToPage(
                       context,
@@ -393,16 +418,19 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
                       targetTabIndex: 3,
                     );
               },
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue.shade700,
+                side: BorderSide(
+                  color: Colors.blue.shade300,
+                  width: 1.5,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
               child: const Text(
-                'Lengkapi Profil',
+                'Lengkapi Sekarang',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

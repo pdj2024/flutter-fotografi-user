@@ -1,30 +1,39 @@
-/// Enum untuk status pengiriman pesan
+/// ✅ FIXED: Enum untuk status pengiriman pesan
+/// Status flow: pending → sent → received → read (or failed)
 enum SendStatus {
-  pending('pending'),
-  sending('sending'),
-  sent('sent'),
-  delivered('delivered'),
-  read('read'),
-  failed('failed');
+  pending('pending'),     // Local only, belum hit API
+  sent('sent'),          // Terkirim ke server
+  received('received'),  // ✅ Changed from 'delivered' - Diterima di device
+  read('read'),          // Dibaca oleh penerima
+  failed('failed');      // Gagal terkirim
 
   final String value;
   const SendStatus(this.value);
 
   static SendStatus fromString(String? status) {
     if (status == null || status.isEmpty) return SendStatus.pending;
+    
+    // ✅ Handle backward compatibility for 'delivered'
+    if (status.toLowerCase() == 'delivered') {
+      return SendStatus.received;
+    }
+    
     return SendStatus.values.firstWhere(
       (e) => e.value.toLowerCase() == status.toLowerCase(),
       orElse: () => SendStatus.pending,
     );
   }
 
+  // ✅ Updated getters
   bool get isPending => this == SendStatus.pending;
-  bool get isSending => this == SendStatus.sending;
-  bool get isSent => index >= SendStatus.sent.index;
-  bool get isDelivered => index >= SendStatus.delivered.index;
+  bool get isSent => this == SendStatus.sent;
+  bool get isReceived => this == SendStatus.received; // ✅ Changed from isDelivered
   bool get isRead => this == SendStatus.read;
-  bool get isUnread => index < SendStatus.read.index;
   bool get isFailed => this == SendStatus.failed;
+  
+  // ✅ Composite checks
+  bool get isSuccessful => index >= SendStatus.sent.index && !isFailed;
+  bool get isUnread => index < SendStatus.read.index && !isFailed;
 }
 
 /// Enum untuk jenis pesan
@@ -48,6 +57,7 @@ enum JenisPesan {
   }
 }
 
+/// ✅ FIXED: ChatModel with correct status field names
 class ChatModel {
   final String messageId;
   final String roomId;
@@ -59,11 +69,11 @@ class ChatModel {
   final String? noInvoice; // No Pesanan (jika penawaran sudah jadi pesanan)
   final String? noPenawaran;
   final String status;
-  final String sendStatus;
+  final String sendStatus; // pending, sent, received, read, failed
   final String roomType;
   final DateTime sentAt;
   final DateTime? editedAt;
-  final DateTime? deliveredAt;
+  final DateTime? receivedAt; // ✅ Changed from deliveredAt
   final DateTime? readAt;
   final List<String> userIds;
   final List<String> receiverIds;
@@ -86,7 +96,7 @@ class ChatModel {
     required this.roomType,
     required this.sentAt,
     this.editedAt,
-    this.deliveredAt,
+    this.receivedAt, // ✅ Changed
     this.readAt,
     required this.userIds,
     required this.receiverIds,
@@ -167,8 +177,16 @@ class ChatModel {
       editedAt: json["Edited_At"] != null || json["editedAt"] != null
           ? _parseDateTime(json["Edited_At"] ?? json["editedAt"])
           : null,
-      deliveredAt: json["Delivered_At"] != null || json["deliveredAt"] != null
-          ? _parseDateTime(json["Delivered_At"] ?? json["deliveredAt"])
+      // ✅ Changed: Handle both receivedAt and deliveredAt for backward compatibility
+      receivedAt: json["Received_At"] != null || 
+                  json["receivedAt"] != null ||
+                  json["Delivered_At"] != null || 
+                  json["deliveredAt"] != null
+          ? _parseDateTime(
+              json["Received_At"] ?? 
+              json["receivedAt"] ?? 
+              json["Delivered_At"] ?? 
+              json["deliveredAt"])
           : null,
       readAt: json["Read_At"] != null || json["readAt"] != null
           ? _parseDateTime(json["Read_At"] ?? json["readAt"])
@@ -200,8 +218,9 @@ class ChatModel {
       sentAt: _parseDateTime(json["sentAt"]),
       editedAt:
           json["editedAt"] != null ? _parseDateTime(json["editedAt"]) : null,
-      deliveredAt: json["deliveredAt"] != null
-          ? _parseDateTime(json["deliveredAt"])
+      // ✅ Changed: Handle both receivedAt and deliveredAt
+      receivedAt: json["receivedAt"] != null || json["deliveredAt"] != null
+          ? _parseDateTime(json["receivedAt"] ?? json["deliveredAt"])
           : null,
       readAt: json["readAt"] != null ? _parseDateTime(json["readAt"]) : null,
       userIds: _parseUserIds(json["userIds"]),
@@ -231,6 +250,8 @@ class ChatModel {
       "room_type": roomType,
       "Sent_At": sentAt.toUtc().toIso8601String(),
       "Edited_At": editedAt?.toUtc().toIso8601String(),
+      "Received_At": receivedAt?.toUtc().toIso8601String(), // ✅ Changed
+      "Read_At": readAt?.toUtc().toIso8601String(),
       "user_Ids": userIds,
       "receiver_Ids": receiverIds,
     };
@@ -258,6 +279,8 @@ class ChatModel {
       "message": message,
       "sentAt": sentAt.toUtc().toIso8601String(),
       "editedAt": editedAt?.toUtc().toIso8601String(),
+      "receivedAt": receivedAt?.toUtc().toIso8601String(), // ✅ Changed
+      "readAt": readAt?.toUtc().toIso8601String(),
       "tipeUser": tipeUser,
       "noInvoice": noInvoice,
       "noPenawaran": noPenawaran,
@@ -288,7 +311,7 @@ class ChatModel {
     String? roomType,
     DateTime? sentAt,
     DateTime? editedAt,
-    DateTime? deliveredAt,
+    DateTime? receivedAt, // ✅ Changed
     DateTime? readAt,
     List<String>? userIds,
     List<String>? receiverIds,
@@ -309,7 +332,7 @@ class ChatModel {
       roomType: roomType ?? this.roomType,
       sentAt: sentAt ?? this.sentAt,
       editedAt: editedAt ?? this.editedAt,
-      deliveredAt: deliveredAt ?? this.deliveredAt,
+      receivedAt: receivedAt ?? this.receivedAt, // ✅ Changed
       readAt: readAt ?? this.readAt,
       userIds: userIds ?? this.userIds,
       receiverIds: receiverIds ?? this.receiverIds,
@@ -355,4 +378,8 @@ class ChatModel {
 
   @override
   int get hashCode => messageId.hashCode ^ roomId.hashCode;
+
+  // ✅ Backward compatibility getter
+  @Deprecated('Use receivedAt instead')
+  DateTime? get deliveredAt => receivedAt;
 }

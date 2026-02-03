@@ -118,35 +118,48 @@ class _EditAccountPageState extends State<EditAccountPage> {
               if (customer.userName == "" || customer.namaDisplay == "")
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 10),
+                  padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
-                    shape: BoxShape.rectangle,
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.orange.shade300),
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.blue.shade100,
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange.shade800,
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          Icons.info_outline,
+                          color: Colors.blue.shade700,
+                          size: 18,
+                        ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Flexible(
                         child: Text(
-                          "Demi keamanan dan pengalaman yang lebih baik, mohon lengkapi data profil Anda sebelum melanjutkan.",
+                          "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
                           maxLines: null,
                           overflow: TextOverflow.visible,
-                          style: TextStyle(color: Colors.orange.shade800),
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-    
+
               // Foto Section
               userProvider.photoUrl == null
                   ? Container(
