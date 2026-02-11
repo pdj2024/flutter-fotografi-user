@@ -2,14 +2,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/src/data/hive_entity/chat_message_entity.dart';
-import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
-import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
+import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
-/// ✅ FIXED: Repository dengan Migration Support dan Upsert Pattern
+/// ✅ IMPROVED: Repository dengan real-time Hive watch stream
 class HiveChatRepository {
   // Box names
   static const String _roomsBoxName = 'chat_rooms';
@@ -26,6 +26,9 @@ class HiveChatRepository {
       StreamController<List<RoomChatEntity>>.broadcast();
   final Map<String, StreamController<List<ChatMessageEntity>>>
       _messagesStreamControllers = {};
+
+  // ✅ NEW: Track box watch subscriptions
+  final Map<String, StreamSubscription> _boxWatchSubscriptions = {};
 
   // =========================================
   // INITIALIZATION
@@ -55,6 +58,9 @@ class HiveChatRepository {
       // Open boxes
       _roomsBox = await _safeOpenBox<RoomChatEntity>(_roomsBoxName);
       _metaBox = await _safeOpenBox(_metaBoxName);
+
+      // ✅ Setup rooms box watcher
+      _setupRoomsBoxWatcher();
 
       debugPrint('[HiveChatRepo] ✅ Initialized (${_roomsBox!.length} rooms)');
       _notifyRoomsUpdate();
@@ -92,15 +98,56 @@ class HiveChatRepository {
     final box = await _safeOpenBox<ChatMessageEntity>(boxName);
     _messagesBoxes[roomId] = box;
 
+    // ✅ Setup watcher untuk box ini
+    _setupMessagesBoxWatcher(roomId, box);
+
     debugPrint('[HiveChatRepo] 📦 Opened messages box: $roomId');
     return box;
   }
 
   Future<void> _closeMessagesBox(String roomId) async {
+    // ✅ Cancel box watch subscription
+    _boxWatchSubscriptions[roomId]?.cancel();
+    _boxWatchSubscriptions.remove(roomId);
+
     final box = _messagesBoxes.remove(roomId);
     if (box != null && box.isOpen) {
       await box.close();
     }
+  }
+
+  // ✅ NEW: Setup rooms box watcher
+  void _setupRoomsBoxWatcher() {
+    if (_roomsBox == null) return;
+
+    _roomsBox!.watch().listen((event) {
+      debugPrint('[HiveChatRepo] 📡 Rooms box changed');
+      _notifyRoomsUpdate();
+    });
+  }
+
+  // ✅ NEW: Setup messages box watcher
+  void _setupMessagesBoxWatcher(String roomId, Box<ChatMessageEntity> box) {
+    // Cancel existing subscription if any
+    _boxWatchSubscriptions[roomId]?.cancel();
+
+    // Create new subscription
+    _boxWatchSubscriptions[roomId] = box.watch().listen((BoxEvent event) {
+      debugPrint('[HiveChatRepo] 📡 Messages box changed: $roomId');
+      debugPrint(
+          '[HiveChatRepo]   Event: ${event.key}, deleted: ${event.deleted}');
+
+      // Emit to stream controller
+      if (_messagesStreamControllers.containsKey(roomId) &&
+          !_messagesStreamControllers[roomId]!.isClosed) {
+        final messages = _getMessagesFromBox(box);
+        _messagesStreamControllers[roomId]!.add(messages);
+        debugPrint(
+            '[HiveChatRepo] ✅ Stream updated with ${messages.length} messages');
+      }
+    });
+
+    debugPrint('[HiveChatRepo] 👁️ Box watcher setup for: $roomId');
   }
 
   // =========================================
@@ -124,9 +171,11 @@ class HiveChatRepository {
   RoomChatModel? getRoomModel(String roomId) =>
       getRoom(roomId)?.toRoomChatModel();
 
+  /// ✅ IMPROVED: Get total unread dari countStatusReceived
   int getTotalUnreadCount() {
     if (_roomsBox == null) return 0;
-    return _roomsBox!.values.fold(0, (sum, room) => sum + room.unread);
+    return _roomsBox!.values
+        .fold(0, (sum, room) => sum + room.countStatusReceived);
   }
 
   Future<void> setRooms(List<RoomChatEntity> rooms) async {
@@ -134,6 +183,11 @@ class HiveChatRepository {
     await _roomsBox!.clear();
     await _roomsBox!.putAll({for (var room in rooms) room.roomId: room});
     debugPrint('[HiveChatRepo] ✅ Set ${rooms.length} rooms');
+
+    // Debug info
+    final totalUnread = getTotalUnreadCount();
+    debugPrint('[HiveChatRepo] 📊 Total unread (received): $totalUnread');
+
     _notifyRoomsUpdate();
   }
 
@@ -146,38 +200,199 @@ class HiveChatRepository {
   Future<void> upsertRoom(RoomChatEntity room) async {
     if (_roomsBox == null) return;
     await _roomsBox!.put(room.roomId, room);
-    _notifyRoomsUpdate();
+    // No need to call _notifyRoomsUpdate() - box watcher will do it
   }
 
   Future<void> upsertRoomFromModel(RoomChatModel model) async {
     await upsertRoom(RoomChatEntity.fromRoomChatModel(model));
   }
 
+  /// ✅ IMPROVED: Update room dengan support untuk received list
   Future<void> updateRoomWithMessage({
     required String roomId,
     required String lastMessage,
     required DateTime lastMessageAt,
     bool incrementUnread = false,
+    bool addToReceivedList = false,
+    String? messageId,
   }) async {
     if (_roomsBox == null) return;
     final room = _roomsBox!.get(roomId);
     if (room == null) return;
 
+    List<String> updatedReceivedList =
+        List<String>.from(room.listIdMessageReceived);
+    int updatedReceivedCount = room.countStatusReceived;
+
+    if (addToReceivedList &&
+        messageId != null &&
+        !updatedReceivedList.contains(messageId)) {
+      updatedReceivedList.add(messageId);
+      updatedReceivedCount = updatedReceivedList.length;
+
+      debugPrint('[HiveChatRepo] ➕ Added to received list: $messageId');
+      debugPrint('[HiveChatRepo] 📊 Received count: $updatedReceivedCount');
+    }
+
     final updatedRoom = room.copyWith(
       lastMessage: lastMessage,
       lastMessageAt: lastMessageAt,
       unread: incrementUnread ? room.unread + 1 : room.unread,
+      countStatusReceived: updatedReceivedCount,
+      listIdMessageReceived: updatedReceivedList,
     );
+
     await _roomsBox!.put(roomId, updatedRoom);
-    _notifyRoomsUpdate();
+    // Box watcher will trigger update automatically
   }
 
   Future<void> clearRoomUnread(String roomId) async {
     if (_roomsBox == null) return;
     final room = _roomsBox!.get(roomId);
-    if (room != null && room.unread > 0) {
-      await _roomsBox!.put(roomId, room.copyWith(unread: 0));
-      _notifyRoomsUpdate();
+    if (room != null && (room.unread > 0 || room.countStatusReceived > 0)) {
+      await _roomsBox!.put(
+        roomId,
+        room.copyWith(
+          unread: 0,
+          countStatusReceived: 0,
+          listIdMessageReceived: [],
+        ),
+      );
+
+      debugPrint('[HiveChatRepo] ✅ Cleared unread for: $roomId');
+      debugPrint('[HiveChatRepo] 📊 Received count: 0');
+    }
+  }
+
+  Future<void> clearRoomReceivedList(String roomId) async {
+    if (_roomsBox == null) return;
+    final room = _roomsBox!.get(roomId);
+
+    if (room != null && room.countStatusReceived > 0) {
+      final updated = room.copyWith(
+        countStatusReceived: 0,
+        listIdMessageReceived: [],
+      );
+
+      await _roomsBox!.put(roomId, updated);
+
+      debugPrint('[HiveChatRepo] ✅ Cleared received list for room: $roomId');
+    }
+  }
+
+  Future<void> removeFromReceivedList(String roomId, String messageId) async {
+    if (_roomsBox == null) return;
+    final room = _roomsBox!.get(roomId);
+
+    if (room != null && room.listIdMessageReceived.contains(messageId)) {
+      List<String> updatedList = List<String>.from(room.listIdMessageReceived);
+      updatedList.remove(messageId);
+
+      final updated = room.copyWith(
+        countStatusReceived: updatedList.length,
+        listIdMessageReceived: updatedList,
+      );
+
+      await _roomsBox!.put(roomId, updated);
+
+      debugPrint('[HiveChatRepo] ✅ Removed $messageId from received list');
+      debugPrint('[HiveChatRepo] 📊 New received count: ${updatedList.length}');
+    }
+  }
+
+  Future<void> addToReceivedList(String roomId, String messageId) async {
+    if (_roomsBox == null) return;
+    final room = _roomsBox!.get(roomId);
+
+    if (room != null && !room.listIdMessageReceived.contains(messageId)) {
+      List<String> updatedList = List<String>.from(room.listIdMessageReceived);
+      updatedList.add(messageId);
+
+      final updated = room.copyWith(
+        countStatusReceived: updatedList.length,
+        listIdMessageReceived: updatedList,
+      );
+
+      await _roomsBox!.put(roomId, updated);
+
+      debugPrint('[HiveChatRepo] ➕ Added $messageId to received list');
+      debugPrint('[HiveChatRepo] 📊 New received count: ${updatedList.length}');
+    }
+  }
+
+  Future<void> recalculateUnreadForRoom(
+      String roomId, String currentUserId) async {
+    try {
+      debugPrint('[HiveChatRepo] 🔄 Recalculating unread for: $roomId');
+
+      final messages = await getMessages(roomId);
+
+      final receivedMessages = messages.where((msg) {
+        final isFromOther = msg.senderId != currentUserId;
+        final isReceived = msg.sendStatus == 'received';
+        return isFromOther && isReceived;
+      }).toList();
+
+      final receivedMessageIds =
+          receivedMessages.map((msg) => msg.messageId).toList();
+
+      final room = _roomsBox?.get(roomId);
+      if (room != null) {
+        final updated = room.copyWith(
+          countStatusReceived: receivedMessages.length,
+          listIdMessageReceived: receivedMessageIds,
+        );
+
+        await _roomsBox!.put(roomId, updated);
+
+        debugPrint('[HiveChatRepo] ✅ Recalculated unread for $roomId');
+        debugPrint(
+            '[HiveChatRepo] 📊 Received count: ${receivedMessages.length}');
+        debugPrint('[HiveChatRepo] 📋 Message IDs: $receivedMessageIds');
+      } else {
+        debugPrint('[HiveChatRepo] ⚠️ Room not found: $roomId');
+      }
+    } catch (e, st) {
+      debugPrint('[HiveChatRepo] ❌ Recalculate error for $roomId: $e\n$st');
+    }
+  }
+
+  Future<void> recalculateAllUnreadCounts(String currentUserId) async {
+    try {
+      final rooms = getRooms();
+
+      if (rooms.isEmpty) {
+        debugPrint('[HiveChatRepo] ⚠️ No rooms to recalculate');
+        return;
+      }
+
+      debugPrint(
+          '[HiveChatRepo] 🔄 Recalculating unread for ${rooms.length} rooms...');
+
+      int totalRecalculated = 0;
+      int totalUnreadCount = 0;
+
+      for (final room in rooms) {
+        try {
+          await recalculateUnreadForRoom(room.roomId, currentUserId);
+          totalRecalculated++;
+
+          final updatedRoom = _roomsBox?.get(room.roomId);
+          if (updatedRoom != null) {
+            totalUnreadCount += updatedRoom.countStatusReceived;
+          }
+        } catch (e) {
+          debugPrint(
+              '[HiveChatRepo] ⚠️ Failed to recalculate ${room.roomId}: $e');
+        }
+      }
+
+      debugPrint('[HiveChatRepo] ✅ Recalculation complete');
+      debugPrint(
+          '[HiveChatRepo] 📊 Recalculated: $totalRecalculated/${rooms.length} rooms');
+      debugPrint('[HiveChatRepo] 📊 Total unread: $totalUnreadCount');
+    } catch (e, st) {
+      debugPrint('[HiveChatRepo] ❌ Recalculate all error: $e\n$st');
     }
   }
 
@@ -185,7 +400,6 @@ class HiveChatRepository {
     if (_roomsBox == null) return;
     await _roomsBox!.delete(roomId);
     await deleteAllMessages(roomId);
-    _notifyRoomsUpdate();
   }
 
   // =========================================
@@ -199,14 +413,26 @@ class HiveChatRepository {
     return messages;
   }
 
+  /// ✅ IMPROVED: Stream with Hive box watch
   Stream<List<ChatMessageEntity>> getMessagesStream(String roomId) async* {
     final box = await _openMessagesBox(roomId);
-    yield _getMessagesFromBox(box);
 
+    // ✅ Initial emission - get current state
+    final initialMessages = _getMessagesFromBox(box);
+    debugPrint(
+        '[HiveChatRepo] 📤 Initial emission: ${initialMessages.length} messages');
+    yield initialMessages;
+
+    // ✅ Create controller if not exists
     if (!_messagesStreamControllers.containsKey(roomId)) {
       _messagesStreamControllers[roomId] =
           StreamController<List<ChatMessageEntity>>.broadcast();
+
+      debugPrint('[HiveChatRepo] 🎛️ Stream controller created for: $roomId');
     }
+
+    // ✅ Emit all future updates from controller
+    // The controller is fed by _setupMessagesBoxWatcher()
     yield* _messagesStreamControllers[roomId]!.stream;
   }
 
@@ -257,11 +483,9 @@ class HiveChatRepository {
     bool shouldUpdate = false;
 
     if (existing == null) {
-      // New message - always add
       shouldUpdate = true;
       debugPrint('[HiveChatRepo] ➕ Adding new: ${message.messageId}');
     } else {
-      // Check if nested data changed
       final paketChanged = _hasNestedDataChanged(
         existing.paket,
         message.paket,
@@ -290,20 +514,14 @@ class HiveChatRepository {
 
     if (shouldUpdate) {
       await box.put(message.messageId, message);
-      _notifyMessagesUpdate(message.roomId);
+      debugPrint('[HiveChatRepo] ✅ Message saved to Hive');
+      // Box watcher will trigger stream update automatically
     }
   }
 
-  /// ✅ NEW: Deep comparison helper
   bool _hasNestedDataChanged<T>(T? oldData, T? newData) {
-    // Both null - no change
     if (oldData == null && newData == null) return false;
-
-    // One is null, other isn't - changed
     if (oldData == null || newData == null) return true;
-
-    // Both exist - compare (implement equality check based on type)
-    // For now, treat any existence as changed if they differ
     return oldData.toString() != newData.toString();
   }
 
@@ -325,7 +543,6 @@ class HiveChatRepository {
     ));
   }
 
-  /// ✅ UPSERT: Batch add or update
   Future<void> addMessages(
       String roomId, List<ChatMessageEntity> messages) async {
     final box = await _openMessagesBox(roomId);
@@ -343,9 +560,9 @@ class HiveChatRepository {
 
     if (messagesToUpsert.isNotEmpty) {
       await box.putAll(messagesToUpsert);
-      _notifyMessagesUpdate(roomId);
       debugPrint(
           '[HiveChatRepo] ✅ Upserted ${messagesToUpsert.length} (added: $added, updated: $updated)');
+      // Box watcher will trigger stream update
     }
   }
 
@@ -363,7 +580,7 @@ class HiveChatRepository {
       return;
     }
     await box.put(message.messageId, message);
-    _notifyMessagesUpdate(message.roomId);
+    // Box watcher will trigger stream update
   }
 
   Future<void> updateMessageStatus({
@@ -375,13 +592,13 @@ class HiveChatRepository {
     final message = box.get(messageId);
 
     if (message != null) {
+      final oldStatus = message.sendStatus;
       DateTime? readAt;
       DateTime? receivedAt;
 
-      // ✅ Set timestamps based on status
       if (newStatus == 'read') {
         readAt = DateTime.now();
-        receivedAt = message.receivedAt ?? DateTime.now(); // Preserve or set
+        receivedAt = message.receivedAt ?? DateTime.now();
       } else if (newStatus == 'received') {
         receivedAt = DateTime.now();
       }
@@ -391,11 +608,18 @@ class HiveChatRepository {
           message.copyWith(
             sendStatus: newStatus,
             readAt: readAt,
-            receivedAt: receivedAt, // ✅ Changed from deliveredAt
+            receivedAt: receivedAt,
           ));
-      _notifyMessagesUpdate(roomId);
 
       debugPrint('[HiveChatRepo] ✅ Status: $messageId → $newStatus');
+
+      await _handleReceivedListOnStatusChange(
+        roomId: roomId,
+        messageId: messageId,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+      );
+      // Box watcher will trigger stream update
     } else {
       debugPrint('[HiveChatRepo] ⚠️ Message not found: $messageId');
     }
@@ -418,10 +642,10 @@ class HiveChatRepository {
       return;
     }
 
+    final oldStatus = existing.sendStatus;
     DateTime? readAt = existing.readAt;
     DateTime? receivedAt = existing.receivedAt;
 
-    // ✅ Update timestamps based on new status
     if (newStatus != null) {
       if (newStatus == 'read') {
         readAt = DateTime.now();
@@ -437,33 +661,55 @@ class HiveChatRepository {
       penawaran: penawaran ?? existing.penawaran,
       pesanan: pesanan ?? existing.pesanan,
       readAt: readAt,
-      receivedAt: receivedAt, // ✅ Changed from deliveredAt
+      receivedAt: receivedAt,
     );
 
     await box.put(messageId, updated);
-    _notifyMessagesUpdate(roomId);
 
     debugPrint('[HiveChatRepo] ✅ Smart update completed for: $messageId');
+
+    if (newStatus != null) {
+      await _handleReceivedListOnStatusChange(
+        roomId: roomId,
+        messageId: messageId,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+      );
+    }
+    // Box watcher will trigger stream update
+  }
+
+  Future<void> _handleReceivedListOnStatusChange({
+    required String roomId,
+    required String messageId,
+    required String oldStatus,
+    required String newStatus,
+  }) async {
+    if (oldStatus == 'received' && newStatus == 'read') {
+      await removeFromReceivedList(roomId, messageId);
+      debugPrint('[HiveChatRepo] 📉 Removed from received (read): $messageId');
+    } else if (oldStatus == 'sent' && newStatus == 'received') {
+      await addToReceivedList(roomId, messageId);
+      debugPrint('[HiveChatRepo] 📈 Added to received (new): $messageId');
+    }
   }
 
   Future<void> storeLatest100Messages(
       String roomId, List<ChatMessageEntity> messages) async {
     final box = await _openMessagesBox(roomId);
 
-    // Clear existing messages in Hive
     await box.clear();
 
-    // Store latest 100 (messages should already be sorted by sentAt ascending)
     final messagesToStore = <String, ChatMessageEntity>{};
     for (final message in messages) {
       messagesToStore[message.messageId] = message;
     }
 
     await box.putAll(messagesToStore);
-    _notifyMessagesUpdate(roomId);
 
     debugPrint(
         '[HiveChatRepo] ✅ Stored latest ${messages.length} messages in Hive (max 100)');
+    // Box watcher will trigger stream update
   }
 
   Future<bool> replaceLocalEcho({
@@ -473,7 +719,6 @@ class HiveChatRepository {
     final box = await _openMessagesBox(roomId);
     String? localKey;
 
-    // Find by localId
     for (final entry in box.toMap().entries) {
       if (entry.value.localId == serverMessage.messageId) {
         localKey = entry.key;
@@ -481,7 +726,6 @@ class HiveChatRepository {
       }
     }
 
-    // Fuzzy match if not found
     if (localKey == null) {
       for (final entry in box.toMap().entries) {
         final msg = entry.value;
@@ -498,16 +742,14 @@ class HiveChatRepository {
     if (localKey != null) {
       await box.delete(localKey);
       await box.put(serverMessage.messageId, serverMessage);
-      _notifyMessagesUpdate(roomId);
       debugPrint('[HiveChatRepo] 🔄 Replaced local echo: $localKey');
       return true;
     }
 
     debugPrint('[HiveChatRepo] ⚠️ Local echo not found, adding as new message');
-    // ✅ FIXED: Even if local echo not found, add the message
     await box.put(serverMessage.messageId, serverMessage);
-    _notifyMessagesUpdate(roomId);
     return false;
+    // Box watcher will trigger stream update
   }
 
   Future<void> markAllMessagesAsRead({
@@ -516,25 +758,30 @@ class HiveChatRepository {
   }) async {
     final box = await _openMessagesBox(roomId);
     final updatedMessages = <String, ChatMessageEntity>{};
+    final messageIdsToRemoveFromReceived = <String>[];
 
     for (final message in box.values) {
-      // Only update messages from others that aren't already read
       if (message.senderId != currentUserId && message.sendStatus != 'read') {
         updatedMessages[message.messageId] = message.copyWith(
           sendStatus: 'read',
           readAt: DateTime.now(),
-          receivedAt:
-              message.receivedAt ?? DateTime.now(), // Ensure receivedAt is set
+          receivedAt: message.receivedAt ?? DateTime.now(),
         );
+
+        if (message.sendStatus == 'received') {
+          messageIdsToRemoveFromReceived.add(message.messageId);
+        }
       }
     }
 
     if (updatedMessages.isNotEmpty) {
       await box.putAll(updatedMessages);
-      _notifyMessagesUpdate(roomId);
       debugPrint(
           '[HiveChatRepo] ✅ Marked ${updatedMessages.length} messages as read');
     }
+
+    await clearRoomReceivedList(roomId);
+    // Box watcher will trigger stream update
   }
 
   Future<void> updateMessageWithPesanan({
@@ -557,16 +804,18 @@ class HiveChatRepository {
 
     if (updatedMessages.isNotEmpty) {
       await box.putAll(updatedMessages);
-      _notifyMessagesUpdate(roomId);
       debugPrint(
           '[HiveChatRepo] ✅ Updated ${updatedMessages.length} with pesanan');
     }
+    // Box watcher will trigger stream update
   }
 
   Future<void> deleteMessage(String roomId, String messageId) async {
     final box = await _openMessagesBox(roomId);
     await box.delete(messageId);
-    _notifyMessagesUpdate(roomId);
+
+    await removeFromReceivedList(roomId, messageId);
+    // Box watcher will trigger stream update
   }
 
   Future<void> deleteAllMessages(String roomId) async {
@@ -575,6 +824,8 @@ class HiveChatRepository {
     await _closeMessagesBox(roomId);
     _messagesStreamControllers[roomId]?.close();
     _messagesStreamControllers.remove(roomId);
+
+    await clearRoomReceivedList(roomId);
   }
 
   // =========================================
@@ -624,6 +875,12 @@ class HiveChatRepository {
   }
 
   Future<void> close() async {
+    // ✅ Cancel all box watch subscriptions
+    for (final subscription in _boxWatchSubscriptions.values) {
+      await subscription.cancel();
+    }
+    _boxWatchSubscriptions.clear();
+
     await _roomsBox?.close();
     await _metaBox?.close();
     for (final box in _messagesBoxes.values) {
@@ -636,11 +893,31 @@ class HiveChatRepository {
   }
 
   void printStats() {
-    debugPrint('=== Hive Chat Repository ===');
+    debugPrint('═══════════════════════════════════════');
+    debugPrint('📊 HIVE CHAT REPOSITORY STATS');
+    debugPrint('═══════════════════════════════════════');
     debugPrint('Rooms: ${_roomsBox?.length ?? 0}');
     debugPrint('Message boxes: ${_messagesBoxes.length}');
+    debugPrint('Total Unread (Received): ${getTotalUnreadCount()}');
+
+    if (_roomsBox != null && _roomsBox!.isNotEmpty) {
+      debugPrint('\n📋 Room Details:');
+      for (final room in _roomsBox!.values) {
+        debugPrint('  ${room.roomId}:');
+        debugPrint('    - Partner: ${room.usernameLawan}');
+        debugPrint('    - Unread (old): ${room.unread}');
+        debugPrint('    - ✅ Received: ${room.countStatusReceived}');
+        debugPrint(
+            '    - Received IDs: ${room.listIdMessageReceived.length} messages');
+        debugPrint('    - Sent: ${room.countStatusSent}');
+        debugPrint('    - Last: ${room.lastMessage}');
+      }
+    }
+
     for (final entry in _messagesBoxes.entries) {
       debugPrint('  ${entry.key}: ${entry.value.length} messages');
     }
+
+    debugPrint('═══════════════════════════════════════');
   }
 }

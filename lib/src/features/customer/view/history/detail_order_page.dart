@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/constants/status_progres_constant.dart';
@@ -20,7 +21,6 @@ import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.d
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/revisi_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/selesaikan_dialog.dart';
@@ -41,6 +41,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   PesananModel? pesanan;
   MetodePembayaranModel? metodePembayaran;
 
+  late HistoryOrderProvider historyProvider;
+
   bool isLoading = false;
   String error = '';
 
@@ -50,6 +52,113 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   bool isProgressExpanded = true;
 
   int _previousHistoryCount = 0;
+
+  Timer? _updateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      fetchData();
+      _setupHistoryListener();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    historyProvider = context.read<HistoryOrderProvider>();
+
+    // ✅ Set initial history count
+    _previousHistoryCount =
+        historyProvider.getHistoryCount(widget.pesananModel.noBukti);
+  }
+
+  @override
+  void dispose() {
+    // ✅ Untrack order
+    if (pesanan != null) {
+      historyProvider.untrackOrder(pesanan!.noBukti);
+    }
+
+    // ✅ Cancel timer
+    _updateTimer?.cancel();
+
+    super.dispose();
+  }
+
+  void _setupHistoryListener() {
+    final historyProvider = context.read<HistoryOrderProvider>();
+
+    // Store listener reference so we can remove it
+    void historyListener() {
+      if (!mounted) return;
+
+      final currentCount =
+          historyProvider.getHistoryCount(widget.pesananModel.noBukti);
+
+      if (currentCount != _previousHistoryCount) {
+        debugPrint(
+            '[DetailOrderPage] 🔔 History changed: $_previousHistoryCount → $currentCount');
+        _previousHistoryCount = currentCount;
+        _fetchUpdatedData();
+      }
+    }
+
+    // Add listener
+    historyProvider.addListener(historyListener);
+  }
+
+  Future<void> fetchData() async {
+    try {
+      setState(() {
+        isLoading = true;
+        error = '';
+      });
+
+      pesanan = widget.pesananModel;
+
+      // ✅ Fetch dari provider (sudah real-time via FCM)
+      final historyProvider = context.read<HistoryOrderProvider>();
+
+      // ✅ Track order untuk FCM updates (no join needed)
+      debugPrint(
+          '[DetailOrderPage] 📍 Tracking order: ${widget.pesananModel.noBukti}');
+      historyProvider.trackOrder(widget.pesananModel.noBukti);
+
+      // Fetch initial history
+      await historyProvider.fetchHistoryForOrder(widget.pesananModel.noBukti);
+
+      // Fetch other data
+      paket = (await PaketService().getAll(noId: widget.pesananModel.idPaket))
+          .first;
+
+      final ulasanList =
+          await UlasanService().getAll(noOrder: pesanan!.noBukti);
+      ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
+
+      final metodePembayaranList = await MetodePembayaranService()
+          .getAll(caraBayar: pesanan!.metodeBayar);
+      metodePembayaran =
+          metodePembayaranList.isNotEmpty ? metodePembayaranList.first : null;
+
+      debugPrint('[DetailOrderPage] ✅ Data loaded');
+      debugPrint('[DetailOrderPage] ℹ️ Real-time updates via FCM');
+    } catch (e) {
+      debugPrint('[DetailOrderPage] ❌ Error: $e');
+      error = e.toString();
+      if (mounted) {
+        CustomSnackbar.showErrorSnackbar(context, e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   // =========================================
   // 🆕 CALLBACK SAAT HISTORY BERUBAH
@@ -66,21 +175,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     // 🔥 FETCH ULANG DATA
     debugPrint('[DetailOrderPage] 🔄 Fetching updated data...');
     _fetchUpdatedData();
-
-    // Optional: Show notification to user
-    // if (currentHistory.isNotEmpty) {
-    //   final latestProgress = currentHistory.first;
-
-    //   // Use WidgetsBinding to ensure we're not in build phase
-    //   WidgetsBinding.instance.addPostFrameCallback((_) {
-    //     if (mounted) {
-    //       CustomSnackbar.showSuccessSnackbar(
-    //           context, 'Progress baru: ${latestProgress.deskripsi}');
-    //     }
-    //   });
-    // }
   }
-
+  
   // 🆕 Separate method untuk fetch updated data
   Future<void> _fetchUpdatedData() async {
     if (!mounted) return;
@@ -124,75 +220,19 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     }
   }
 
-  // Fetch data histori order
-  Future<void> fetchData() async {
-    try {
-      setState(() {
-        isLoading = true;
-        error = '';
-      });
-
-      final historyProvider = context.read<HistoryOrderProvider>();
-      pesanan = widget.pesananModel;
-
-      // Fetch history (ini akan otomatis dipanggil setelah join berhasil di provider,
-      // tapi kita tetap panggil untuk memastikan)
-      if (pesanan != null) {
-        await historyProvider.fetchHistoryForOrder(pesanan!.noBukti);
-
-        paket = (await PaketService().getAll(noId: pesanan!.idPaket)).first;
-
-        final ulasanList =
-            await UlasanService().getAll(noOrder: pesanan!.noBukti);
-        ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
-
-        final metodePembayaranList = await MetodePembayaranService()
-            .getAll(caraBayar: pesanan!.metodeBayar);
-        metodePembayaran =
-            metodePembayaranList.isNotEmpty ? metodePembayaranList.first : null;
-      }
-    } catch (e) {
-      print(e);
-      error = e.toString();
-      CustomSnackbar.showErrorSnackbar(context, e.toString());
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  Future<void> fetchUpdatePesanan() async {
-    try {
-      setState(() {
-        isLoading = true;
-        error = '';
-      });
-
-      pesanan =
-          (await PesananService().getAll(noBukti: pesanan!.noBukti)).first;
-    } catch (e) {
-      print(e);
-      error = e.toString();
-      CustomSnackbar.showErrorSnackbar(context, e.toString());
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
   // =====================================================
   // 📝 SHOW REVISI DIALOG
   // =====================================================
   void _showRevisiDialog() {
+    if (pesanan == null) return;
+
     showDialog(
       context: context,
       builder: (context) => RevisiDialog(
         pesanan: pesanan!,
         onSuccess: () async {
           await fetchData();
-          await fetchUpdatePesanan();
+          await _fetchUpdatedData();
         },
       ),
     );
@@ -202,6 +242,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   // ✅ SHOW SELESAIKAN DIALOG
   // =====================================================
   void _showSelesaikanDialog() {
+    if (pesanan == null) return;
+
     final pesananProvider = context.read<PesananProvider>();
     showDialog(
       context: context,
@@ -209,8 +251,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
         pesanan: pesanan!,
         onSuccess: () async {
           await fetchData();
-          await pesananProvider.loadOrder(
-              userId: context.read<UserProvider>().userId ?? '');
+          await pesananProvider.loadOrder(context);
           Navigator.pop(context);
         },
       ),
@@ -218,9 +259,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   // =====================================================
-  // 📝 SHOW REVISI DIALOG
+  // 📝 SHOW ULASAN DIALOG
   // =====================================================
   void _showUlasanDialog() {
+    if (pesanan == null) return;
+
     showDialog(
       context: context,
       builder: (context) => UlasanDialog(
@@ -229,7 +272,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           final ulasanList =
               await UlasanService().getAll(noOrder: pesanan!.noBukti);
           ulasan = ulasanList.isNotEmpty ? ulasanList.first : null;
-          fetchUpdatePesanan();
+          _fetchUpdatedData();
           setState(() {});
         },
       ),
@@ -237,34 +280,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      fetchData();
-    });
-  }
-
-  @override
-  void dispose() {
-    if (pesanan != null) {
-      // Gunakan Provider.of dengan listen: false
-      try {
-        final historyProvider =
-            Provider.of<HistoryOrderProvider>(context, listen: false);
-        historyProvider.leaveOrder(pesanan!.noBukti);
-      } catch (e) {
-        debugPrint('Error leaving order: $e');
-      }
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final tanggal =
-        DateFormat("dd MMM yyyy", "id_ID").format(pesanan!.tglRealisasi);
-    final waktu = Helper.toLocalTime(pesanan!.tglRealisasi);
-
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
@@ -283,11 +299,45 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
           if (isLoading) {
             return DetailOrderShimmer(fetchData: fetchData);
           }
-    
+
+          // ✅ TAMBAHAN: Null check untuk pesanan
+          if (pesanan == null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 60,
+                    color: Colors.red.shade400,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Data pesanan tidak ditemukan',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => fetchData(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Muat Ulang'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Constants.primaryColorVendor,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           return RefreshIndicator(
             onRefresh: () async {
               await fetchData();
-              await fetchUpdatePesanan();
+              await _fetchUpdatedData();
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -297,9 +347,9 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                 children: [
                   // Profile Card dengan Chat Button
                   _buildProfileCard(),
-    
+
                   const SizedBox(height: 16),
-    
+
                   /// =======================
                   /// 💳 INFORMASI & RINGKASAN PEMBAYARAN (Expandable)
                   /// =======================
@@ -315,8 +365,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         ? Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Row(
                                   children: [
@@ -326,12 +375,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: pesanan!.statusBayar ==
-                                                "settlement"
-                                            ? Colors.green.shade50
-                                            : Colors.orange.shade50,
-                                        borderRadius:
-                                            BorderRadius.circular(6),
+                                        color:
+                                            pesanan!.statusBayar == "settlement"
+                                                ? Colors.green.shade50
+                                                : Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(6),
                                         border: Border.all(
                                           color: pesanan!.statusBayar ==
                                                   "settlement"
@@ -389,9 +437,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         const SizedBox(height: 8),
                         _buildInfoRow(
                           label: "Metode Pembayaran",
-                          value: pesanan!.metodeBayar != null
-                              ? pesanan!.metodeBayar!
-                              : "-",
+                          value: pesanan!.metodeBayar ?? "-",
                           icon: Icons.account_balance_wallet_outlined,
                         ),
                         const SizedBox(height: 8),
@@ -405,11 +451,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                               ? Colors.green
                               : Colors.orange,
                         ),
-    
+
                         const SizedBox(height: 20),
                         const Divider(),
                         const SizedBox(height: 16),
-    
+
                         // Ringkasan Pembayaran
                         const Text(
                           "Ringkasan Pembayaran",
@@ -422,8 +468,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         const SizedBox(height: 12),
                         _buildPriceRow(
                           "Subtotal",
-                          Helper.formatCurrency(pesanan!.subtotal -
-                              (metodePembayaran?.fee ?? 0)),
+                          Helper.formatCurrency(
+                              pesanan!.subtotal - (metodePembayaran?.fee ?? 0)),
                         ),
                         const SizedBox(height: 6),
                         _buildPriceRow(
@@ -431,15 +477,6 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                           Helper.formatCurrency(metodePembayaran?.fee ?? 0),
                         ),
                         const SizedBox(height: 8),
-                        // _buildPriceRow(
-                        //   "DPP (Dasar Pengenaan Pajak)",
-                        //   Helper.formatCurrency(pesanan!.totDpp?.toInt() ?? 0),
-                        // ),
-                        // const SizedBox(height: 8),
-                        // _buildPriceRow(
-                        //   "PPN ${pesanan!.ppn ?? 11}%",
-                        //   Helper.formatCurrency(pesanan!.totPpn ?? 0),
-                        // ),
                         const Divider(height: 24),
                         _buildPriceRow(
                           "Total Pembayaran",
@@ -450,12 +487,12 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                       ],
                     ),
                   ),
-    
+
                   /// =======================
                   /// 📊 PROGRESS PESANAN (Expandable) - 🆕 REAL-TIME
                   /// =======================
                   _buildProgressSection(),
-    
+
                   /// =======================
                   /// 📍 LOKASI & JADWAL
                   /// =======================
@@ -467,13 +504,13 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         _buildInfoRow(
                           icon: Icons.calendar_today_outlined,
                           label: "Tanggal",
-                          value: tanggal,
+                          value: Helper.formatTanggal(pesanan!.tglRealisasi),
                         ),
                         const SizedBox(height: 12),
                         _buildInfoRow(
                           icon: Icons.access_time,
                           label: "Waktu",
-                          value: waktu,
+                          value: Helper.toLocalTime(pesanan!.tglRealisasi),
                         ),
                         const SizedBox(height: 12),
                         _buildInfoRow(
@@ -518,87 +555,88 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                       ],
                     ),
                   ),
-    
+
                   /// =======================
                   /// 📦 DETAIL PAKET (Expandable)
                   /// =======================
-                  _buildExpandableCard(
-                    title: "Detail Paket",
-                    isExpanded: isPackageExpanded,
-                    onToggle: () {
-                      setState(() {
-                        isPackageExpanded = !isPackageExpanded;
-                      });
-                    },
-                    content: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color:
-                                    Constants.primaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10),
+                  if (paket != null)
+                    _buildExpandableCard(
+                      title: "Detail Paket",
+                      isExpanded: isPackageExpanded,
+                      onToggle: () {
+                        setState(() {
+                          isPackageExpanded = !isPackageExpanded;
+                        });
+                      },
+                      content: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Constants.primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.card_giftcard,
+                                  color: Constants.primaryColor,
+                                  size: 28,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.card_giftcard,
-                                color: Constants.primaryColor,
-                                size: 28,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      paket!.nama_paket,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      Helper.formatCurrency(pesanan!.harga),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: Constants.primaryColorVendor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (paket!.rincian.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            const Divider(),
+                            const SizedBox(height: 12),
+                            const Text(
+                              "Rincian Paket:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    paket!.nama_paket,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    Helper.formatCurrency(pesanan!.harga),
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: Constants.primaryColorVendor,
-                                    ),
-                                  ),
-                                ],
+                            const SizedBox(height: 8),
+                            Text(
+                              paket!.rincian,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                                height: 1.5,
                               ),
                             ),
                           ],
-                        ),
-                        if (paket!.rincian.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          const Divider(),
-                          const SizedBox(height: 12),
-                          const Text(
-                            "Rincian Paket:",
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            paket!.rincian,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.black87,
-                              height: 1.5,
-                            ),
-                          ),
                         ],
-                      ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -612,6 +650,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   // 🆕 REAL-TIME PROGRESS SECTION
   // =========================================
   Widget _buildProgressSection() {
+    if (pesanan == null) return const SizedBox.shrink();
+
     return Consumer<HistoryOrderProvider>(
       builder: (context, historyProvider, child) {
         final historyOrder =
@@ -839,6 +879,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   // 🆕 PROGRESS ERROR
   // =========================================
   Widget _buildProgressError(String errorMessage) {
+    if (pesanan == null) return const SizedBox.shrink();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -970,6 +1012,11 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   Widget _buildProfileCard() {
+    // ✅ Early return jika pesanan null
+    if (pesanan == null) {
+      return const SizedBox.shrink();
+    }
+
     final hasLinkUrl = pesanan!.linkUrl != null && pesanan!.linkUrl!.isNotEmpty;
     final isReviewStatus =
         pesanan!.statusProgresPesanan?.toLowerCase() == 'review';
@@ -1042,7 +1089,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                       ),
                       child: Center(
                         child: Text(
-                          (pesanan!.namaVendor!.isEmpty
+                          (pesanan!.namaVendor?.isEmpty ?? true
                                   ? "V"
                                   : pesanan!.namaVendor![0])
                               .toUpperCase(),
@@ -1419,6 +1466,8 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
   }
 
   Widget _buildUlasanCard() {
+    if (ulasan == null) return const SizedBox.shrink();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),

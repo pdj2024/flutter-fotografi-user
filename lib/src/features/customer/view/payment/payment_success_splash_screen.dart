@@ -30,7 +30,7 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
   Future<void> _fetchPesanan() {
     final pesananProvider = context.read<PesananProvider>();
     final userId = context.read<UserProvider>().customer!.noId;
-    return pesananProvider.loadOrder(userId: userId);
+    return pesananProvider.loadOrder(context);
   }
 
   @override

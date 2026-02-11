@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'paket_model.g.dart';
 
-@HiveType(typeId: 2)
+@HiveType(typeId: 3)
 class PaketModel {
   @HiveField(0)
   final String no_id;

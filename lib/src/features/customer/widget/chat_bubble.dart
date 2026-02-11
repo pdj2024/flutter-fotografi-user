@@ -4,7 +4,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'message_status_indicator.dart';
 
-/// ✅ Chat bubble with long press and copy functionality
+/// ✅ IMPROVED: Chat bubble with better visual design
 class ChatBubble extends StatefulWidget {
   final ChatModel message;
   final bool isMe;
@@ -26,7 +26,6 @@ class ChatBubble extends StatefulWidget {
 class _ChatBubbleState extends State<ChatBubble> {
   bool _isPressed = false;
 
-  /// ✅ Show context menu on long press - IMPROVED POSITIONING
   void _showContextMenu(BuildContext context) {
     final RenderBox? bubbleBox = context.findRenderObject() as RenderBox?;
     if (bubbleBox == null) return;
@@ -35,23 +34,18 @@ class _ChatBubbleState extends State<ChatBubble> {
     final Size bubbleSize = bubbleBox.size;
     final Size screenSize = MediaQuery.of(context).size;
 
-    // Hitung apakah menu harus muncul di atas atau di bawah
     final double spaceBelow =
         screenSize.height - (bubblePosition.dy + bubbleSize.height);
     final double spaceAbove = bubblePosition.dy;
     final bool showBelow = spaceBelow > 100 || spaceBelow > spaceAbove;
 
-    // Hitung posisi X (kiri atau kanan sesuai alignment bubble)
     final double leftPosition = widget.isMe
-        ? bubblePosition.dx +
-            bubbleSize.width -
-            160 // Align ke kanan untuk pesan sendiri
-        : bubblePosition.dx; // Align ke kiri untuk pesan partner
+        ? bubblePosition.dx + bubbleSize.width - 160
+        : bubblePosition.dx;
 
-    // Hitung posisi Y
     final double topPosition = showBelow
-        ? bubblePosition.dy + bubbleSize.height + 8 // Di bawah bubble + spacing
-        : bubblePosition.dy - 8; // Di atas bubble - spacing
+        ? bubblePosition.dy + bubbleSize.height + 8
+        : bubblePosition.dy - 8;
 
     final overlay = Overlay.of(context);
     OverlayEntry? overlayEntry;
@@ -59,14 +53,12 @@ class _ChatBubbleState extends State<ChatBubble> {
     overlayEntry = OverlayEntry(
       builder: (context) => Stack(
         children: [
-          // Tap detector untuk menutup menu
           Positioned.fill(
             child: GestureDetector(
               onTap: () => overlayEntry?.remove(),
               child: Container(color: Colors.transparent),
             ),
           ),
-          // Menu positioned
           Positioned(
             left: leftPosition.clamp(16.0, screenSize.width - 176),
             top: showBelow ? topPosition : null,
@@ -78,7 +70,6 @@ class _ChatBubbleState extends State<ChatBubble> {
                 tween: Tween(begin: 0.0, end: 1.0),
                 curve: Curves.easeOutBack,
                 builder: (context, value, child) {
-                  // ✅ FIX: Clamp value untuk memastikan selalu dalam range 0.0 - 1.0
                   final clampedValue = value.clamp(0.0, 1.0);
 
                   return Transform.scale(
@@ -87,7 +78,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                         ? Alignment.topCenter
                         : Alignment.bottomCenter,
                     child: Opacity(
-                      opacity: clampedValue, // ✅ Gunakan clamped value
+                      opacity: clampedValue,
                       child: child,
                     ),
                   );
@@ -108,7 +99,6 @@ class _ChatBubbleState extends State<ChatBubble> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Copy option
                       _buildMenuItem(
                         icon: Icons.copy_rounded,
                         iconColor: Constants.primaryColor,
@@ -118,8 +108,6 @@ class _ChatBubbleState extends State<ChatBubble> {
                           _copyMessage();
                         },
                       ),
-
-                      // Delete option (only for own messages)
                       if (widget.isMe && widget.onDelete != null) ...[
                         Divider(height: 1, color: Colors.grey.shade200),
                         _buildMenuItem(
@@ -133,8 +121,6 @@ class _ChatBubbleState extends State<ChatBubble> {
                           },
                         ),
                       ],
-
-                      // Retry option (only for failed messages)
                       if (widget.message.sendStatusEnum.isFailed &&
                           widget.isMe &&
                           widget.onRetry != null) ...[
@@ -161,12 +147,9 @@ class _ChatBubbleState extends State<ChatBubble> {
     );
 
     overlay.insert(overlayEntry);
-
-    // ✅ Haptic feedback saat menu muncul
     HapticFeedback.mediumImpact();
   }
 
-  /// ✅ Build menu item widget
   Widget _buildMenuItem({
     required IconData icon,
     required Color iconColor,
@@ -199,7 +182,6 @@ class _ChatBubbleState extends State<ChatBubble> {
     );
   }
 
-  /// ✅ Copy message to clipboard
   void _copyMessage() {
     Clipboard.setData(ClipboardData(text: widget.message.message));
 
@@ -207,7 +189,7 @@ class _ChatBubbleState extends State<ChatBubble> {
       SnackBar(
         content: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.check_circle_rounded,
               color: Colors.white,
               size: 20,
@@ -261,28 +243,31 @@ class _ChatBubbleState extends State<ChatBubble> {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                // Main bubble
+                // ✅ IMPROVED: Better bubble design
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
+                    // ✅ Better colors
                     color: widget.isMe
                         ? (isFailed
                             ? Colors.red.shade50
-                            : const Color.fromARGB(255, 195, 195, 241))
+                            : Constants.primaryColor) // Messenger blue
                         : Colors.white,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(widget.isMe ? 16 : 4),
-                      bottomRight: Radius.circular(widget.isMe ? 4 : 16),
+                      topLeft: const Radius.circular(18), // ✅ Rounder
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(widget.isMe ? 18 : 4),
+                      bottomRight: Radius.circular(widget.isMe ? 4 : 18),
                     ),
+                    // ✅ Softer shadow
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            Colors.black.withOpacity(_isPressed ? 0.1 : 0.05),
-                        blurRadius: _isPressed ? 4 : 2,
-                        offset: Offset(0, _isPressed ? 2 : 1),
+                        color: widget.isMe
+                            ? Constants.primaryColor.withOpacity(0.2)
+                            : Colors.black.withOpacity(0.08),
+                        blurRadius: _isPressed ? 4 : 8,
+                        offset: Offset(0, _isPressed ? 2 : 3),
                       ),
                     ],
                   ),
@@ -293,8 +278,11 @@ class _ChatBubbleState extends State<ChatBubble> {
                         widget.message.message,
                         style: TextStyle(
                           fontSize: 15,
-                          color:
-                              isFailed ? Colors.red.shade900 : Colors.black87,
+                          // ✅ White text for sent, black for received
+                          color: widget.isMe
+                              ? (isFailed ? Colors.red.shade900 : Colors.white)
+                              : Colors.black87,
+                          height: 1.4, // ✅ Better line spacing
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -305,7 +293,12 @@ class _ChatBubbleState extends State<ChatBubble> {
                             _formatTime(widget.message.sentAt),
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.grey.shade600,
+                              // ✅ Appropriate text color
+                              color: widget.isMe
+                                  ? (isFailed
+                                      ? Colors.red.shade700
+                                      : Colors.grey.shade200)
+                                  : Colors.grey.shade600,
                             ),
                           ),
                           if (widget.isMe) ...[

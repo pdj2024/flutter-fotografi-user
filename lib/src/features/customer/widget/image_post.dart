@@ -2,10 +2,15 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/services/media_preload_service.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 
 /// Widget untuk menampilkan gambar post dengan swipe horizontal.
+///
+/// ✅ UPDATED: Menggunakan MediaPreloadService untuk background preloading
+/// ✅ Semua gambar di-preload saat widget dibuat
+/// ✅ User tidak perlu menunggu saat swipe
 ///
 /// TIDAK menggunakan PageView untuk menghindari unbounded height error.
 /// Menggunakan AnimatedSwitcher + GestureDetector untuk navigasi.
@@ -13,11 +18,15 @@ import 'package:mpjnew/src/data/models/portofolio_model.dart';
 class ImagePost extends StatefulWidget {
   final List<MediaUrlModel> mediaUrl;
   final BoxFit fit;
+  
+  // ✅ NEW: Control preloading behavior
+  final bool enablePreload;
 
   const ImagePost({
     super.key,
     required this.mediaUrl,
     this.fit = BoxFit.cover,
+    this.enablePreload = true, // ✅ Default: enabled
   });
 
   @override
@@ -28,6 +37,117 @@ class _ImagePostState extends State<ImagePost> {
   int _currentIndex = 0;
   bool _isImageLoaded = false;
   double? _imageHeight;
+  
+  // ✅ NEW: Preload service instance
+  final MediaPreloadService _preloadService = MediaPreloadService();
+  
+  // ✅ NEW: Track preload status
+  bool _isPreloading = false;
+  final Set<int> _preloadedIndices = {};
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // ✅ Preload all images in background
+    if (widget.enablePreload) {
+      _preloadAllImages();
+    }
+  }
+
+  @override
+  void didUpdateWidget(ImagePost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // ✅ If media URLs changed, preload new images
+    if (widget.mediaUrl != oldWidget.mediaUrl && widget.enablePreload) {
+      _preloadAllImages();
+    }
+  }
+
+  // ✅ NEW: Preload all images in this post
+  Future<void> _preloadAllImages() async {
+    if (_isPreloading) return;
+    
+    final validMedia = widget.mediaUrl
+        .where((media) => media.idMedia != null && media.idMedia!.isNotEmpty)
+        .toList();
+
+    if (validMedia.isEmpty) return;
+
+    setState(() {
+      _isPreloading = true;
+    });
+
+    try {
+      debugPrint('[ImagePost] 🚀 Preloading ${validMedia.length} images...');
+
+      // Extract URLs from media
+      final urls = validMedia
+          .map((media) => media.displayUrl)
+          .where((url) => url != null && url.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      // Preload with high priority (this is the current post user is viewing)
+      await _preloadService.preloadUrls(
+        urls,
+        priority: 10, // High priority
+      );
+
+      // Mark all as preloaded
+      if (mounted) {
+        setState(() {
+          for (int i = 0; i < validMedia.length; i++) {
+            _preloadedIndices.add(i);
+          }
+        });
+      }
+
+      debugPrint('[ImagePost] ✅ All images preloaded');
+    } catch (e) {
+      debugPrint('[ImagePost] ⚠️ Preload error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPreloading = false;
+        });
+      }
+    }
+  }
+
+  // ✅ IMPROVED: Preload adjacent images when index changes
+  void _preloadAdjacentImages(int currentIndex) {
+    final validMedia = widget.mediaUrl
+        .where((media) => media.idMedia != null && media.idMedia!.isNotEmpty)
+        .toList();
+
+    // Preload next image
+    if (currentIndex + 1 < validMedia.length && 
+        !_preloadedIndices.contains(currentIndex + 1)) {
+      final nextMedia = validMedia[currentIndex + 1];
+      if (nextMedia.displayUrl != null) {
+        _preloadService.preloadUrls(
+          [nextMedia.displayUrl!],
+          priority: 9,
+        );
+        _preloadedIndices.add(currentIndex + 1);
+      }
+    }
+
+    // Preload previous image
+    if (currentIndex - 1 >= 0 && 
+        !_preloadedIndices.contains(currentIndex - 1)) {
+      final prevMedia = validMedia[currentIndex - 1];
+      if (prevMedia.displayUrl != null) {
+        _preloadService.preloadUrls(
+          [prevMedia.displayUrl!],
+          priority: 9,
+        );
+        _preloadedIndices.add(currentIndex - 1);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +174,9 @@ class _ImagePostState extends State<ImagePost> {
                   _currentIndex++;
                   _isImageLoaded = false;
                 });
+                
+                // ✅ Preload adjacent when changing index
+                _preloadAdjacentImages(_currentIndex);
               }
             }
             // Swipe ke kanan (previous)
@@ -63,6 +186,9 @@ class _ImagePostState extends State<ImagePost> {
                   _currentIndex--;
                   _isImageLoaded = false;
                 });
+                
+                // ✅ Preload adjacent when changing index
+                _preloadAdjacentImages(_currentIndex);
               }
             }
           },
@@ -90,6 +216,7 @@ class _ImagePostState extends State<ImagePost> {
                   child: _buildImageItem(
                     validMedia[_currentIndex],
                     key: ValueKey(_currentIndex),
+                    isPreloaded: _preloadedIndices.contains(_currentIndex),
                   ),
                 ),
 
@@ -99,6 +226,14 @@ class _ImagePostState extends State<ImagePost> {
                     top: 12,
                     right: 12,
                     child: _buildCounter(validMedia.length),
+                  ),
+                
+                // ✅ NEW: Preload indicator (optional, for debugging)
+                if (widget.enablePreload && _isPreloading)
+                  Positioned(
+                    bottom: 12,
+                    left: 12,
+                    child: _buildPreloadIndicator(),
                   ),
               ],
             ),
@@ -115,13 +250,22 @@ class _ImagePostState extends State<ImagePost> {
     );
   }
 
-  Widget _buildImageItem(MediaUrlModel media, {Key? key}) {
+  Widget _buildImageItem(
+    MediaUrlModel media, {
+    Key? key,
+    bool isPreloaded = false,
+  }) {
     return CachedNetworkImage(
       key: key,
       imageUrl: media.idMedia!,
       fit: widget.fit,
       width: double.infinity,
       placeholder: (context, url) {
+        // ✅ IMPROVED: Jika sudah preloaded, tampilkan loading yang lebih subtle
+        if (isPreloaded) {
+          return _buildSubtleLoadingPlaceholder();
+        }
+        
         // Tampilkan thumbnail sambil loading gambar utama
         if (media.thumbUrl != null && media.thumbUrl!.isNotEmpty) {
           return Stack(
@@ -252,6 +396,25 @@ class _ImagePostState extends State<ImagePost> {
     );
   }
 
+  // ✅ NEW: Subtle loading untuk gambar yang sudah preloaded
+  Widget _buildSubtleLoadingPlaceholder() {
+    return Container(
+      width: double.infinity,
+      height: _imageHeight ?? 300,
+      color: Colors.grey.shade50,
+      child: const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoadingOverlay() {
     return Center(
       child: Container(
@@ -293,23 +456,63 @@ class _ImagePostState extends State<ImagePost> {
     );
   }
 
+  // ✅ NEW: Preload indicator
+  Widget _buildPreloadIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Memuat...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildIndicator(int count) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
         count,
-        (index) => AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          height: 6,
-          width: _currentIndex == index ? 20 : 6,
-          decoration: BoxDecoration(
-            color:
-                _currentIndex == index ? Colors.black87 : Colors.grey.shade400,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
+        (index) {
+          // ✅ IMPROVED: Different color for preloaded images
+          final isPreloaded = _preloadedIndices.contains(index);
+          final isActive = _currentIndex == index;
+          
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            height: 6,
+            width: isActive ? 20 : 6,
+            decoration: BoxDecoration(
+              color: isActive
+                  ? Colors.black87
+                  : (isPreloaded ? Colors.grey.shade300 : Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          );
+        },
       ),
     );
   }

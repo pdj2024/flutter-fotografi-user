@@ -186,21 +186,13 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         );
 
         // Step 6: Navigate to payment page
+        context.read<NavigationProvider>().popAllToRoot();
         context.read<NavigationProvider>().navigateToPage(
               context,
               targetTabIndex: 2,
               WaitingPaymentPage(paymentData: pesanan.first),
             );
       }
-
-      /// 🔥 NAVIGASI DARI DATA NYATA
-      context.read<NavigationProvider>().navigateToPage(
-            context,
-            targetTabIndex: 2,
-            WaitingPaymentPage(
-              paymentData: pesanan.first,
-            ),
-          );
     } catch (e) {
       errorMessage = e.toString();
       CustomSnackbar.showErrorSnackbar(context, errorMessage!);
@@ -248,7 +240,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
               ),
             );
           }
-    
+
           /// =======================
           /// 2️⃣ ERROR STATE
           /// =======================
@@ -257,8 +249,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Colors.red),
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
                   const SizedBox(height: 12),
                   Text(
                     errorMessage!,
@@ -273,7 +264,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
               ),
             );
           }
-    
+
           /// =======================
           /// 3️⃣ EMPTY STATE
           /// =======================
@@ -282,14 +273,14 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
               child: Text("Data penawaran tidak tersedia"),
             );
           }
-    
+
           /// =======================
           /// 4️⃣ SUCCESS STATE
           /// =======================
           final tanggal = DateFormat("dd MMM yyyy", "id_ID")
               .format(penawaran!.tglRealisasi);
           final waktu = Helper.toLocalTime(penawaran!.tglRealisasi);
-    
+
           return Column(
             children: [
               Expanded(
@@ -332,7 +323,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-    
+
                       /// =======================
                       /// 💳 METODE PEMBAYARAN
                       /// =======================
@@ -395,8 +386,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                       ),
                                       const SizedBox(width: 12),
                                       Text(
-                                        textMetode ??
-                                            "Pilih Metode Pembayaran",
+                                        textMetode ?? "Pilih Metode Pembayaran",
                                         style: TextStyle(
                                           fontWeight: FontWeight.w600,
                                           color: kodeMetode == null
@@ -416,7 +406,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                             ),
                           ),
                         ),
-    
+
                       /// =======================
                       /// 📦 DETAIL PAKET (Expandable)
                       /// =======================
@@ -437,8 +427,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Constants.primaryColor
-                                        .withOpacity(0.1),
+                                    color:
+                                        Constants.primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Icon(
@@ -462,8 +452,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        Helper.formatCurrency(
-                                            penawaran!.harga),
+                                        Helper.formatCurrency(penawaran!.harga),
                                         style: TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w600,
@@ -499,7 +488,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ],
                         ),
                       ),
-    
+
                       /// =======================
                       /// 📍 LOKASI & JADWAL
                       /// =======================
@@ -567,11 +556,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   ),
                 ),
               ),
-    
+
               /// =======================
               /// 💰 BOTTOM BAR - RINGKASAN
               /// =======================
-    
+
               _buildExpandableBottomBar(),
             ],
           );

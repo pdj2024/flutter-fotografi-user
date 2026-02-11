@@ -1,23 +1,23 @@
 /// ✅ FIXED: Enum untuk status pengiriman pesan
 /// Status flow: pending → sent → received → read (or failed)
 enum SendStatus {
-  pending('pending'),     // Local only, belum hit API
-  sent('sent'),          // Terkirim ke server
-  received('received'),  // ✅ Changed from 'delivered' - Diterima di device
-  read('read'),          // Dibaca oleh penerima
-  failed('failed');      // Gagal terkirim
+  pending('pending'), // Local only, belum hit API
+  sent('sent'), // Terkirim ke server
+  received('received'), // ✅ Changed from 'delivered' - Diterima di device
+  read('read'), // Dibaca oleh penerima
+  failed('failed'); // Gagal terkirim
 
   final String value;
   const SendStatus(this.value);
 
   static SendStatus fromString(String? status) {
     if (status == null || status.isEmpty) return SendStatus.pending;
-    
+
     // ✅ Handle backward compatibility for 'delivered'
     if (status.toLowerCase() == 'delivered') {
       return SendStatus.received;
     }
-    
+
     return SendStatus.values.firstWhere(
       (e) => e.value.toLowerCase() == status.toLowerCase(),
       orElse: () => SendStatus.pending,
@@ -27,10 +27,11 @@ enum SendStatus {
   // ✅ Updated getters
   bool get isPending => this == SendStatus.pending;
   bool get isSent => this == SendStatus.sent;
-  bool get isReceived => this == SendStatus.received; // ✅ Changed from isDelivered
+  bool get isReceived =>
+      this == SendStatus.received; // ✅ Changed from isDelivered
   bool get isRead => this == SendStatus.read;
   bool get isFailed => this == SendStatus.failed;
-  
+
   // ✅ Composite checks
   bool get isSuccessful => index >= SendStatus.sent.index && !isFailed;
   bool get isUnread => index < SendStatus.read.index && !isFailed;
@@ -178,14 +179,13 @@ class ChatModel {
           ? _parseDateTime(json["Edited_At"] ?? json["editedAt"])
           : null,
       // ✅ Changed: Handle both receivedAt and deliveredAt for backward compatibility
-      receivedAt: json["Received_At"] != null || 
-                  json["receivedAt"] != null ||
-                  json["Delivered_At"] != null || 
-                  json["deliveredAt"] != null
-          ? _parseDateTime(
-              json["Received_At"] ?? 
-              json["receivedAt"] ?? 
-              json["Delivered_At"] ?? 
+      receivedAt: json["Received_At"] != null ||
+              json["receivedAt"] != null ||
+              json["Delivered_At"] != null ||
+              json["deliveredAt"] != null
+          ? _parseDateTime(json["Received_At"] ??
+              json["receivedAt"] ??
+              json["Delivered_At"] ??
               json["deliveredAt"])
           : null,
       readAt: json["Read_At"] != null || json["readAt"] != null
@@ -199,25 +199,24 @@ class ChatModel {
   }
 
   /// FROM SignalR event data
-  factory ChatModel.fromSignalR(
-      Map<String, dynamic> json, String currentUserId) {
+  factory ChatModel.fromFCM(Map<String, dynamic> json, String currentUserId) {
     return ChatModel(
-      messageId: json["messageId"]?.toString() ?? "",
-      roomId: json["roomId"]?.toString() ?? "",
-      senderId:
-          json["senderId"]?.toString() ?? json["sender"]?.toString() ?? "",
-      tipeUser: json["tipeUser"]?.toString() ?? "",
+      messageId: json["message_id"]?.toString() ?? "",
+      roomId: json["room_id"]?.toString() ?? "",
+      senderId: json["sender_id"]?.toString() ?? "",
+      tipeUser: json["tipe_user"]?.toString() ?? "",
       message: json["message"]?.toString() ?? "",
-      jenisPesan: json["jenisPesan"]?.toString() ?? "text",
-      idPaket: json["idPaket"]?.toString(),
-      noInvoice: json["noInvoice"]?.toString() ?? json["noPesanan"]?.toString(),
-      noPenawaran: json["noPenawaran"]?.toString(),
+      jenisPesan: json["jenis_pesan"]?.toString() ?? "text",
+      idPaket: json["id_paket"]?.toString(),
+      noInvoice:
+          json["no_invoice"]?.toString() ?? json["no_pesanan"]?.toString(),
+      noPenawaran: json["no_penawaran"]?.toString(),
       status: json["status"]?.toString() ?? "aktif",
-      sendStatus: json["sendStatus"]?.toString() ?? "sent",
+      sendStatus: json["send_status"]?.toString() ?? "sent",
       roomType: json["roomType"]?.toString() ?? "direct",
-      sentAt: _parseDateTime(json["sentAt"]),
+      sentAt: _parseDateTime(json["sent_at"]),
       editedAt:
-          json["editedAt"] != null ? _parseDateTime(json["editedAt"]) : null,
+          json["edited_at"] != null ? _parseDateTime(json["edited_at"]) : null,
       // ✅ Changed: Handle both receivedAt and deliveredAt
       receivedAt: json["receivedAt"] != null || json["deliveredAt"] != null
           ? _parseDateTime(json["receivedAt"] ?? json["deliveredAt"])

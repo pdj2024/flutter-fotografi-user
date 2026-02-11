@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 
 /// ✅ UPDATED: Message status indicator with "received" instead of "delivered"
-/// 
+///
 /// Status flow:
 /// 1. pending → Clock icon (gray) - Message being sent
 /// 2. sent → Single check (gray) - Sent to server
@@ -42,7 +42,7 @@ class MessageStatusIndicator extends StatelessWidget {
       return Icon(
         Icons.access_time_rounded,
         size: size,
-        color: pendingColor ?? Colors.grey.shade500,
+        color: pendingColor ?? Colors.grey.shade200,
       );
     }
 
@@ -60,7 +60,7 @@ class MessageStatusIndicator extends StatelessWidget {
       return Icon(
         Icons.check_rounded,
         size: size,
-        color: sentColor ?? Colors.grey.shade500,
+        color: sentColor ?? Colors.grey.shade200,
       );
     }
 
@@ -69,7 +69,7 @@ class MessageStatusIndicator extends StatelessWidget {
       return Icon(
         Icons.done_all_rounded,
         size: size,
-        color: receivedColor ?? Colors.grey.shade500,
+        color: receivedColor ?? Colors.grey.shade200,
       );
     }
 
@@ -78,7 +78,7 @@ class MessageStatusIndicator extends StatelessWidget {
       return Icon(
         Icons.done_all_rounded,
         size: size,
-        color: readColor ?? Colors.blue.shade600,
+        color: readColor ?? Colors.blue.shade300,
       );
     }
 

@@ -3,10 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
@@ -14,19 +13,21 @@ import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:collection/collection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 /// ============================================
-/// 🔐 UserLogin - FIXED VERSION
+/// 🔐 UserLogin - FCM-ONLY VERSION
 /// ============================================
 /// Changes:
-/// 1. ✅ Compatible with new AuthService API
-/// 2. ✅ Removed forceRefresh parameter
-/// 3. ✅ Better error handling
-/// 4. ✅ Cleaner initialization flow
+/// 1. ✅ Removed all SignalR initialization
+/// 2. ✅ Uses FCM for real-time updates
+/// 3. ✅ Simpler initialization flow
+/// 4. ✅ Better error handling
 /// ============================================
 
 class UserLogin extends StatefulWidget {
@@ -77,7 +78,7 @@ class _UserLoginState extends State<UserLogin>
     super.dispose();
   }
 
-  /// ✅ Handle Google Login - Compatible with new AuthService
+  /// ✅ Handle Google Login - FCM-only version
   Future<void> handleLoginGoogle(
     BuildContext context,
     String targetPage,
@@ -90,14 +91,16 @@ class _UserLoginState extends State<UserLogin>
     setState(() => _isLoading = true);
 
     try {
-      print("═══════════════════════════════════════");
-      print("🔐 [UserLogin] Starting Google login...");
+      debugPrint("═══════════════════════════════════════");
+      debugPrint("🔐 [UserLogin] Starting Google login...");
 
       final provider = context.read<UserProvider>();
       final navigationProvider = context.read<NavigationProvider>();
       final chatProv = context.read<ChatProvider>();
+      final historyOrderProv = context.read<HistoryOrderProvider>();
+      final pesananProv = context.read<PesananProvider>();
 
-      // ✅ Login with Google (uses new AuthService.signIn())
+      // ✅ Login with Google
       final result = await provider.checkLoginGoogle(
         role: Constants.customer,
         silent: false,
@@ -105,15 +108,15 @@ class _UserLoginState extends State<UserLogin>
 
       if (!mounted) return;
 
-      print("📊 [UserLogin] Login result: ${result.name}");
+      debugPrint("📊 [UserLogin] Login result: ${result.name}");
 
       // ==========================================
       // CHECK LOGIN RESULT
       // ==========================================
 
       if (result.name == 'aktif') {
-        print("✅ [UserLogin] Login successful!");
-        print("   User: ${provider.customer?.namaDisplay}");
+        debugPrint("✅ [UserLogin] Login successful!");
+        debugPrint("   User: ${provider.customer?.namaDisplay}");
 
         // ==========================================
         // 1️⃣ REQUEST NOTIFICATION PERMISSION (Android 13+)
@@ -121,24 +124,34 @@ class _UserLoginState extends State<UserLogin>
         await _requestNotificationPermission(context);
 
         // ==========================================
-        // 2️⃣ INITIALIZE ChatProvider
+        // 2️⃣ INITIALIZE ChatProvider (FCM-based)
         // ==========================================
         await _initializeChatProvider(context, provider, chatProv);
 
         // ==========================================
-        // 3️⃣ INITIALIZE HistoryOrderProvider
+        // 3️⃣ INITIALIZE HistoryOrderProvider (FCM-based)
         // ==========================================
-        await _initializeHistoryOrderProvider(context, provider);
+        await _initializeHistoryOrderProvider(
+          context,
+          provider,
+          historyOrderProv,
+          pesananProv,
+        );
 
         // ==========================================
-        // 4️⃣ LOAD KOTA LIST
+        // 4️⃣ REGISTER FCM TOKEN
+        // ==========================================
+        await _registerFCMToken(provider);
+
+        // ==========================================
+        // 5️⃣ LOAD KOTA LIST
         // ==========================================
         await _loadKotaList(context);
 
         if (!mounted) return;
 
-        print("✅ [UserLogin] All services initialized");
-        print("═══════════════════════════════════════");
+        debugPrint("✅ [UserLogin] All services initialized");
+        debugPrint("═══════════════════════════════════════");
 
         // ✅ Pop login page with success = true
         Navigator.pop(context, true);
@@ -164,9 +177,9 @@ class _UserLoginState extends State<UserLogin>
           );
         }
 
-        print("✅ [UserLogin] Navigation completed");
+        debugPrint("✅ [UserLogin] Navigation completed");
       } else if (result.name == 'nonaktif') {
-        print("⚠️  [UserLogin] Account inactive");
+        debugPrint("⚠️ [UserLogin] Account inactive");
 
         if (!mounted) return;
 
@@ -182,7 +195,7 @@ class _UserLoginState extends State<UserLogin>
           Navigator.pop(context, false);
         }
       } else {
-        print("❌ [UserLogin] Login failed: ${result.name}");
+        debugPrint("❌ [UserLogin] Login failed: ${result.name}");
 
         if (!mounted) return;
 
@@ -199,11 +212,11 @@ class _UserLoginState extends State<UserLogin>
         }
       }
     } catch (e, st) {
-      print("═══════════════════════════════════════");
-      print("❌ [UserLogin] Error during login");
-      print("═══════════════════════════════════════");
-      print("Error: $e");
-      print("Stack: $st");
+      debugPrint("═══════════════════════════════════════");
+      debugPrint("❌ [UserLogin] Error during login");
+      debugPrint("═══════════════════════════════════════");
+      debugPrint("Error: $e");
+      debugPrint("Stack: $st");
 
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(
@@ -224,10 +237,10 @@ class _UserLoginState extends State<UserLogin>
     if (!Platform.isAndroid) return;
 
     try {
-      print("[UserLogin] 🔔 Requesting notification permission...");
+      debugPrint("[UserLogin] 🔔 Requesting notification permission...");
 
       final status = await Permission.notification.request();
-      print("[UserLogin] Permission status: $status");
+      debugPrint("[UserLogin] Permission status: $status");
 
       if (status.isDenied && mounted) {
         showDialog(
@@ -269,82 +282,78 @@ class _UserLoginState extends State<UserLogin>
           ),
         );
       } else if (status.isGranted) {
-        print("[UserLogin] ✅ Notification permission granted");
+        debugPrint("[UserLogin] ✅ Notification permission granted");
       }
     } catch (e) {
-      print("[UserLogin] ⚠️  Notification permission error: $e");
+      debugPrint("[UserLogin] ⚠️ Notification permission error: $e");
     }
   }
 
-  /// ✅ Initialize ChatProvider
+  /// ✅ Initialize ChatProvider (FCM-based, no SignalR)
   Future<void> _initializeChatProvider(
     BuildContext context,
     UserProvider provider,
     ChatProvider chatProv,
   ) async {
     try {
-      print("[UserLogin] 🔧 Initializing ChatProvider...");
+      debugPrint("[UserLogin] 🔧 Initializing ChatProvider (FCM-based)...");
 
-      // Setup getSenderName callback
-      chatProv.chatService.getSenderName = (roomId, senderId) {
-        final room = chatProv.getRoom(roomId);
-        if (room != null && senderId == room.partnerId) {
-          return room.usernameLawan ?? 'Unknown User';
-        }
-        return 'New Message';
-      };
-
-      // ✅ Changed: Removed forceRefresh parameter
-      await chatProv.initWithApiClient(
+      // Initialize ChatProvider (loads rooms from API)
+      await chatProv.initialize(
         userId: provider.customer!.noId,
         userType: Constants.customer,
-        hubUrl: "${Constants.baseUrlHub}/api/chathub",
-        getToken: () async => await authService.getIdToken(),
       );
 
-      print("[UserLogin] ✅ ChatProvider initialized");
+      debugPrint("[UserLogin] ✅ ChatProvider initialized");
+      debugPrint("[UserLogin] ℹ️ Real-time updates via FCM");
     } catch (e) {
-      print("[UserLogin] ⚠️  ChatProvider init error: $e");
+      debugPrint("[UserLogin] ⚠️ ChatProvider init error: $e");
       // Don't throw - allow app to continue without chat
     }
   }
 
-  /// ✅ Initialize HistoryOrderProvider
+  /// ✅ Initialize HistoryOrderProvider (FCM-based, no SignalR)
   Future<void> _initializeHistoryOrderProvider(
     BuildContext context,
     UserProvider provider,
+    HistoryOrderProvider historyOrderProv,
+    PesananProvider pesananProv,
   ) async {
     try {
-      print("[UserLogin] 🔧 Initializing HistoryOrderProvider...");
+      debugPrint(
+          "[UserLogin] 🔧 Initializing HistoryOrderProvider (FCM-based)...");
 
-      final historyOrderProvider = context.read<HistoryOrderProvider>();
-      final pesananProvider = context.read<PesananProvider>();
+      // Load orders first
+      await pesananProv.loadOrder(context);
+      debugPrint(
+          "[UserLogin] ✅ Orders loaded: ${pesananProv.allPesanan.length}");
 
-      await pesananProvider.loadOrder(userId: provider.customer!.noId);
-
-      // Connect HistoryOrder → Pesanan
-      historyOrderProvider.onOrderStatusChanged = (noOrder, newStatus) {
-        print("[UserLogin] 📨 Order status update: $noOrder → $newStatus");
-        pesananProvider.updateOrderStatus(noOrder, newStatus);
-      };
-
-      // ✅ Changed: Removed forceRefresh parameter
-      final historyConnected = await historyOrderProvider.initialize(
-        config: HistoryOrderServiceConfig(
-          hubUrl: "${Constants.baseUrlHub}/api/chathub",
-          role: Constants.customer,
-          getToken: () async => await authService.getIdToken(),
-        ),
-        userId: provider.customer!.noId,
-      );
-
-      if (historyConnected) {
-        print("[UserLogin] ✅ HistoryOrderProvider initialized");
-      } else {
-        print("[UserLogin] ⚠️  HistoryOrderProvider connection failed");
+      // HistoryOrderProvider is already initialized in main.dart
+      // Just track the orders here
+      for (final order in pesananProv.allPesanan) {
+        if (order.noBukti.isNotEmpty) {
+          historyOrderProv.trackOrder(order.noBukti);
+        }
       }
+
+      debugPrint("[UserLogin] ✅ HistoryOrderProvider ready");
+      debugPrint("[UserLogin] ℹ️ Real-time updates via FCM");
     } catch (e) {
-      print("[UserLogin] ⚠️  HistoryOrderProvider init error: $e");
+      debugPrint("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
+      // Don't throw - allow app to continue
+    }
+  }
+
+  /// ✅ Register FCM token to backend
+  Future<void> _registerFCMToken(UserProvider provider) async {
+    try {
+      debugPrint("[UserLogin] 📱 Registering FCM token...");
+
+      await FCMService.instance.registerToken(provider.customer!.noId);
+
+      debugPrint("[UserLogin] ✅ FCM token registered");
+    } catch (e) {
+      debugPrint("[UserLogin] ⚠️ FCM token registration error: $e");
       // Don't throw - allow app to continue
     }
   }
@@ -352,13 +361,13 @@ class _UserLoginState extends State<UserLogin>
   /// ✅ Load Kota list
   Future<void> _loadKotaList(BuildContext context) async {
     try {
-      print("[UserLogin] 🔧 Loading Kota list...");
+      debugPrint("[UserLogin] 🔧 Loading Kota list...");
 
       await context.read<KotaProvider>().getAllKotaList();
 
-      print("[UserLogin] ✅ Kota list loaded");
+      debugPrint("[UserLogin] ✅ Kota list loaded");
     } catch (e) {
-      print("[UserLogin] ⚠️  Kota list load error: $e");
+      debugPrint("[UserLogin] ⚠️ Kota list load error: $e");
       // Don't throw - allow app to continue
     }
   }
@@ -588,13 +597,16 @@ class _UserLoginState extends State<UserLogin>
     String? noIdPortofolio,
     String? noIdVendor,
   }) {
-    print("[UserLogin] 🎯 Target page: $targetPage");
+    debugPrint("[UserLogin] 🎯 Target page: $targetPage");
 
     switch (targetPage) {
       case 'SinglePostPage':
-        return SinglePostPage(
-          noId: noIdPortofolio ?? 'porto_6',
-        );
+        final portoProvider = context.read<PortofolioProvider>();
+        final porto = portoProvider.portofolioList
+            .firstWhereOrNull((porto) => porto.noId == noIdPortofolio);
+        portoProvider.setSelectedPortofolio(porto);
+
+        return SinglePostPage();
       case 'VendorBioPage':
         return VendorBioPage(
           idVendor: noIdVendor ?? 'ven_2',
@@ -606,9 +618,7 @@ class _UserLoginState extends State<UserLogin>
       case 'Tab3':
         return const CustomerAccountPage();
       default:
-        return SinglePostPage(
-          noId: noIdPortofolio ?? 'porto_6',
-        );
+        return SinglePostPage();
     }
   }
 }

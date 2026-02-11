@@ -5,7 +5,7 @@ part 'room_chat_entity.g.dart';
 
 /// Hive entity untuk room chat
 /// Field minimal untuk hemat storage
-@HiveType(typeId: 1)
+@HiveType(typeId: 7)
 class RoomChatEntity extends HiveObject {
   @HiveField(0)
   String roomId;
@@ -34,6 +34,19 @@ class RoomChatEntity extends HiveObject {
   @HiveField(8)
   List<String> userIds;
 
+  // ✅ NEW FIELDS untuk tracking message status
+  @HiveField(9)
+  int countStatusSent;
+
+  @HiveField(10)
+  List<String> listIdMessageSent;
+
+  @HiveField(11)
+  int countStatusReceived;
+
+  @HiveField(12)
+  List<String> listIdMessageReceived;
+
   RoomChatEntity({
     required this.roomId,
     required this.roomType,
@@ -44,13 +57,22 @@ class RoomChatEntity extends HiveObject {
     required this.lastMessage,
     this.unread = 0,
     required this.userIds,
+    this.countStatusSent = 0,
+    this.listIdMessageSent = const [],
+    this.countStatusReceived = 0,
+    this.listIdMessageReceived = const [],
   });
 
   // =========================================
   // HELPER GETTERS
   // =========================================
 
-  bool get hasUnread => unread > 0;
+  /// ✅ IMPROVED: hasUnread berdasarkan received count
+  bool get hasUnread => countStatusReceived > 0;
+  
+  /// ✅ IMPROVED: actualUnreadCount dari received messages
+  int get actualUnreadCount => countStatusReceived;
+  
   String get displayName => usernameLawan ?? 'Unknown';
 
   String get previewMessage {
@@ -85,6 +107,11 @@ class RoomChatEntity extends HiveObject {
       lastMessage: model.lastMessage,
       unread: model.unread ?? 0,
       userIds: model.userIds,
+      // ✅ NEW FIELDS
+      countStatusSent: model.countStatusSent,
+      listIdMessageSent: List<String>.from(model.listIdMessageSent),
+      countStatusReceived: model.countStatusReceived,
+      listIdMessageReceived: List<String>.from(model.listIdMessageReceived),
     );
   }
 
@@ -101,6 +128,11 @@ class RoomChatEntity extends HiveObject {
       status: 'aktif',
       unread: unread,
       userIds: userIds,
+      // ✅ NEW FIELDS
+      countStatusSent: countStatusSent,
+      listIdMessageSent: listIdMessageSent,
+      countStatusReceived: countStatusReceived,
+      listIdMessageReceived: listIdMessageReceived,
     );
   }
 
@@ -109,6 +141,10 @@ class RoomChatEntity extends HiveObject {
     String? lastMessage,
     DateTime? lastMessageAt,
     int? unread,
+    int? countStatusSent,
+    List<String>? listIdMessageSent,
+    int? countStatusReceived,
+    List<String>? listIdMessageReceived,
   }) {
     return RoomChatEntity(
       roomId: roomId,
@@ -120,11 +156,15 @@ class RoomChatEntity extends HiveObject {
       lastMessage: lastMessage ?? this.lastMessage,
       unread: unread ?? this.unread,
       userIds: userIds,
+      countStatusSent: countStatusSent ?? this.countStatusSent,
+      listIdMessageSent: listIdMessageSent ?? this.listIdMessageSent,
+      countStatusReceived: countStatusReceived ?? this.countStatusReceived,
+      listIdMessageReceived: listIdMessageReceived ?? this.listIdMessageReceived,
     );
   }
 
   @override
   String toString() {
-    return 'RoomChatEntity(id: $roomId, partner: $usernameLawan, unread: $unread)';
+    return 'RoomChatEntity(id: $roomId, partner: $usernameLawan, unread: $actualUnreadCount, received: $countStatusReceived)';
   }
 }

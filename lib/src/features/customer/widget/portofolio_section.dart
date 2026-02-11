@@ -174,6 +174,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
                   // ✅ FIXED: Safely get media URL
                   final String? mediaUrl = _getMediaUrl(p);
                   return PortofolioCard(
+                    portofolio: p,
                     photographerIcon: p.idMediaVendor ?? '',
                     imageUrl:
                         mediaUrl, // Bisa null, PortofolioCard harus handle ini

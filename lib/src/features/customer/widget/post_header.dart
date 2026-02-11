@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
@@ -28,7 +30,26 @@ class PostHeader extends StatelessWidget {
               child: Row(
                 children: [
                   // Avatar
-                  AvatarCircle(size: 36, imgUrl: portofolio.idMediaVendor),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.grey.shade300,
+                    child: CachedNetworkImage(
+                      imageUrl: portofolio.idMediaVendor ?? '',
+                      imageBuilder: (context, imageProvider) => CircleAvatar(
+                        radius: 32,
+                        backgroundImage: imageProvider,
+                      ),
+                      placeholder: (context, url) => ShimmerPlaceholder(
+                        radius: 32,
+                      ),
+                      errorWidget: (context, url, error) => const CircleAvatar(
+                        radius: 32,
+                        backgroundColor: Colors.grey,
+                        child:
+                            Icon(Icons.person, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   // Nama + rating
                   Expanded(

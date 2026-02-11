@@ -2,8 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioCard extends StatelessWidget {
@@ -16,12 +18,14 @@ class PortofolioCard extends StatelessWidget {
     this.aspectRatio = 5 / 4,
     required this.noId,
     required this.idVendor,
+    required this.portofolio,
   }) : super(key: key);
 
+  final PortofolioModel portofolio;
   final String photographerIcon;
   final String? imageUrl;
   final String name;
-  final double? rating;
+  final int? rating;
   final double aspectRatio;
   final String noId;
   final String idVendor;
@@ -50,13 +54,18 @@ class PortofolioCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => nav.navigateToPage(
-              hrsLogin: true,
-              context,
-              SinglePostPage(noId: noId, idVendor: idVendor),
-              targetTabIndex: 0,
-              targetPage: 'SinglePostPage',
-            ),
+            onTap: () {
+              context
+                  .read<PortofolioProvider>()
+                  .setSelectedPortofolio(portofolio);
+              nav.navigateToPage(
+                hrsLogin: true,
+                context,
+                SinglePostPage(),
+                targetTabIndex: 0,
+                targetPage: 'SinglePostPage',
+              );
+            },
             child: ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(15)),
@@ -82,12 +91,14 @@ class PortofolioCard extends StatelessWidget {
             ),
           ),
           GestureDetector(
-            onTap: () => nav.navigateToPage(
-              context,
-              VendorBioPage(idVendor: idVendor),
-              targetTabIndex: 0,
-              targetPage: 'VendorBioPage',
-            ),
+            onTap: () {
+              nav.navigateToPage(
+                context,
+                VendorBioPage(idVendor: idVendor),
+                targetTabIndex: 0,
+                targetPage: 'VendorBioPage',
+              );
+            },
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
