@@ -2,17 +2,19 @@ import 'dart:convert';
 
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-import 'package:mpjnew/src/data/models/create_pesanan_result.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/data/models/create_pesanan_result.dart';
 
 class PesananService {
-  final String entity = 'Order';
+  final String entity = 'order';
   final String controller = 'order';
 
   final ApiClient _client = apiClient;
 
+  /// GET ALL
   Future<List<PesananModel>> getAll({
     String? noBukti,
+    String? idVendor,
     String? idCustomer,
     String? status,
     String? statusBayar,
@@ -27,6 +29,7 @@ class PesananService {
         queryParameters: {
           if (noBukti != null) 'no_bukti': noBukti,
           if (idCustomer != null) 'id_customer': idCustomer,
+          if (idVendor != null) 'id_vendor': idVendor,
           if (status != null) 'status': status,
           if (statusBayar != null) 'status_bayar': statusBayar,
           if (statusProgresPesanan != null)
@@ -61,11 +64,12 @@ class PesananService {
       } else {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       throw Exception('Error saat mengambil $entity: $e');
     }
   }
 
+  /// CREATE
   Future<CreatePesananResult> create(PesananModel model) async {
     final response = await apiClient.post(
       '/$controller/create',
@@ -102,12 +106,6 @@ class PesananService {
       body: jsonEncode(model.toJsonUpdate()),
       headers: {'Content-Type': 'application/json'},
     );
-
-    print('==============================');
-    print('URL: ${response.request?.url}');
-    print('Status Code: ${response.statusCode}');
-    print('Body: ${response.body}');
-    print('==============================');
 
     if (response.statusCode != 200) {
       throw Exception('Gagal mengupdate $entity');

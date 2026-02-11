@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
+import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/widget/shimmer/vendor_bio_shimmer.dart';
@@ -164,28 +165,6 @@ class _VendorBioPageState extends State<VendorBioPage> {
                       );
                     },
                   )
-                // const Center(
-                //   child: Column(
-                //     children: [
-                //       Expanded(
-                //         child: AspectRatio(
-                //           aspectRatio: 1,
-                //           child: ShimmerPlaceholder(
-                //             radius: 10,
-                //           ),
-                //         ),
-                //       ),
-                //       Expanded(
-                //         child: AspectRatio(
-                //           aspectRatio: 1,
-                //           child: ShimmerPlaceholder(
-                //             radius: 10,
-                //           ),
-                //         ),
-                //       ),
-                //     ],
-                //   ),
-                // )
                 else if (portofolioList.isNotEmpty) ...[
                   const Text(
                     "Portofolio",
@@ -223,8 +202,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
                         onTap: () {
                           context.read<NavigationProvider>().navigateToPage(
                               context,
-                              SinglePostPage(
-                                  noId: p.noId, idVendor: p.idVendor),
+                              SinglePostPage(),
                               targetTabIndex: 0);
                         },
                         child: Container(

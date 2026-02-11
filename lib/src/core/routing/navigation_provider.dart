@@ -154,7 +154,7 @@ class NavigationProvider with ChangeNotifier {
       final userProv = context.read<UserProvider>();
       if (userProv.customer != null) {
         try {
-          await deviceTokenService.removeDeviceToken(userProv.customer!.noId);
+          await deviceTokenService.removeDeviceToken(userProv.customer!.noId, null);
         } catch (e, stackTrace) {
           debugPrint("⚠️ Error remove device token: $e");
           // await AppLogger.logError(

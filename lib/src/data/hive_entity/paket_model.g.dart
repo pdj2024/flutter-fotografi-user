@@ -8,7 +8,7 @@ part of 'paket_model.dart';
 
 class PaketModelAdapter extends TypeAdapter<PaketModel> {
   @override
-  final int typeId = 2;
+  final int typeId = 3;
 
   @override
   PaketModel read(BinaryReader reader) {

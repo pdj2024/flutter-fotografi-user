@@ -24,7 +24,7 @@ class ChatPackageCard extends StatelessWidget {
       builder: (context) => PackageDetailModal(
         paket: paket,
         onCreateOffer: onTap,
-        showOfferButton: isMe, // Only show for sent packages
+        showOfferButton: false, // Only show for sent packages
       ),
     );
   }

@@ -1,7 +1,8 @@
 import 'dart:convert';
 
-import '../../../core/services/api_client.dart';
-import '../../../data/models/portofolio_model.dart';
+import 'package:mpjnew/src/core/services/api_client.dart';
+import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
+
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 class PortofolioService {

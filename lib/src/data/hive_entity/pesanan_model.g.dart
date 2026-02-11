@@ -8,7 +8,7 @@ part of 'pesanan_model.dart';
 
 class PesananModelAdapter extends TypeAdapter<PesananModel> {
   @override
-  final int typeId = 4;
+  final int typeId = 5;
 
   @override
   PesananModel read(BinaryReader reader) {

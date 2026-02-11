@@ -14,6 +14,12 @@ class RoomChatModel extends Equatable {
   final String status;
   final int? unread;
   final List<String> userIds;
+  
+  // ✅ NEW FIELDS untuk tracking message status
+  final int countStatusSent;
+  final List<String> listIdMessageSent;
+  final int countStatusReceived;
+  final List<String> listIdMessageReceived;
 
   RoomChatModel({
     required this.roomId,
@@ -27,6 +33,10 @@ class RoomChatModel extends Equatable {
     required this.status,
     this.unread,
     required this.userIds,
+    this.countStatusSent = 0,
+    this.listIdMessageSent = const [],
+    this.countStatusReceived = 0,
+    this.listIdMessageReceived = const [],
   });
 
   // =========================================
@@ -43,8 +53,12 @@ class RoomChatModel extends Equatable {
   // HELPER GETTERS
   // =========================================
 
-  /// Cek apakah ada unread messages
-  bool get hasUnread => unread != null && unread! > 0;
+  /// ✅ IMPROVED: Cek unread berdasarkan received messages
+  /// Untuk customer: pesan dengan status "received" adalah pesan yang belum dibaca
+  bool get hasUnread => countStatusReceived > 0;
+
+  /// ✅ IMPROVED: Get actual unread count
+  int get actualUnreadCount => countStatusReceived;
 
   /// Get display name
   String get displayName => usernameLawan ?? 'Unknown';
@@ -84,6 +98,10 @@ class RoomChatModel extends Equatable {
     String? status,
     int? unread,
     List<String>? userIds,
+    int? countStatusSent,
+    List<String>? listIdMessageSent,
+    int? countStatusReceived,
+    List<String>? listIdMessageReceived,
   }) {
     return RoomChatModel(
       roomId: roomId ?? this.roomId,
@@ -97,6 +115,10 @@ class RoomChatModel extends Equatable {
       status: status ?? this.status,
       unread: unread ?? this.unread,
       userIds: userIds ?? List<String>.from(this.userIds),
+      countStatusSent: countStatusSent ?? this.countStatusSent,
+      listIdMessageSent: listIdMessageSent ?? List<String>.from(this.listIdMessageSent),
+      countStatusReceived: countStatusReceived ?? this.countStatusReceived,
+      listIdMessageReceived: listIdMessageReceived ?? List<String>.from(this.listIdMessageReceived),
     );
   }
 
@@ -129,9 +151,13 @@ class RoomChatModel extends Equatable {
     );
   }
 
-  /// Clear unread count
+  /// ✅ NEW: Clear unread by clearing received messages
   RoomChatModel clearUnread() {
-    return copyWith(unread: 0);
+    return copyWith(
+      unread: 0,
+      countStatusReceived: 0,
+      listIdMessageReceived: [],
+    );
   }
 
   // =========================================
@@ -161,6 +187,17 @@ class RoomChatModel extends Equatable {
       unread: int.tryParse(
           json["Unread"]?.toString() ?? json["unread"]?.toString() ?? "0"),
       userIds: _parseUserIds(json["User_Ids"] ?? json["userIds"]),
+      // ✅ NEW FIELDS
+      countStatusSent: int.tryParse(
+          json["Count_Status_Sent"]?.toString() ?? 
+          json["countStatusSent"]?.toString() ?? "0") ?? 0,
+      listIdMessageSent: _parseStringList(
+          json["List_Id_Message_Sent"] ?? json["listIdMessageSent"]),
+      countStatusReceived: int.tryParse(
+          json["Count_Status_Received"]?.toString() ?? 
+          json["countStatusReceived"]?.toString() ?? "0") ?? 0,
+      listIdMessageReceived: _parseStringList(
+          json["List_Id_Message_Received"] ?? json["listIdMessageReceived"]),
     );
   }
 
@@ -178,6 +215,10 @@ class RoomChatModel extends Equatable {
       status: json["status"]?.toString() ?? "aktif",
       unread: 0,
       userIds: _parseUserIds(json["userIds"]),
+      countStatusSent: 0,
+      listIdMessageSent: [],
+      countStatusReceived: 0,
+      listIdMessageReceived: [],
     );
   }
 
@@ -197,6 +238,10 @@ class RoomChatModel extends Equatable {
       "Status": status,
       "Unread": unread,
       "User_Ids": userIds,
+      "Count_Status_Sent": countStatusSent,
+      "List_Id_Message_Sent": listIdMessageSent,
+      "Count_Status_Received": countStatusReceived,
+      "List_Id_Message_Received": listIdMessageReceived,
     };
   }
 
@@ -221,9 +266,18 @@ class RoomChatModel extends Equatable {
     return [];
   }
 
+  /// ✅ NEW: Parse string list helper
+  static List<String> _parseStringList(dynamic value) {
+    if (value == null) return [];
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
   @override
   String toString() {
-    return 'RoomChatModel(id: $roomId, partner: $usernameLawan, unread: $unread)';
+    return 'RoomChatModel(id: $roomId, partner: $usernameLawan, unread: $actualUnreadCount)';
   }
 
   @override

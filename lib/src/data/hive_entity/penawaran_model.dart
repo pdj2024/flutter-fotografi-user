@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'penawaran_model.g.dart';
 
-@HiveType(typeId: 3)
+@HiveType(typeId: 4)
 class PenawaranModel {
   @HiveField(0)
   final String noId;

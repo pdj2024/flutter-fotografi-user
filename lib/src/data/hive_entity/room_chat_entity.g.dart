@@ -8,7 +8,7 @@ part of 'room_chat_entity.dart';
 
 class RoomChatEntityAdapter extends TypeAdapter<RoomChatEntity> {
   @override
-  final int typeId = 1;
+  final int typeId = 7;
 
   @override
   RoomChatEntity read(BinaryReader reader) {
@@ -26,13 +26,17 @@ class RoomChatEntityAdapter extends TypeAdapter<RoomChatEntity> {
       lastMessage: fields[6] as String,
       unread: fields[7] as int,
       userIds: (fields[8] as List).cast<String>(),
+      countStatusSent: fields[9] as int,
+      listIdMessageSent: (fields[10] as List).cast<String>(),
+      countStatusReceived: fields[11] as int,
+      listIdMessageReceived: (fields[12] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, RoomChatEntity obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.roomId)
       ..writeByte(1)
@@ -50,7 +54,15 @@ class RoomChatEntityAdapter extends TypeAdapter<RoomChatEntity> {
       ..writeByte(7)
       ..write(obj.unread)
       ..writeByte(8)
-      ..write(obj.userIds);
+      ..write(obj.userIds)
+      ..writeByte(9)
+      ..write(obj.countStatusSent)
+      ..writeByte(10)
+      ..write(obj.listIdMessageSent)
+      ..writeByte(11)
+      ..write(obj.countStatusReceived)
+      ..writeByte(12)
+      ..write(obj.listIdMessageReceived);
   }
 
   @override

@@ -184,10 +184,6 @@ class ChatCacheManager {
   }
 
   /// Replace local echo dengan server message
-  // =========================================
-// IMPROVED LOCAL ECHO REPLACEMENT - ChatCacheManager
-// =========================================
-
   /// Replace local echo dengan server message
   bool replaceLocalEcho(String roomId, ChatModel serverMessage) {
     final messages = _messagesCache[roomId];

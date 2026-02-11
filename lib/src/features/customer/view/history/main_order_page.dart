@@ -6,6 +6,7 @@ import 'package:mpjnew/src/features/customer/view/history/main_order_shimmer.dar
 import 'package:mpjnew/src/features/customer/view/history/progress_order_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/unpaid_order_section.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -17,7 +18,9 @@ class MainOrderPage extends StatefulWidget {
   State<MainOrderPage> createState() => _MainOrderPageState();
 }
 
-class _MainOrderPageState extends State<MainOrderPage> {
+class _MainOrderPageState extends State<MainOrderPage> with TickerProviderStateMixin {
+  late TabController _tabController;
+
   late PesananProvider pesananProvider;
   late HistoryOrderProvider historyOrderProvider;
   bool _isInitialized = false;
@@ -31,6 +34,29 @@ class _MainOrderPageState extends State<MainOrderPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndInitialize();
     });
+
+    
+    // Ambil initial tab index dari provider
+    final orderTabProvider = context.read<OrderTabProvider>();
+    _tabController = TabController(
+      initialIndex: orderTabProvider.selectedTabIndex,
+      length: 2,
+      vsync: this,
+    );
+    orderTabProvider.tabController = _tabController;
+
+    // Listen untuk perubahan tab dari provider
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        orderTabProvider.setSelectedTabIndex(_tabController.index);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -46,18 +72,18 @@ class _MainOrderPageState extends State<MainOrderPage> {
     final userProvider = context.read<UserProvider>();
 
     debugPrint("═══════════════════════════════════════");
-    debugPrint("[MainOrderPage] 🔍 Checking login...");
+    debugPrint("[AllOrderPage] 🔍 Checking login...");
 
     // User not logged in
     if (userProvider.customer == null) {
-      debugPrint("[MainOrderPage] ⚠️ User not logged in");
+      debugPrint("[AllOrderPage] ⚠️ User not logged in");
 
       if (_isInitialized) {
         setState(() {
           _isInitialized = false;
           _lastInitializedUserId = null;
         });
-        debugPrint("[MainOrderPage] 🔄 Reset state (logged out)");
+        debugPrint("[AllOrderPage] 🔄 Reset state (logged out)");
       }
 
       debugPrint("═══════════════════════════════════════");
@@ -66,16 +92,16 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
     final userId = userProvider.customer!.noId;
     debugPrint(
-        "[MainOrderPage] ✅ User logged in: ${userProvider.customer!.namaDisplay}");
+        "[AllOrderPage] ✅ User logged in: ${userProvider.customer!.namaDisplay}");
 
     // Already initialized for this user
     if (_isInitialized && _lastInitializedUserId == userId) {
-      debugPrint("[MainOrderPage] ℹ️ Already initialized for: $userId");
+      debugPrint("[AllOrderPage] ℹ️ Already initialized for: $userId");
       debugPrint("═══════════════════════════════════════");
       return;
     }
 
-    debugPrint("[MainOrderPage] 🚀 Initializing for: $userId");
+    debugPrint("[AllOrderPage] 🚀 Initializing for: $userId");
     debugPrint("═══════════════════════════════════════");
 
     // Initialize
@@ -92,67 +118,49 @@ class _MainOrderPageState extends State<MainOrderPage> {
   /// Initialize pesanan and history
   Future<void> _initializeData(String userId) async {
     debugPrint("───────────────────────────────────────");
-    debugPrint("[MainOrderPage] 📦 Loading pesanan...");
+    debugPrint("[AllOrderPage] 📦 Loading pesanan...");
 
     try {
-      // 1. Load pesanan
-      await pesananProvider.loadOrder(userId: userId);
+      // ✅ Load pesanan only - FCM will handle real-time updates
+      await pesananProvider.loadOrder(context);
 
       debugPrint(
-          "[MainOrderPage] ✅ Pesanan loaded: ${pesananProvider.allPesanan.length}");
+          "[AllOrderPage] ✅ Pesanan loaded: ${pesananProvider.allPesanan.length}");
 
-      // 2. Join history orders
+      // ✅ Track orders for FCM updates
       if (pesananProvider.allPesanan.isNotEmpty) {
-        await _joinHistoryOrderSignalR();
+        await _trackOrdersForFCM();
       } else {
-        debugPrint("[MainOrderPage] ℹ️ No orders to join");
+        debugPrint("[AllOrderPage] ℹ️ No orders to track");
       }
 
-      debugPrint("[MainOrderPage] ✅ Initialization complete");
+      debugPrint("[AllOrderPage] ✅ Initialization complete");
+      debugPrint("[AllOrderPage] ℹ️ Real-time updates via FCM");
     } catch (e, st) {
-      debugPrint("[MainOrderPage] ❌ Error: $e");
+      debugPrint("[AllOrderPage] ❌ Error: $e");
       debugPrint("Stack: $st");
     }
 
     debugPrint("───────────────────────────────────────");
   }
 
-  /// Join all orders to HistoryOrder SignalR
-  Future<void> _joinHistoryOrderSignalR() async {
-    debugPrint("[MainOrderPage] 🔗 Joining HistoryOrder SignalR...");
+  Future<void> _trackOrdersForFCM() async {
+    debugPrint("[AllOrderPage] 📍 Tracking orders for FCM...");
 
     final allPesanan = pesananProvider.allPesanan;
-
-    if (!historyOrderProvider.isConnected) {
-      debugPrint("[MainOrderPage] ⚠️ HistoryOrderProvider not connected");
-      return;
-    }
-
-    debugPrint("[MainOrderPage] ✅ HistoryOrderProvider connected");
-
-    int successCount = 0;
-    int failCount = 0;
 
     for (var i = 0; i < allPesanan.length; i++) {
       final noOrder = allPesanan[i].noBukti;
 
-      try {
-        final joined = await historyOrderProvider.joinOrder(noOrder);
-        if (joined) {
-          successCount++;
-        } else {
-          failCount++;
-        }
-      } catch (e) {
-        failCount++;
-        debugPrint("[MainOrderPage] ❌ Error joining $noOrder: $e");
-      }
+      // Just mark as tracked - FCM will handle updates
+      historyOrderProvider.trackOrder(noOrder);
+
+      debugPrint("[AllOrderPage] ✅ Tracking: $noOrder");
     }
 
-    debugPrint("[MainOrderPage] 📊 Join summary:");
-    debugPrint("   Total: ${allPesanan.length}");
-    debugPrint("   Success: $successCount");
-    debugPrint("   Failed: $failCount");
+    debugPrint("[AllOrderPage] 📊 Tracking summary:");
+    debugPrint("   Total orders tracked: ${allPesanan.length}");
+    debugPrint("   Updates: Via FCM");
   }
 
   @override
@@ -276,13 +284,13 @@ class _MainOrderPageState extends State<MainOrderPage> {
         ),
         body: TabBarView(
           children: [
-            pesananProvider.isLoading
+            pesananProvider.isLoadingOrder
                 ? const MainOrderShimmer()
                 : const UnpaidOrderSection(),
-            pesananProvider.isLoading
+            pesananProvider.isLoadingOrder
                 ? const MainOrderShimmer()
                 : const ProgressOrderSection(),
-            pesananProvider.isLoading
+            pesananProvider.isLoadingOrder
                 ? const MainOrderShimmer()
                 : const FinishOrderSection(),
           ],

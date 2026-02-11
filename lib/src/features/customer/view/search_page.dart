@@ -2,7 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/data/models/portofolio_model.dart';
+import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/widget/filter_overlay.dart';
@@ -299,7 +299,7 @@ class _SearchPageState extends State<SearchPage>
         GestureDetector(
           onTap: () => context.read<NavigationProvider>().navigateToPage(
                 context,
-                SinglePostPage(noId: noId, idVendor: idVendor),
+                SinglePostPage(),
                 targetTabIndex: 0,
                 targetPage: "SinglePostPage",
               ),

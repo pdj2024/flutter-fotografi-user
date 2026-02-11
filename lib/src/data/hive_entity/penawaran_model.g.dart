@@ -8,7 +8,7 @@ part of 'penawaran_model.dart';
 
 class PenawaranModelAdapter extends TypeAdapter<PenawaranModel> {
   @override
-  final int typeId = 3;
+  final int typeId = 4;
 
   @override
   PenawaranModel read(BinaryReader reader) {

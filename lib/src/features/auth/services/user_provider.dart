@@ -234,7 +234,7 @@ class UserProvider with ChangeNotifier {
 
         // Register device token
         try {
-          await deviceTokenService.addDeviceToken(_customer!.noId);
+          await deviceTokenService.addDeviceToken(_customer!.noId, null);
           print("✅ [UserProvider] Device token registered");
         } catch (e) {
           print("⚠️  [UserProvider] Device token registration failed: $e");
@@ -383,7 +383,7 @@ class UserProvider with ChangeNotifier {
       // 1️⃣ Remove device token
       if (_customer != null) {
         try {
-          await deviceTokenService.removeDeviceToken(_customer!.noId);
+          await deviceTokenService.removeDeviceToken(_customer!.noId, null);
           print("✅ [UserProvider] Device token removed");
         } catch (e) {
           print("⚠️  [UserProvider] Device token removal failed: $e");
@@ -420,7 +420,7 @@ class UserProvider with ChangeNotifier {
       // 1️⃣ Remove device token
       if (_customer != null) {
         try {
-          await deviceTokenService.removeDeviceToken(_customer!.noId);
+          await deviceTokenService.removeDeviceToken(_customer!.noId, null);
           print("✅ [UserProvider] Device token removed");
         } catch (e) {
           print("⚠️  [UserProvider] Device token removal failed: $e");

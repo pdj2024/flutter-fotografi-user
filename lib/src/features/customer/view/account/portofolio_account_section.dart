@@ -109,9 +109,11 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection> {
 
               return GestureDetector(
                 onTap: () {
+                  context.read<PortofolioProvider>().setSelectedPortofolio(p);
+
                   context.read<NavigationProvider>().navigateToPage(
                         context,
-                        SinglePostPage(noId: p.noId, idVendor: p.idVendor),
+                        SinglePostPage(),
                         hrsLogin: true,
                         targetTabIndex: 3,
                       );

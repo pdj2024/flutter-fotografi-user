@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'pesanan_model.g.dart';
 
-@HiveType(typeId: 4)
+@HiveType(typeId: 5)
 class PesananModel {
   // =======================
   // IDENTITAS
