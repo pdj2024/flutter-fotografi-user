@@ -1,27 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/post_header.dart';
-import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:provider/provider.dart';
-
-/// ═══════════════════════════════════════════════════════════════
-/// SINGLE POST PAGE - OPTIMIZED ⚡
-///
-/// Improvements:
-/// - ✅ Cache-first portfolio loading
-/// - ✅ Efficient paket & ulasan loading (filtered by paket IDs only!)
-/// - ✅ Background image preloading
-/// - ✅ Like/Save state management
-/// - ✅ Pull-to-refresh support
-/// ═══════════════════════════════════════════════════════════════
+import 'package:url_launcher/url_launcher.dart';
 
 class SinglePostPage extends StatefulWidget {
   const SinglePostPage({super.key});
@@ -34,14 +23,11 @@ class _SinglePostPageState extends State<SinglePostPage> {
   final ScrollController _scrollController = ScrollController();
 
   bool _isLoadingData = false;
-  bool isLiked = false;
-  bool isSaved = false;
-  int likeCount = 0;
+  String? _currentPortfolioId;
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _loadData();
@@ -55,168 +41,84 @@ class _SinglePostPageState extends State<SinglePostPage> {
   }
 
   void _safeSetState(VoidCallback fn) {
-    if (mounted) {
-      setState(fn);
-    }
+    if (mounted) setState(fn);
   }
 
-  /// ═══════════════════════════════════════════════════════════
-  /// OPTIMIZED DATA LOADING
-  /// ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // LOAD DATA
+  // ═══════════════════════════════════════════════════════════
+
   Future<void> _loadData() async {
-    _safeSetState(() {
-      _isLoadingData = true;
-    });
+    _safeSetState(() => _isLoadingData = true);
 
     try {
       final portofolioProvider = context.read<PortofolioProvider>();
       final paketProvider = context.read<PaketProvider>();
-      final userProvider = context.read<UserProvider>();
 
       var selectedPortfolio = portofolioProvider.selectedPortofolio;
+      if (selectedPortfolio == null) return;
 
-      if (selectedPortfolio == null) {
-        debugPrint('[SinglePost] ⚠️ No portfolio selected');
-        return;
+      final targetId = selectedPortfolio.noId;
+      paketProvider.clearForPortfolio(targetId);
+
+      // Ambil data fresh dari lokal / API
+      final fresh = await _getFreshPortfolio(portofolioProvider, targetId);
+      if (fresh != null) {
+        portofolioProvider.setSelectedPortofolio(fresh);
+        selectedPortfolio = fresh;
       }
 
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('[SinglePost] ⚡ Loading data (OPTIMIZED)');
-      debugPrint('[SinglePost] Portfolio: ${selectedPortfolio.noId}');
+      _safeSetState(() => _currentPortfolioId = selectedPortfolio!.noId);
 
-      // ✅ STEP 1: Get fresh portfolio from cache (if available)
-      final freshPortfolio = await _getFreshPortfolio(
-        portofolioProvider,
-        selectedPortfolio.noId,
-      );
-
-      if (freshPortfolio != null) {
-        portofolioProvider.setSelectedPortofolio(freshPortfolio);
-        selectedPortfolio = freshPortfolio;
-
-        debugPrint('[SinglePost] ✅ Using fresh portfolio');
-        debugPrint(
-            '[SinglePost] Cached media: ${freshPortfolio.cachedMedia.length}/${freshPortfolio.mediaUrls.length}');
-      }
-
-      // ✅ STEP 2: Initialize like/save state
-      final customer = userProvider.customer;
-      if (customer != null) {
-        _safeSetState(() {
-          isLiked = customer.likes.contains(selectedPortfolio?.noId);
-          isSaved = customer.saves.contains(selectedPortfolio?.noId);
-          likeCount = selectedPortfolio?.likes ?? 0;
-        });
-
-        debugPrint('[SinglePost] Like status: $isLiked');
-        debugPrint('[SinglePost] Save status: $isSaved');
-      }
-
-      // ✅ STEP 3: Load pakets with ulasan (filtered by paket IDs only!)
-      if (selectedPortfolio.idPaket.isNotEmpty) {
-        debugPrint('[SinglePost] 📥 Loading pakets & ulasan...');
-        debugPrint('[SinglePost]    Paket IDs: ${selectedPortfolio.idPaket}');
-
-        // ✅ NEW: Only fetch ulasan for these specific pakets
+      // Load paket
+      if (selectedPortfolio!.idPaket.isNotEmpty) {
         await paketProvider.loadPaketsWithUlasan(
           paketIds: selectedPortfolio.idPaket,
+          portfolioId: targetId,
+          vendorId: selectedPortfolio.idVendor,
         );
-
-        debugPrint('[SinglePost] ✅ Loaded:');
-        debugPrint('[SinglePost]    Pakets: ${paketProvider.paketList.length}');
-
-        // Count pakets with/without ulasan
-        int withUlasan = 0;
-        int withoutUlasan = 0;
-        for (var paket in paketProvider.paketList) {
-          final ulasan = paketProvider.getUlasanForPaket(paket.no_id);
-          if (ulasan.isEmpty) {
-            withoutUlasan++;
-          } else {
-            withUlasan++;
-          }
-        }
-
-        debugPrint('[SinglePost]    With ulasan: $withUlasan');
-        debugPrint('[SinglePost]    Without ulasan: $withoutUlasan');
-      } else {
-        debugPrint('[SinglePost] ℹ️ No pakets in this portfolio');
       }
-
-      debugPrint('═══════════════════════════════════════════════════');
     } catch (e, st) {
-      debugPrint('[SinglePost] ❌ Load error: $e');
-      debugPrint(st.toString());
-
+      debugPrint('[SinglePost] ❌ $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading data: $e'),
-            backgroundColor: Colors.red,
-          ),
+              content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      _safeSetState(() {
-        _isLoadingData = false;
-      });
+      _safeSetState(() => _isLoadingData = false);
     }
   }
 
-  /// ═══════════════════════════════════════════════════════════
-  /// GET FRESH PORTFOLIO - Priority: Cache → Memory
-  /// ═══════════════════════════════════════════════════════════
   Future<PortofolioModel?> _getFreshPortfolio(
     PortofolioProvider provider,
     String noId,
   ) async {
-    // ✅ Priority 1: Get from cache (with cache info)
     try {
-      final cached = await provider.getPortfolioById(noId);
-
-      if (cached != null) {
-        debugPrint('[SinglePost] 📦 Using cached portfolio');
-        return cached;
-      }
-    } catch (e) {
-      debugPrint('[SinglePost] No cached version: $e');
-    }
-
-    // ✅ Priority 2: Already in memory
-    debugPrint('[SinglePost] 📋 Using portfolio from provider');
+      return await provider.getPortfolioById(noId);
+    } catch (_) {}
     return provider.selectedPortofolio;
   }
 
-  /// ═══════════════════════════════════════════════════════════
-  /// PULL TO REFRESH
-  /// ═══════════════════════════════════════════════════════════
   Future<void> _onRefresh() async {
     try {
-      final portofolioProvider = context.read<PortofolioProvider>();
-      final paketProvider = context.read<PaketProvider>();
-
-      debugPrint('[SinglePost] 🔄 Pull-to-refresh...');
-
-      // Full refresh
-      await portofolioProvider.refreshSinglePortofolio(
-        context,
-        paketProvider: paketProvider,
-      );
-
-      // Reload data
+      context.read<PaketProvider>().clearForPortfolio(null);
+      _safeSetState(() => _currentPortfolioId = null);
       await _loadData();
-
       if (mounted) {
-        CustomSnackbar.showSuccessSnackbar(context, "Portfolio updated");
+        CustomSnackbar.showSuccessSnackbar(context, 'Portfolio updated');
       }
-    } catch (e) {
-      debugPrint('[SinglePost] ❌ Refresh error: $e');
-
+    } catch (_) {
       if (mounted) {
-        CustomSnackbar.showErrorSnackbar(context, "Failed to refresh");
+        CustomSnackbar.showErrorSnackbar(context, 'Failed to refresh');
       }
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -224,61 +126,30 @@ class _SinglePostPageState extends State<SinglePostPage> {
       builder: (context, portofolioProvider, paketProvider, _) {
         final selectedPortfolio = portofolioProvider.selectedPortofolio;
 
-        // ═══════════════════════════════════════════════════════
-        // NO PORTFOLIO SELECTED
-        // ═══════════════════════════════════════════════════════
-        if (selectedPortfolio == null) {
-          return Scaffold(
-            backgroundColor: const Color(0xFFF9F9F9),
-            appBar: AppBar(
-              backgroundColor: const Color(0xFFF9F9F9),
-              elevation: 1,
-              title: const Text(
-                "Portofolio",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 80, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Portfolio not found',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Go Back'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
+        if (selectedPortfolio == null) return _buildEmptyScaffold();
 
-        // ═══════════════════════════════════════════════════════
-        // NORMAL VIEW
-        // ═══════════════════════════════════════════════════════
+        final isDataReady =
+            _currentPortfolioId == selectedPortfolio.noId;
+
+        // Baca state like/save langsung dari provider (sudah sinkron dengan Hive)
+        final isLiked =
+            portofolioProvider.isLiked(selectedPortfolio.noId);
+        final isSaved =
+            portofolioProvider.isSaved(selectedPortfolio.noId);
+        final isLikeInProgress =
+            portofolioProvider.isLikeInProgress(selectedPortfolio.noId);
+        final isSaveInProgress =
+            portofolioProvider.isSaveInProgress(selectedPortfolio.noId);
+
         return Scaffold(
           backgroundColor: const Color(0xFFF9F9F9),
           appBar: AppBar(
             backgroundColor: const Color(0xFFF9F9F9),
             elevation: 1,
             title: const Text(
-              "Portofolio",
+              'Portofolio',
               style: TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
+                  color: Colors.black, fontWeight: FontWeight.bold),
             ),
           ),
           body: RefreshIndicator(
@@ -289,37 +160,60 @@ class _SinglePostPageState extends State<SinglePostPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Portfolio Header
-                  PostHeader(portofolio: selectedPortfolio),
+                  Container(
+                    color: Colors.white,
+                    child: Column(
+                      children: [
+                        PostHeader(portofolio: selectedPortfolio),
 
-                  // ✅ Portfolio Images (with preloading!)
-                  ImagePost(
-                    mediaUrl: selectedPortfolio.mediaUrls,
-                    enablePreload: true, // Auto-preload all images
-                  ),
+                        // ImagePost menerima state dari provider langsung
+                        // Tidak ada state lokal like/save di page ini
+                        ImagePost(
+                          mediaUrl: selectedPortfolio.mediaUrls,
+                          enablePreload: true,
+                          isLiked: isLiked,
+                          isSaved: isSaved,
+                          isLikeInProgress: isLikeInProgress,
+                          isSaveInProgress: isSaveInProgress,
+                          likeCount: selectedPortfolio.likes,
+                          onLike: isLikeInProgress
+                              ? null
+                              : () => portofolioProvider.toggleLike(
+                                    context: context,
+                                    porto: selectedPortfolio,
+                                  ),
+                          onSave: isSaveInProgress
+                              ? null
+                              : () => portofolioProvider.toggleSave(
+                                    context: context,
+                                    porto: selectedPortfolio,
+                                  ),
+                        ),
 
-                  // Like & Save Row
-                  _buildLikeSaveRow(selectedPortfolio),
-
-                  const SizedBox(height: 10),
-
-                  // Paket Section Title
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      "Paket portofolio",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                        if (selectedPortfolio.caption != null &&
+                            selectedPortfolio.caption!.isNotEmpty) ...[
+                          _ExpandableCaption(
+                              caption: selectedPortfolio.caption!),
+                          Container(
+                            height: 10,
+                            color: Colors.grey.shade200,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
-                  // Paket List
-                  _buildPaketSection(paketProvider, selectedPortfolio),
-
+                  if (!isDataReady ||
+                      _isLoadingData ||
+                      paketProvider.isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(30),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    _buildPaketSection(paketProvider, selectedPortfolio),
                   const SizedBox(height: 20),
                 ],
               ),
@@ -330,24 +224,14 @@ class _SinglePostPageState extends State<SinglePostPage> {
     );
   }
 
-  /// ═══════════════════════════════════════════════════════════
-  /// BUILD PAKET SECTION
-  /// ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // PAKET SECTION
+  // ═══════════════════════════════════════════════════════════
+
   Widget _buildPaketSection(
     PaketProvider paketProvider,
     PortofolioModel portfolio,
   ) {
-    // Loading state
-    if (_isLoadingData || paketProvider.isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(30),
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    // Error state
     if (paketProvider.error != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -361,24 +245,22 @@ class _SinglePostPageState extends State<SinglePostPage> {
             children: [
               const Icon(Icons.error_outline, color: Colors.red, size: 40),
               const SizedBox(height: 10),
-              Text(
-                paketProvider.error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
-              ),
+              Text(paketProvider.error!, textAlign: TextAlign.center),
               const SizedBox(height: 10),
               ElevatedButton(
-                onPressed: _loadData,
-                child: const Text('Retry'),
-              ),
+                  onPressed: _loadData, child: const Text('Retry')),
             ],
           ),
         ),
       );
     }
 
-    // Empty state
-    if (paketProvider.paketList.isEmpty) {
+    final portfolioPaketIds = portfolio.idPaket.toSet();
+    final filteredPakets = paketProvider.paketList
+        .where((p) => portfolioPaketIds.contains(p.no_id))
+        .toList();
+
+    if (filteredPakets.isEmpty) {
       return Center(
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -388,44 +270,30 @@ class _SinglePostPageState extends State<SinglePostPage> {
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [
               BoxShadow(
-                color: Colors.black12,
-                blurRadius: 6,
-                offset: Offset(1, 2),
-              )
+                  color: Colors.black12,
+                  blurRadius: 6,
+                  offset: Offset(1, 2)),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 30,
-            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 30),
             child: Column(
               children: [
-                const Icon(
-                  Icons.shelves,
-                  size: 100,
-                  color: Colors.grey,
-                ),
+                const Icon(Icons.shelves, size: 100, color: Colors.grey),
                 const SizedBox(height: 20),
-                const Text(
-                  "Portofolio ini tidak memiliki paket",
-                  textAlign: TextAlign.center,
-                ),
+                const Text('Portofolio ini tidak memiliki paket',
+                    textAlign: TextAlign.center),
                 const SizedBox(height: 10),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Constants.primaryColor,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                        borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text(
-                    "Kembali",
-                    style: TextStyle(color: Colors.white),
-                  ),
+                  child: const Text('Kembali',
+                      style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -434,173 +302,180 @@ class _SinglePostPageState extends State<SinglePostPage> {
       );
     }
 
-    // ✅ Paket list with ulasan
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: paketProvider.paketList.length,
+      itemCount: filteredPakets.length,
       itemBuilder: (context, index) {
-        final paket = paketProvider.paketList[index];
-
-        // ✅ Get ulasan for this paket (may be empty!)
+        final paket = filteredPakets[index];
         final ulasanList = paketProvider.getUlasanForPaket(paket.no_id);
-
-        if (ulasanList.isEmpty) {
-          debugPrint('[SinglePost] Paket ${paket.no_id}: No ulasan yet');
-        } else {
-          debugPrint(
-              '[SinglePost] Paket ${paket.no_id}: ${ulasanList.length} ulasan');
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-          child: OfferCard(
-            key: ValueKey(paket.no_id),
-            ulasanList: ulasanList, // ✅ Can be empty!
-            paket: paket,
-            vendorId: portfolio.idVendor,
-          ),
+        return OfferCard(
+          key: ValueKey('${portfolio.noId}_${paket.no_id}'),
+          ulasanList: ulasanList,
+          paket: paket,
+          vendorId: portfolio.idVendor,
         );
       },
     );
   }
 
-  /// ═══════════════════════════════════════════════════════════
-  /// BUILD LIKE & SAVE ROW
-  /// ═══════════════════════════════════════════════════════════
-  Widget _buildLikeSaveRow(PortofolioModel portfolio) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 9, 16, 4),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => _handleLikeToggle(portfolio),
-                child: Icon(
-                  isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: isLiked ? Colors.red : Colors.black,
-                  size: 28,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => _handleSaveToggle(portfolio),
-                child: Icon(
-                  isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  color: isSaved ? Colors.amber : Colors.black,
-                  size: 29,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Show likes count if > 0
-        if (likeCount > 0)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "$likeCount likes",
-              style: const TextStyle(fontWeight: FontWeight.bold),
+  Widget _buildEmptyScaffold() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F9F9),
+        elevation: 1,
+        title: const Text('Portofolio',
+            style: TextStyle(
+                color: Colors.black, fontWeight: FontWeight.bold)),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 80, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text('Portfolio not found',
+                style:
+                    TextStyle(fontSize: 16, color: Colors.grey.shade700)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Go Back'),
             ),
-          ),
-        const SizedBox(height: 8),
-      ],
+          ],
+        ),
+      ),
     );
   }
+}
 
-  /// ═══════════════════════════════════════════════════════════
-  /// LIKE/SAVE HANDLERS
-  /// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// _ExpandableCaption
+// ═══════════════════════════════════════════════════════════════
 
-  /// Handle like toggle
-  Future<void> _handleLikeToggle(PortofolioModel portfolio) async {
-    if (!mounted) return;
+class _ExpandableCaption extends StatefulWidget {
+  final String caption;
 
-    final prevLiked = isLiked;
-    final prevCount = likeCount;
+  const _ExpandableCaption({required this.caption});
 
-    // Optimistic update
-    _safeSetState(() {
-      isLiked = !isLiked;
-      likeCount += isLiked ? 1 : -1;
-    });
+  @override
+  State<_ExpandableCaption> createState() => _ExpandableCaptionState();
+}
 
-    try {
-      final userId = context.read<UserProvider>().userId;
+class _ExpandableCaptionState extends State<_ExpandableCaption> {
+  bool _isExpanded = false;
+  bool _hasOverflow = false;
 
-      if (userId == null) {
-        throw Exception('User not logged in');
-      }
+  static const _collapsedLines = 3;
+  static const _baseStyle = TextStyle(
+    fontSize: 14,
+    height: 1.5,
+    color: Colors.black87,
+  );
 
-      await PortofolioService().action(
-        no_id: userId,
-        id_portofolio: portfolio.noId,
-        action_type: isLiked ? "like" : "unlike",
-      );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _measureOverflow());
+  }
 
-      debugPrint('[SinglePost] ✅ Like toggled: $isLiked');
-    } catch (e) {
-      debugPrint('[SinglePost] ❌ Error toggling like: $e');
-
-      // Rollback on error
-      if (!mounted) return;
-
-      _safeSetState(() {
-        isLiked = prevLiked;
-        likeCount = prevCount;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengubah like: $e')),
-        );
-      }
+  @override
+  void didUpdateWidget(_ExpandableCaption oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.caption != widget.caption) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _measureOverflow());
     }
   }
 
-  /// Handle save toggle
-  Future<void> _handleSaveToggle(PortofolioModel portfolio) async {
+  void _measureOverflow() {
     if (!mounted) return;
+    final plainText = _stripHtml(widget.caption);
+    final maxWidth = MediaQuery.of(context).size.width - 40;
 
-    final prevSaved = isSaved;
+    final tp = TextPainter(
+      text: TextSpan(text: plainText, style: _baseStyle),
+      maxLines: _collapsedLines,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: maxWidth);
 
-    // Optimistic update
-    _safeSetState(() {
-      isSaved = !isSaved;
-    });
-
-    try {
-      final userId = context.read<UserProvider>().userId;
-
-      if (userId == null) {
-        throw Exception('User not logged in');
-      }
-
-      await PortofolioService().action(
-        no_id: userId,
-        id_portofolio: portfolio.noId,
-        action_type: isSaved ? "save" : "unsave",
-      );
-
-      debugPrint('[SinglePost] ✅ Save toggled: $isSaved');
-    } catch (e) {
-      debugPrint('[SinglePost] ❌ Error toggling save: $e');
-
-      // Rollback on error
-      if (!mounted) return;
-
-      _safeSetState(() {
-        isSaved = prevSaved;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengubah save: $e')),
-        );
-      }
+    if (tp.didExceedMaxLines != _hasOverflow) {
+      setState(() => _hasOverflow = tp.didExceedMaxLines);
     }
+  }
+
+  String _stripHtml(String html) =>
+      html.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Html(
+            data: Helper.formatCaption(widget.caption),
+            style: {
+              "body": Style(
+                margin: Margins.zero,
+                padding: HtmlPaddings.zero,
+                maxLines: _isExpanded ? null : _collapsedLines,
+                fontSize: FontSize(14),
+                lineHeight: LineHeight(1.5),
+                color: Colors.black87,
+              ),
+              "b": Style(fontWeight: FontWeight.bold),
+              "i": Style(fontStyle: FontStyle.italic),
+              "u": Style(textDecoration: TextDecoration.underline),
+              "a": Style(
+                color: Colors.blue,
+                textDecoration: TextDecoration.none,
+                fontWeight: FontWeight.w500,
+              ),
+            },
+            onLinkTap: (url, attributes, element) async {
+              if (url == null) return;
+              await launchUrl(Uri.parse(url),
+                  mode: LaunchMode.externalApplication);
+            },
+          ),
+          if (_hasOverflow) ...[
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _isExpanded = !_isExpanded),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _isExpanded ? 'Lebih sedikit' : 'Selengkapnya',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  AnimatedRotation(
+                    turns: _isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
   }
 }

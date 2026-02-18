@@ -4,110 +4,107 @@ import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 
 part 'portofolio_model.g.dart';
 
-/// Model untuk Portfolio dengan support hybrid cache strategy
-/// 
-/// Cache Strategy:
-/// - Metadata portfolio → Hive database
-/// - Media files → Local file system
-/// - Gunakan MediaUrlModel.localPath untuk referensi
 @HiveType(typeId: 6)
 class PortofolioModel extends Equatable {
   // =====================================
   // CORE FIELDS (DARI BACKEND)
   // =====================================
-  
+
   @HiveField(0)
   final String noId;
-  
+
   @HiveField(1)
   final String idVendor;
-  
+
   @HiveField(2)
   final List<String> idMedia;
-  
+
   @HiveField(3)
   final String? idMediaVendor;
-  
+
   @HiveField(4)
   final String? idKategori;
-  
+
   @HiveField(5)
   final String? namaKategori;
-  
+
   @HiveField(6)
   final String? jenisMedia;
-  
+
   @HiveField(7)
   final String? usernameVendor;
-  
+
   @HiveField(8)
   final String? namaVendor;
-  
+
   @HiveField(9)
   final String? kota;
-  
+
   @HiveField(10)
   final String? namaKota;
-  
+
   @HiveField(11)
-  final List<String> idPaket;
-  
+  final String? caption;
+
   @HiveField(12)
-  final dynamic paket;
-  
+  final List<String> idPaket;
+
   @HiveField(13)
-  final DateTime tglCreated;
-  
+  final dynamic paket;
+
   @HiveField(14)
-  final int? jumlahPaket;
-  
+  final DateTime tglCreated;
+
   @HiveField(15)
-  final String status;
-  
+  final int? jumlahPaket;
+
   @HiveField(16)
-  final int? ratingVendor;
-  
+  final String status;
+
   @HiveField(17)
-  final int? hargaMinPaket;
-  
+  final int? ratingVendor;
+
   @HiveField(18)
-  final int? hargaMaxPaket;
-  
+  final int? hargaMinPaket;
+
   @HiveField(19)
-  final int? jumlahPortofolio;
-  
+  final int? hargaMaxPaket;
+
   @HiveField(20)
-  final int likes;
-  
+  final int? jumlahPortofolio;
+
   @HiveField(21)
-  final int saves;
-  
+  final int likes;
+
   @HiveField(22)
-  final int? matchKota;
-  
+  final int saves;
+
   @HiveField(23)
-  final int? fromSavedVendor;
-  
+  final int? matchKota;
+
   @HiveField(24)
-  final bool? isSaved;
-  
+  final int? fromSavedVendor;
+
   @HiveField(25)
-  final bool? isLiked;
-  
+  final bool? isSaved;
+
   @HiveField(26)
-  final double? skorTotal;
-  
+  final bool? isLiked;
+
   @HiveField(27)
+  final double? skorTotal;
+
+  @HiveField(28)
   final List<MediaUrlModel> mediaUrls;
-  
+
   // =====================================
   // CACHE & SYNC FIELDS
   // =====================================
-  
-  @HiveField(28)
-  final DateTime? lastUpdated;
-  
+
   @HiveField(29)
+  final DateTime? lastUpdated;
+
+  @HiveField(30)
   final DateTime? lastSynced;
 
   const PortofolioModel({
@@ -122,6 +119,7 @@ class PortofolioModel extends Equatable {
     this.namaVendor,
     this.kota,
     this.namaKota,
+    this.caption,
     required this.idPaket,
     this.paket,
     required this.tglCreated,
@@ -154,6 +152,7 @@ class PortofolioModel extends Equatable {
         jenisMedia,
         usernameVendor,
         namaVendor,
+        caption,
         kota,
         namaKota,
         idPaket,
@@ -180,25 +179,25 @@ class PortofolioModel extends Equatable {
   // =====================================
   // STATUS HELPERS
   // =====================================
-  
+
   /// Apakah portofolio aktif
   bool get isActive => status.toLowerCase() == 'aktif';
-  
+
   /// Apakah portofolio diarsipkan
   bool get isArchived => status.toLowerCase() == 'nonaktif';
-  
+
   /// Apakah portofolio dihapus
   bool get isDeleted => status.toLowerCase() == 'hapus';
 
   // =====================================
   // MEDIA CACHE HELPERS
   // =====================================
-  
+
   /// Get semua media yang sudah ter-cache
   List<MediaUrlModel> get cachedMedia {
     return mediaUrls.where((m) => m.isCached).toList();
   }
-  
+
   /// Get semua thumbnail (untuk grid view, list preview)
   List<MediaUrlModel> get thumbnails {
     return mediaUrls.map((media) {
@@ -213,67 +212,67 @@ class PortofolioModel extends Equatable {
       return media;
     }).toList();
   }
-  
+
   /// Get semua full-size images
   List<MediaUrlModel> get fullImages {
-    return mediaUrls.where((m) => 
-      m.isImage && (m.isCompressed == false || m.isCompressed == null)
-    ).toList();
+    return mediaUrls
+        .where((m) =>
+            m.isImage && (m.isCompressed == false || m.isCompressed == null))
+        .toList();
   }
-  
+
   /// Get media untuk display (prioritas cache)
   List<MediaUrlModel> get displayMedia {
     return mediaUrls.map((m) => m.markAccessed()).toList();
   }
-  
+
   /// Apakah ada media yang sudah ter-cache
   bool get hasCachedMedia {
     return mediaUrls.any((m) => m.isCached);
   }
-  
+
   /// Apakah semua media sudah ter-cache
   bool get isFullyCached {
     if (mediaUrls.isEmpty) return false;
     return mediaUrls.every((m) => m.isCached);
   }
-  
+
   /// Get media yang perlu di-download
   List<MediaUrlModel> get mediaNeedDownload {
-    return mediaUrls.where((m) => 
-      !m.isCached && 
-      m.cacheStatus != MediaCacheStatus.failed
-    ).toList();
+    return mediaUrls
+        .where((m) => !m.isCached && m.cacheStatus != MediaCacheStatus.failed)
+        .toList();
   }
-  
+
   /// Get media yang URL-nya expired
   List<MediaUrlModel> get expiredMedia {
     return mediaUrls.where((m) => m.isExpired).toList();
   }
-  
+
   /// Apakah ada media yang URL-nya perlu di-refresh
   bool get needsUrlRefresh {
     return mediaUrls.any((m) => m.shouldRefreshUrl());
   }
-  
+
   /// Get first media URL untuk preview/thumbnail
   String? get firstMediaUrl {
     if (mediaUrls.isEmpty) return null;
     return mediaUrls.first.displayUrl;
   }
-  
+
   /// Get first thumbnail URL
   String? get firstThumbnailUrl {
     if (mediaUrls.isEmpty) return null;
     return mediaUrls.first.thumbnailUrl;
   }
-  
+
   /// Total size cache (dalam bytes)
   int get totalCacheSize {
     return mediaUrls
         .where((m) => m.isCached)
         .fold(0, (sum, m) => sum + (m.size ?? 0));
   }
-  
+
   /// Persentase media yang sudah ter-cache (0.0 - 1.0)
   double get cacheProgress {
     if (mediaUrls.isEmpty) return 0.0;
@@ -284,7 +283,7 @@ class PortofolioModel extends Equatable {
   // =====================================
   // SYNC HELPERS
   // =====================================
-  
+
   /// Apakah data sudah outdated (perlu sync dari server)
   bool needsSync({Duration threshold = const Duration(hours: 1)}) {
     if (lastSynced == null) return true;
@@ -295,26 +294,25 @@ class PortofolioModel extends Equatable {
   // =====================================
   // SERIALIZATION
   // =====================================
-  
+
   /// FROM JSON (dari backend)
   factory PortofolioModel.fromJson(Map<String, dynamic> json) {
     return PortofolioModel(
       noId: json['No_Id'] ?? '',
       idVendor: json['Id_Vendor'] ?? '',
-      idMedia: json['Id_Media'] != null 
-          ? List<String>.from(json['Id_Media']) 
-          : [],
+      idMedia:
+          json['Id_Media'] != null ? List<String>.from(json['Id_Media']) : [],
       idMediaVendor: json['Id_Media_Vendor'],
       idKategori: json['Id_Kategori'],
       namaKategori: json['Nama_Kategori'],
       jenisMedia: json['Jenis_Media'],
       usernameVendor: json['Username_Vendor'],
       namaVendor: json['Nama_Vendor'],
+      caption: json['Caption'],
       kota: json['Kota'],
       namaKota: json['Nama_Kota'],
-      idPaket: json['Id_Paket'] != null 
-          ? List<String>.from(json['Id_Paket']) 
-          : [],
+      idPaket:
+          json['Id_Paket'] != null ? List<String>.from(json['Id_Paket']) : [],
       paket: json['Paket'],
       tglCreated: json['Tgl_Created'] != null
           ? DateTime.parse(json['Tgl_Created'])
@@ -357,6 +355,7 @@ class PortofolioModel extends Equatable {
       'Id_Media_Vendor': idMediaVendor,
       'Id_Kategori': idKategori,
       'Nama_Kategori': namaKategori,
+      'Caption': caption,
       'Jenis_Media': jenisMedia,
       'Username_Vendor': usernameVendor,
       'Nama_Vendor': namaVendor,
@@ -393,6 +392,7 @@ class PortofolioModel extends Equatable {
       'jenis_media': jenisMedia,
       'status': status,
       'id_media': idMedia,
+      'caption': caption,
     };
   }
 
@@ -405,13 +405,14 @@ class PortofolioModel extends Equatable {
       'jenis_media': jenisMedia,
       'status': status,
       'id_media': idMedia,
+      'caption': caption,
     };
   }
 
   // =====================================
   // COPY WITH
   // =====================================
-  
+
   PortofolioModel copyWith({
     String? noId,
     String? idVendor,
@@ -422,6 +423,7 @@ class PortofolioModel extends Equatable {
     String? jenisMedia,
     String? usernameVendor,
     String? namaVendor,
+    String? caption,
     String? kota,
     String? namaKota,
     List<String>? idPaket,
@@ -454,6 +456,7 @@ class PortofolioModel extends Equatable {
       jenisMedia: jenisMedia ?? this.jenisMedia,
       usernameVendor: usernameVendor ?? this.usernameVendor,
       namaVendor: namaVendor ?? this.namaVendor,
+      caption: caption ?? this.caption,
       kota: kota ?? this.kota,
       namaKota: namaKota ?? this.namaKota,
       idPaket: idPaket ?? this.idPaket,
@@ -481,7 +484,7 @@ class PortofolioModel extends Equatable {
   // =====================================
   // CACHE MANAGEMENT
   // =====================================
-  
+
   /// Update specific media dengan cache info
   PortofolioModel updateMedia(String mediaId, MediaUrlModel updatedMedia) {
     final updatedList = mediaUrls.map((m) {
@@ -490,20 +493,20 @@ class PortofolioModel extends Equatable {
       }
       return m;
     }).toList();
-    
+
     return copyWith(
       mediaUrls: updatedList,
       lastUpdated: DateTime.now(),
     );
   }
-  
+
   /// Mark portfolio sebagai sudah di-sync
   PortofolioModel markSynced() {
     return copyWith(
       lastSynced: DateTime.now(),
     );
   }
-  
+
   /// Refresh semua expired URLs
   PortofolioModel refreshExpiredUrls(
     Map<String, MediaUrlModel> refreshedMedia,
@@ -515,7 +518,7 @@ class PortofolioModel extends Equatable {
       }
       return m;
     }).toList();
-    
+
     return copyWith(
       mediaUrls: updatedList,
       lastSynced: DateTime.now(),
@@ -525,7 +528,7 @@ class PortofolioModel extends Equatable {
   // =====================================
   // LIST PARSER
   // =====================================
-  
+
   static List<PortofolioModel> fromJsonList(List<dynamic> list) {
     return list.map((e) => PortofolioModel.fromJson(e)).toList();
   }

@@ -21,12 +21,16 @@ class PaketProvider with ChangeNotifier {
   List<PaketModel> _paketList = [];
   PaketModel? _paket;
 
-  // ✅ Map paket_id → list ulasan
+  // Map paket_id → list ulasan
   Map<String, List<UlasanModel>> _ulasanByPaket = {};
 
   bool _isLoading = false;
   bool _isLoadingUlasan = false;
   String? _error;
+
+  // ✅ FIX: Track portfolio ID yang sedang dimuat
+  // Digunakan untuk membatalkan hasil load jika portfolio sudah berganti
+  String? _loadingForPortfolioId;
 
   // ═══════════════════════════════════════════════════════════
   // GETTERS
@@ -40,14 +44,32 @@ class PaketProvider with ChangeNotifier {
   bool get isLoadingUlasan => _isLoadingUlasan;
   String? get error => _error;
 
-  /// Get ulasan for specific paket
+  /// Get ulasan for specific paket — returns empty list jika tidak ada
   List<UlasanModel> getUlasanForPaket(String paketId) {
     return _ulasanByPaket[paketId] ?? [];
   }
 
-  /// Check if paket has ulasan loaded
   bool hasUlasanForPaket(String paketId) {
     return _ulasanByPaket.containsKey(paketId);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ FIX: CLEAR FOR PORTFOLIO
+  // Harus dipanggil SEBELUM load porto baru agar data lama
+  // tidak pernah terlihat di porto yang salah
+  // ═══════════════════════════════════════════════════════════
+
+  /// Reset state untuk porto baru.
+  /// [portfolioId] null = force clear tanpa set target baru (untuk refresh)
+  void clearForPortfolio(String? portfolioId) {
+    debugPrint('[PaketProvider] 🗑️ Clearing for portfolio: $portfolioId');
+
+    _paketList = [];
+    _ulasanByPaket = {};
+    _error = null;
+    _loadingForPortfolioId = portfolioId;
+
+    notifyListeners();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -84,21 +106,12 @@ class PaketProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load pakets by ID list (for portfolio)
   Future<List<PaketModel>> loadPaketsByIds(List<String> paketIds) async {
-    if (paketIds.isEmpty) {
-      debugPrint('[PaketProvider] ℹ️ No paket IDs to load');
-      return [];
-    }
+    if (paketIds.isEmpty) return [];
 
     try {
-      debugPrint('[PaketProvider] 📥 Loading ${paketIds.length} pakets...');
-
-      final pakets = await service.getAll(
-        idList: paketIds,
-        status: 'aktif',
-      );
-
+      debugPrint('[PaketProvider] 📥 Loading ${paketIds.length} pakets by IDs...');
+      final pakets = await service.getAll(idList: paketIds, status: 'aktif');
       debugPrint('[PaketProvider] ✅ Loaded ${pakets.length} pakets');
       return pakets;
     } catch (e) {
@@ -108,74 +121,16 @@ class PaketProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ULASAN OPERATIONS - OPTIMIZED WITH FOREACH
+  // ✅ FIXED: LOAD PAKETS WITH ULASAN
+  // Menerima portfolioId untuk memastikan hasil load masih relevan
   // ═══════════════════════════════════════════════════════════
 
-  /// ✅ OPTIMIZED: Load ulasan for each paket individually
-  Future<void> loadUlasanForPakets(List<String> paketIds) async {
-    if (paketIds.isEmpty) {
-      debugPrint('[PaketProvider] ℹ️ No paket IDs for ulasan');
-      return;
-    }
-
-    _isLoadingUlasan = true;
-    notifyListeners();
-
-    try {
-      debugPrint(
-          '[PaketProvider] 📥 Loading ulasan for ${paketIds.length} pakets...');
-
-      final Map<String, List<UlasanModel>> grouped = {};
-
-      // ✅ Fetch ulasan for each paket individually
-      for (var paketId in paketIds) {
-        try {
-          final ulasanList = await ulasanService.getAll(
-            idPaket: paketId, // ✅ One paket at a time
-            status: 'aktif',
-            orderBy: 'Tgl_Ulasan',
-            orderDir: 'DESC',
-          );
-
-          grouped[paketId] = ulasanList;
-
-          debugPrint(
-              '[PaketProvider]    📦 $paketId: ${ulasanList.length} ulasan');
-        } catch (e) {
-          debugPrint(
-              '[PaketProvider]    ⚠️ Error loading ulasan for $paketId: $e');
-          grouped[paketId] = []; // Empty list on error
-        }
-      }
-
-      _ulasanByPaket = grouped;
-
-      final totalUlasan = grouped.values.fold<int>(
-        0,
-        (sum, list) => sum + list.length,
-      );
-
-      debugPrint('[PaketProvider] ✅ Total ulasan loaded: $totalUlasan');
-    } catch (e) {
-      debugPrint('[PaketProvider] ❌ Error loading ulasan: $e');
-      _error = 'Failed to load ulasan: $e';
-
-      // Initialize empty ulasan for all pakets on error
-      _ulasanByPaket = {
-        for (var paketId in paketIds) paketId: [],
-      };
-    } finally {
-      _isLoadingUlasan = false;
-      notifyListeners();
-    }
-  }
-
-  /// ✅ OPTIMIZED: Load pakets with their ulasan
   Future<void> loadPaketsWithUlasan({
     required List<String> paketIds,
+    String? portfolioId, // ✅ FIX: tambah parameter ini
+    String? vendorId,
   }) async {
     if (paketIds.isEmpty) {
-      debugPrint('[PaketProvider] ℹ️ No paket IDs provided');
       _paketList = [];
       _ulasanByPaket = {};
       notifyListeners();
@@ -187,67 +142,94 @@ class PaketProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PaketProvider] 📥 Loading pakets with ulasan...');
-      debugPrint('[PaketProvider]    Paket count: ${paketIds.length}');
+      debugPrint('[PaketProvider] ═══════════════════════════════════');
+      debugPrint('[PaketProvider] 📥 loadPaketsWithUlasan');
+      debugPrint('[PaketProvider]    Portfolio: $portfolioId');
+      debugPrint('[PaketProvider]    Paket IDs: $paketIds');
 
-      // ✅ STEP 1: Load pakets
+      // ✅ Step 1: Load pakets
       final pakets = await loadPaketsByIds(paketIds);
+
+      // ✅ FIX: Batalkan jika portfolio sudah berganti saat await
+      if (portfolioId != null && portfolioId != _loadingForPortfolioId) {
+        debugPrint('[PaketProvider] ⚠️ Portfolio changed during load, discarding results');
+        debugPrint('[PaketProvider]    Expected: $portfolioId');
+        debugPrint('[PaketProvider]    Current:  $_loadingForPortfolioId');
+        return;
+      }
+
       _paketList = pakets;
+      notifyListeners(); // Tampilkan paket dulu, ulasan menyusul
 
-      debugPrint('[PaketProvider] ✅ Pakets loaded: ${pakets.length}');
+      debugPrint('[PaketProvider] ✅ Pakets ready: ${pakets.length}');
 
-      // ✅ STEP 2: Load ulasan for each paket
+      // ✅ Step 2: Load ulasan per paket SATU PER SATU
+      // Ulasan harus di-fetch berdasarkan paket_id spesifik,
+      // bukan semua sekaligus, agar tidak tercampur
       final Map<String, List<UlasanModel>> grouped = {};
 
-      for (var paketId in paketIds) {
-        try {
-          debugPrint('[PaketProvider]    📥 Loading ulasan for: $paketId');
+      final ulasanList = await ulasanService.getAll(
+        idVendor: vendorId,
+        status: 'aktif',
+        orderBy: 'Tgl_Ulasan',
+        orderDir: 'DESC',
+      );
 
-          final ulasanList = await ulasanService.getAll(
-            idPaket: paketId, // ✅ One paket at a time
-            status: 'aktif',
-            orderBy: 'Tgl_Ulasan',
-            orderDir: 'DESC',
-          );
+      for (final ulasan in ulasanList) {
+        grouped[ulasan.idPaket] ??= [];
+        grouped[ulasan.idPaket]!.add(ulasan);
+      }
 
-          grouped[paketId] = ulasanList;
+      // for (final paketId in paketIds) {
+      //   // ✅ FIX: Check tiap iterasi apakah portfolio masih sama
+      //   if (portfolioId != null && portfolioId != _loadingForPortfolioId) {
+      //     debugPrint('[PaketProvider] ⚠️ Portfolio changed mid-loop, stopping');
+      //     return;
+      //   }
 
-          debugPrint(
-              '[PaketProvider]       ✅ Found ${ulasanList.length} ulasan');
-        } catch (e) {
-          debugPrint('[PaketProvider]       ⚠️ Error: $e');
-          grouped[paketId] = []; // Empty list on error
-        }
+      //   try {
+      //     debugPrint('[PaketProvider]    📝 Fetching ulasan for paket: $paketId');
+
+      //     final ulasanList = await ulasanService.getAll(
+      //       idPaket: paketId,
+      //       status: 'aktif',
+      //       orderBy: 'Tgl_Ulasan',
+      //       orderDir: 'DESC',
+      //     );
+
+      //     grouped[paketId] = ulasanList;
+
+      //     debugPrint('[PaketProvider]       ✅ $paketId → ${ulasanList.length} ulasan');
+      //   } catch (e) {
+      //     debugPrint('[PaketProvider]       ⚠️ Error for $paketId: $e');
+      //     grouped[paketId] = []; // empty, jangan pakai data paket lain!
+      //   }
+      // }
+
+      // ✅ FIX: Final check sebelum commit ke state
+      if (portfolioId != null && portfolioId != _loadingForPortfolioId) {
+        debugPrint('[PaketProvider] ⚠️ Portfolio changed before commit, discarding');
+        return;
       }
 
       _ulasanByPaket = grouped;
 
-      // ✅ Calculate statistics
-      final totalUlasan = grouped.values.fold<int>(
-        0,
-        (sum, list) => sum + list.length,
-      );
-      final paketsWithUlasan =
-          grouped.entries.where((e) => e.value.isNotEmpty).length;
-      final paketsWithoutUlasan =
-          grouped.entries.where((e) => e.value.isEmpty).length;
+      // Summary
+      final totalUlasan = grouped.values.fold(0, (s, l) => s + l.length);
+      final withUlasan = grouped.values.where((l) => l.isNotEmpty).length;
+      final withoutUlasan = grouped.values.where((l) => l.isEmpty).length;
 
-      debugPrint('[PaketProvider] ✅ SUMMARY:');
+      debugPrint('[PaketProvider] ✅ DONE for portfolio $portfolioId:');
       debugPrint('[PaketProvider]    Pakets: ${pakets.length}');
       debugPrint('[PaketProvider]    Total ulasan: $totalUlasan');
-      debugPrint('[PaketProvider]    Pakets with ulasan: $paketsWithUlasan');
-      debugPrint(
-          '[PaketProvider]    Pakets without ulasan: $paketsWithoutUlasan');
+      debugPrint('[PaketProvider]    With ulasan: $withUlasan');
+      debugPrint('[PaketProvider]    Without ulasan: $withoutUlasan');
+      debugPrint('[PaketProvider] ═══════════════════════════════════');
     } catch (e) {
       debugPrint('[PaketProvider] ❌ Error: $e');
       _error = e.toString();
-
-      // Initialize empty data on error
       _paketList = [];
-      _ulasanByPaket = {
-        for (var paketId in paketIds) paketId: [],
-      };
-
+      _ulasanByPaket = {for (var id in paketIds) id: []};
       rethrow;
     } finally {
       _isLoading = false;
@@ -255,7 +237,39 @@ class PaketProvider with ChangeNotifier {
     }
   }
 
-  /// Clear ulasan data
+  Future<void> loadUlasanForPakets(List<String> paketIds) async {
+    if (paketIds.isEmpty) return;
+
+    _isLoadingUlasan = true;
+    notifyListeners();
+
+    try {
+      final Map<String, List<UlasanModel>> grouped = {};
+
+      for (final paketId in paketIds) {
+        try {
+          final ulasanList = await ulasanService.getAll(
+            idPaket: paketId,
+            status: 'aktif',
+            orderBy: 'Tgl_Ulasan',
+            orderDir: 'DESC',
+          );
+          grouped[paketId] = ulasanList;
+        } catch (e) {
+          grouped[paketId] = [];
+        }
+      }
+
+      _ulasanByPaket = grouped;
+    } catch (e) {
+      _error = 'Failed to load ulasan: $e';
+      _ulasanByPaket = {for (var id in paketIds) id: []};
+    } finally {
+      _isLoadingUlasan = false;
+      notifyListeners();
+    }
+  }
+
   void clearUlasan() {
     _ulasanByPaket.clear();
     notifyListeners();
@@ -271,33 +285,19 @@ class PaketProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PaketProvider] 📥 Fetching pakets from room...');
-      debugPrint('[PaketProvider]    Messages: ${messages.length}');
-
-      // Collect paket IDs
       final Set<String> paketIds = {};
-
       for (final msg in messages) {
         if (msg.idPaket != null && msg.idPaket!.isNotEmpty) {
           paketIds.add(msg.idPaket!);
         }
       }
 
-      debugPrint('[PaketProvider]    Unique paket IDs: ${paketIds.length}');
+      if (paketIds.isEmpty) return [];
 
-      if (paketIds.isEmpty) {
-        debugPrint('[PaketProvider] ℹ️ No pakets in room');
-        return [];
-      }
-
-      // Fetch pakets
       final paketList = await service.getAll(idList: paketIds.toList());
-
-      debugPrint('[PaketProvider] ✅ Fetched ${paketList.length} pakets');
       return paketList;
     } catch (e) {
       _error = e.toString();
-      debugPrint('[PaketProvider] ❌ Error: $e');
       return [];
     } finally {
       _isLoading = false;
@@ -316,10 +316,9 @@ class PaketProvider with ChangeNotifier {
 
     try {
       await service.create(model);
-      await getAll(); // refresh after create
+      await getAll();
     } catch (e) {
       _error = e.toString();
-      debugPrint('[PaketProvider] ❌ Error create: $e');
     }
 
     _isLoading = false;
@@ -333,10 +332,9 @@ class PaketProvider with ChangeNotifier {
 
     try {
       await service.update(model);
-      await getAll(); // refresh after update
+      await getAll();
     } catch (e) {
       _error = e.toString();
-      debugPrint('[PaketProvider] ❌ Error update: $e');
     }
 
     _isLoading = false;
@@ -350,10 +348,9 @@ class PaketProvider with ChangeNotifier {
 
     try {
       await service.delete(noId);
-      await getAll(); // refresh after delete
+      await getAll();
     } catch (e) {
       _error = e.toString();
-      debugPrint('[PaketProvider] ❌ Error delete: $e');
     }
 
     _isLoading = false;

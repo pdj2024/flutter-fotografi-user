@@ -6,28 +6,13 @@ import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart'
 import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:provider/provider.dart';
-
-/// ═══════════════════════════════════════════════════════════════
-/// UNIFIED PORTOFOLIO PROVIDER - CUSTOMER
-///
-/// Features:
-/// - ✅ Local cache management (like vendor)
-/// - ✅ Background image preloading
-/// - ✅ Like & Save tracking
-/// - ✅ Selected portfolio management
-/// - ✅ Smart load with cache-first strategy
-/// ═══════════════════════════════════════════════════════════════
 
 class PortofolioProvider with ChangeNotifier {
   final PortofolioService portofolioService;
   final PortofolioLocalService localService;
-
-  // ✅ Preload service instance
   final MediaPreloadService _preloadService = MediaPreloadService();
-
   bool _disposed = false;
 
   PortofolioProvider({
@@ -37,68 +22,92 @@ class PortofolioProvider with ChangeNotifier {
     _initialize();
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // STATE
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
 
   PortofolioModel? _selectedPortofolio;
   List<PortofolioModel> _portofolioList = [];
   List<PortofolioModel> _portofolioSaveList = [];
   List<PortofolioModel> _portofolioLikelist = [];
   List<PortofolioModel> _cachedPortfolios = [];
-
-  // ✅ For selected portfolio's pakets
   List<PaketModel> _paketPortofolio = [];
 
   bool _isLoadingPorto = true;
+  bool _isLoadingLike = false;
+  bool _isLoadingSave = false;
   String? _errorPorto;
   bool _isInitialized = false;
   bool _isFromCache = false;
 
-  // ═══════════════════════════════════════════════════════════
+  KategoriModel? _selectedKategori;
+  List<PaketModel> _selectedPaket = [];
+
+  // Guard prevent double tap — tidak pakai debounce agar data realtime
+  // ketika user berpindah halaman.
+  final Set<String> _likeInProgress = {};
+  final Set<String> _saveInProgress = {};
+
+  // ═══════════════════════════════════════════════════
   // GETTERS
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
 
   List<PortofolioModel> get portofolioList => _portofolioList;
   List<PortofolioModel> get portofolioSaveList => _portofolioSaveList;
   List<PortofolioModel> get portofolioLikelist => _portofolioLikelist;
   List<PortofolioModel> get cachedPortfolios => _cachedPortfolios;
-
   PortofolioModel? get selectedPortofolio => _selectedPortofolio;
   List<PaketModel> get paketPortofolio => _paketPortofolio;
-
   bool get isLoadingPorto => _isLoadingPorto;
+  bool get isLoadingLike => _isLoadingLike;
+  bool get isLoadingSave => _isLoadingSave;
   String? get errorPorto => _errorPorto;
   bool get isInitialized => _isInitialized;
   bool get isFromCache => _isFromCache;
-
-  // ✅ Preload service getter
-  MediaPreloadService get preloadService => _preloadService;
-
-  KategoriModel? _selectedKategori;
-  List<PaketModel> _selectedPaket = [];
-
   KategoriModel? get selectedKategori => _selectedKategori;
   List<PaketModel> get selectedPaket => _selectedPaket;
+  MediaPreloadService get preloadService => _preloadService;
+
+  /// true jika API like sedang berjalan (prevent double tap)
+  bool isLikeInProgress(String noId) => _likeInProgress.contains(noId);
+
+  /// true jika API save sedang berjalan (prevent double tap)
+  bool isSaveInProgress(String noId) => _saveInProgress.contains(noId);
+
+  bool isPortfolioCached(String noId) =>
+      _cachedPortfolios.any((p) => p.noId == noId);
+
+  /// Cek apakah porto di-like, berdasarkan list lokal
+  bool isLiked(String noId) => _portofolioLikelist.any((p) => p.noId == noId);
+
+  /// Cek apakah porto di-save, berdasarkan list lokal
+  bool isSaved(String noId) => _portofolioSaveList.any((p) => p.noId == noId);
 
   void setKategori(KategoriModel? value) {
     _selectedKategori = value;
     notifyListeners();
   }
 
-  /// Check if portfolio is in cache
-  bool isPortfolioCached(String noId) {
-    return _cachedPortfolios.any((p) => p.noId == noId);
-  }
+  // ═══════════════════════════════════════════════════
+  // REFRESH ALIASES (untuk bottom navigation tab refresh)
+  // ═══════════════════════════════════════════════════
 
-  // ═══════════════════════════════════════════════════════════
+  /// Alias untuk loadLikedPortofolio — dipanggil saat tab profile di-tap
+  /// dari bottom navigation agar nama method konsisten dengan pattern refresh.
+  Future<void> refreshLikePortofolio(BuildContext context) =>
+      loadLikedPortofolio(context: context, syncFromApi: true);
+
+  /// Alias untuk loadSavedPortofolio — dipanggil saat tab profile di-tap.
+  Future<void> refreshSavePortofolio(BuildContext context) =>
+      loadSavedPortofolio(context: context, syncFromApi: true);
+
+  // ═══════════════════════════════════════════════════
   // LIFECYCLE
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
 
   @override
   void dispose() {
     _disposed = true;
-    // ✅ Cancel pending preloads
     _preloadService.cancelAll();
     super.dispose();
   }
@@ -107,95 +116,56 @@ class PortofolioProvider with ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // INITIALIZATION
-  // ═══════════════════════════════════════════════════════════
-
   Future<void> _initialize() async {
     try {
-      debugPrint('🔧 [PortofolioProvider] Initializing...');
-
-      // Initialize local service
       await localService.initialize();
-
       _isInitialized = true;
       debugPrint('✅ [PortofolioProvider] Initialized');
-    } catch (e, stackTrace) {
-      debugPrint('❌ [PortofolioProvider] Initialization error: $e');
-      debugPrint('Stack: $stackTrace');
+    } catch (e) {
+      debugPrint('❌ [PortofolioProvider] Init error: $e');
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SELECTED PORTFOLIO MANAGEMENT
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // SELECTED PORTFOLIO
+  // ═══════════════════════════════════════════════════
 
   void setSelectedPortofolio(PortofolioModel? porto) {
     _selectedPortofolio = porto;
-
-    // ✅ Preload selected portfolio images with high priority
     if (porto != null) {
       _preloadService.preloadPortfolio(porto, highPriority: true);
     }
-
     notifyListeners();
   }
 
-  /// Get portfolio by ID (cache-first)
   Future<PortofolioModel?> getPortfolioById(String noId) async {
     try {
-      // Priority 1: Check cache
       final cached = await localService.getPortfolioById(noId);
-      if (cached != null) {
-        debugPrint('[PortofolioProvider] 📦 Using cached portfolio: $noId');
-        return cached;
-      }
-
-      // Priority 2: Check in-memory list
+      if (cached != null) return cached;
       try {
-        final fromList = _portofolioList.firstWhere((p) => p.noId == noId);
-        debugPrint('[PortofolioProvider] 📋 Using portfolio from list: $noId');
-        return fromList;
-      } catch (e) {
-        // Not found in list
-      }
-
-      // Priority 3: Fetch from API
-      debugPrint('[PortofolioProvider] 🌐 Fetching portfolio from API: $noId');
-      final portfolios = await portofolioService.getAll(noId: noId);
-
-      if (portfolios.isNotEmpty) {
-        return portfolios.first;
-      }
-
-      return null;
+        return _portofolioList.firstWhere((p) => p.noId == noId);
+      } catch (_) {}
+      final list = await portofolioService.getAll(noId: noId);
+      return list.isNotEmpty ? list.first : null;
     } catch (e) {
-      debugPrint('[PortofolioProvider] ❌ Error getting portfolio: $e');
       return null;
     }
   }
 
-  /// Set pakets for selected portfolio
   Future<void> setPaketPortofolio({
     required List<String> idPaket,
     required PaketProvider paketProvider,
   }) async {
-    final allPaketVendor = paketProvider.paketList;
-
-    _paketPortofolio = allPaketVendor
-        .where(
-          (paket) => idPaket.contains(paket.no_id) && paket.status == 'aktif',
-        )
+    _paketPortofolio = paketProvider.paketList
+        .where((p) => idPaket.contains(p.no_id) && p.status == 'aktif')
         .toList();
-
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LOAD OPERATIONS - Smart Cache Strategy
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // LOAD ALL (home feed)
+  // ═══════════════════════════════════════════════════
 
-  /// Load portfolios with smart cache strategy & preloading
   Future<void> loadPortofolio(
     BuildContext context, {
     String status = 'aktif',
@@ -205,47 +175,28 @@ class PortofolioProvider with ChangeNotifier {
   }) async {
     _isLoadingPorto = true;
     _errorPorto = null;
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PortofolioProvider] 📥 Loading portfolios...");
     safeNotify();
 
     try {
       final userProvider = context.read<UserProvider>();
-      final role = userProvider.role;
-      final userId = role == 'customer' ? userProvider.userId : null;
+      final userId =
+          userProvider.role == 'customer' ? userProvider.userId : null;
 
-      debugPrint("[PortofolioProvider] User ID: $userId");
+      // Load liked/saved dari Hive terlebih dahulu
+      await _syncLikedAndSavedFromLocal();
 
-      // ✅ STRATEGY 1: Try cache first (if not force refresh)
       if (!forceRefresh && _isInitialized) {
         try {
           final cached = await localService.getCachedPortfolios();
-
           if (cached.isNotEmpty) {
-            debugPrint(
-                "[PortofolioProvider] 📦 Found ${cached.length} cached portfolios");
-
             _cachedPortfolios = cached;
             _portofolioList = cached;
             _isFromCache = true;
-
-            // Filter likes & saves from cache
-            if (userProvider.customer != null) {
-              _filterLikesAndSaves(userProvider, cached);
-            }
-
-            // Show cached data immediately
             safeNotify();
-
-            debugPrint(
-                "[PortofolioProvider] ✅ Cache loaded, fetching updates in background...");
           }
-        } catch (e) {
-          debugPrint("[PortofolioProvider] ⚠️ Cache load failed: $e");
-        }
+        } catch (_) {}
       }
 
-      // ✅ STRATEGY 2: Fetch from API (background or foreground)
       final result = await portofolioService.getAll(
         id_customer: userId,
         status: status,
@@ -257,177 +208,251 @@ class PortofolioProvider with ChangeNotifier {
       _portofolioList = result;
       _isFromCache = false;
 
-      debugPrint(
-          "[PortofolioProvider] ✅ Loaded ${result.length} portfolios from API");
-
-      // ✅ Filter likes & saves
-      if (userProvider.customer != null) {
-        _filterLikesAndSaves(userProvider, result);
-      }
-
-      // ✅ Save top 10 to cache in background
       if (result.length >= 10) {
         _saveToCacheInBackground(result.take(10).toList());
       }
-
-      // ✅ START PRELOADING IMAGES IN BACKGROUND
       if (preloadImages && result.isNotEmpty) {
-        debugPrint(
-            "[PortofolioProvider] 🚀 Starting background image preload...");
-
-        _preloadService
-            .preloadPortfolios(
-          result,
-          priorityCount: 10, // First 10 portfolios get priority
-        )
-            .then((_) {
-          debugPrint("[PortofolioProvider] ✅ Background preload completed");
-          _preloadService.printStats();
-        }).catchError((e) {
-          debugPrint("[PortofolioProvider] ⚠️ Preload error: $e");
-        });
+        _preloadService.preloadPortfolios(result, priorityCount: 10);
       }
     } catch (e) {
-      debugPrint("[PortofolioProvider] ❌ Error loading portfolios: $e");
-      _errorPorto = "Error memuat portofolio";
+      debugPrint('[PortofolioProvider] ❌ loadPortofolio: $e');
+      _errorPorto = 'Error memuat portofolio';
     } finally {
       _isLoadingPorto = false;
-      debugPrint("[PortofolioProvider] ✅ Load complete");
-      debugPrint("═══════════════════════════════════════════════════");
       safeNotify();
     }
   }
 
-  /// Helper: Filter likes and saves
-  void _filterLikesAndSaves(
-      UserProvider userProvider, List<PortofolioModel> portfolios) {
-    final portoMap = {
-      for (final porto in portfolios) porto.noId: porto,
-    };
+  // ═══════════════════════════════════════════════════
+  // LIKE — Langsung API (tanpa debounce), optimistic UI + rollback
+  // ═══════════════════════════════════════════════════
 
-    final likes = userProvider.customer!.likes;
-    final saves = userProvider.customer!.saves;
+  /// Toggle like pada portfolio.
+  ///
+  /// Flow:
+  /// 1. Guard — abaikan jika API masih berjalan (prevent double tap).
+  /// 2. Optimistic UI — update list lokal langsung agar UI responsif.
+  /// 3. API call — langsung, tanpa debounce, data realtime.
+  /// 4. Local Hive — simpan/hapus + download media background.
+  /// 5. Rollback — kembalikan ke state sebelumnya jika API gagal.
+  Future<void> toggleLike({
+    required BuildContext context,
+    required PortofolioModel porto,
+  }) async {
+    final noId = porto.noId;
 
-    _portofolioLikelist = likes.reversed
-        .where((id) => portoMap.containsKey(id))
-        .map((id) => portoMap[id]!)
-        .toList();
+    // ── 1. Guard ──────────────────────────────────────
+    if (_likeInProgress.contains(noId)) return;
 
-    _portofolioSaveList = saves.reversed
-        .where((id) => portoMap.containsKey(id))
-        .map((id) => portoMap[id]!)
-        .toList();
+    final wasLiked = isLiked(noId);
+    final nowLiked = !wasLiked;
 
-    debugPrint("[PortofolioProvider]    Likes: ${_portofolioLikelist.length}");
-    debugPrint("[PortofolioProvider]    Saves: ${_portofolioSaveList.length}");
+    // ── 2. Optimistic UI ──────────────────────────────
+    _likeInProgress.add(noId);
+    _updateLikeList(porto, nowLiked);
+    safeNotify();
+
+    try {
+      final userId = context.read<UserProvider>().userId;
+      if (userId == null) throw Exception('User belum login');
+
+      debugPrint(
+          '[PortofolioProvider] ${nowLiked ? '❤️' : '💔'} toggleLike: $noId');
+
+      // ── 3. API call ───────────────────────────────
+      if (nowLiked) {
+        await portofolioService.likePorto(userId, noId);
+        // ── 4a. Simpan ke Hive + download media background ──
+        await localService.saveLiked(porto);
+      } else {
+        await portofolioService.unlikePorto(userId, noId);
+        // ── 4b. Hapus dari Hive ──────────────────────
+        await localService.removeLiked(noId);
+      }
+
+      // Sync ulang dari Hive agar list akurat
+      await _syncLikedAndSavedFromLocal();
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ toggleLike error: $e');
+      // ── 5. Rollback ───────────────────────────────
+      _updateLikeList(porto, wasLiked);
+    } finally {
+      _likeInProgress.remove(noId);
+      safeNotify();
+    }
   }
 
-  /// Helper: Save to cache in background
+  void _updateLikeList(PortofolioModel porto, bool liked) {
+    if (liked) {
+      if (!_portofolioLikelist.any((p) => p.noId == porto.noId)) {
+        _portofolioLikelist = [porto, ..._portofolioLikelist];
+      }
+    } else {
+      _portofolioLikelist =
+          _portofolioLikelist.where((p) => p.noId != porto.noId).toList();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SAVE — Langsung API (tanpa debounce), optimistic UI + rollback
+  // ═══════════════════════════════════════════════════
+
+  Future<void> toggleSave({
+    required BuildContext context,
+    required PortofolioModel porto,
+  }) async {
+    final noId = porto.noId;
+
+    // ── 1. Guard ──────────────────────────────────────
+    if (_saveInProgress.contains(noId)) return;
+
+    final wasSaved = isSaved(noId);
+    final nowSaved = !wasSaved;
+
+    // ── 2. Optimistic UI ──────────────────────────────
+    _saveInProgress.add(noId);
+    _updateSaveList(porto, nowSaved);
+    safeNotify();
+
+    try {
+      final userId = context.read<UserProvider>().userId;
+      if (userId == null) throw Exception('User belum login');
+
+      debugPrint(
+          '[PortofolioProvider] ${nowSaved ? '🔖' : '🗑️'} toggleSave: $noId');
+
+      // ── 3. API call ───────────────────────────────
+      if (nowSaved) {
+        await portofolioService.savePorto(userId, noId);
+        // ── 4a. Simpan ke Hive + download media background ──
+        await localService.saveSaved(porto);
+      } else {
+        await portofolioService.unsavePorto(userId, noId);
+        // ── 4b. Hapus dari Hive ──────────────────────
+        await localService.removeSaved(noId);
+      }
+
+      await _syncLikedAndSavedFromLocal();
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ toggleSave error: $e');
+      // ── 5. Rollback ───────────────────────────────
+      _updateSaveList(porto, wasSaved);
+    } finally {
+      _saveInProgress.remove(noId);
+      safeNotify();
+    }
+  }
+
+  void _updateSaveList(PortofolioModel porto, bool saved) {
+    if (saved) {
+      if (!_portofolioSaveList.any((p) => p.noId == porto.noId)) {
+        _portofolioSaveList = [porto, ..._portofolioSaveList];
+      }
+    } else {
+      _portofolioSaveList =
+          _portofolioSaveList.where((p) => p.noId != porto.noId).toList();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // LOAD LIKED LIST (untuk halaman Liked)
+  // ═══════════════════════════════════════════════════
+
+  Future<void> loadLikedPortofolio({
+    BuildContext? context,
+    bool syncFromApi = true,
+  }) async {
+    _isLoadingLike = true;
+    safeNotify();
+
+    try {
+      // Load dari local dulu (cepat, offline-first)
+      _portofolioLikelist = await localService.getLikedPortfolios();
+      safeNotify();
+
+      // Sync dari API untuk pastikan konsistensi
+      if (syncFromApi && context != null) {
+        try {
+          final userId = context.read<UserProvider>().userId;
+          if (userId != null) {
+            final apiLiked =
+                await portofolioService.getLikesPorto(noId: userId);
+            await localService.syncLiked(apiLiked);
+            _portofolioLikelist = await localService.getLikedPortfolios();
+          }
+        } catch (e) {
+          debugPrint('[PortofolioProvider] ⚠️ syncLiked API failed: $e');
+          // Tetap pakai data lokal
+        }
+      }
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ loadLikedPortofolio: $e');
+    } finally {
+      _isLoadingLike = false;
+      safeNotify();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // LOAD SAVED LIST (untuk halaman Saved)
+  // ═══════════════════════════════════════════════════
+
+  Future<void> loadSavedPortofolio({
+    BuildContext? context,
+    bool syncFromApi = true,
+  }) async {
+    _isLoadingSave = true;
+    safeNotify();
+
+    try {
+      _portofolioSaveList = await localService.getSavedPortfolios();
+      safeNotify();
+
+      if (syncFromApi && context != null) {
+        try {
+          final userId = context.read<UserProvider>().userId;
+          if (userId != null) {
+            final apiSaved =
+                await portofolioService.getSavesPorto(noId: userId);
+            await localService.syncSaved(apiSaved);
+            _portofolioSaveList = await localService.getSavedPortfolios();
+          }
+        } catch (e) {
+          debugPrint('[PortofolioProvider] ⚠️ syncSaved API failed: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ loadSavedPortofolio: $e');
+    } finally {
+      _isLoadingSave = false;
+      safeNotify();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // PRIVATE HELPERS
+  // ═══════════════════════════════════════════════════
+
+  Future<void> _syncLikedAndSavedFromLocal() async {
+    try {
+      final liked = await localService.getLikedPortfolios();
+      final saved = await localService.getSavedPortfolios();
+      _portofolioLikelist = liked;
+      _portofolioSaveList = saved;
+      debugPrint(
+          '[PortofolioProvider] 🔄 syncLocal: liked=${liked.length} saved=${saved.length}');
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ syncLocal error: $e');
+    }
+  }
+
   Future<void> _saveToCacheInBackground(
       List<PortofolioModel> portfolios) async {
     try {
-      debugPrint(
-          "[PortofolioProvider] 💾 Saving ${portfolios.length} portfolios to cache...");
-
-      // Small delay to not block UI
       await Future.delayed(const Duration(milliseconds: 500));
-
-      await localService.saveTop10(
-        portfolios,
-        downloadMedia: true, // Download media in background
-      );
-
       _cachedPortfolios = await localService.getCachedPortfolios();
-
-      debugPrint("[PortofolioProvider] ✅ Cache saved");
       safeNotify();
-    } catch (e) {
-      debugPrint("[PortofolioProvider] ⚠️ Cache save failed: $e");
-    }
-  }
-
-  /// Load liked portfolios
-  Future<void> loadLikePortofolio(
-    BuildContext context, {
-    bool preloadImages = true,
-  }) async {
-    _isLoadingPorto = true;
-    _errorPorto = null;
-    debugPrint("[PortofolioProvider] 📥 Loading liked portfolios...");
-    safeNotify();
-
-    try {
-      final userProvider = context.read<UserProvider>();
-      final role = userProvider.role;
-      final userId = role == 'customer' ? userProvider.userId : null;
-
-      final result = await portofolioService.getAll(
-        id_customer: userId,
-        status: "aktif",
-      );
-
-      final userLiked = result
-          .where((porto) => userProvider.customer!.likes.contains(porto.noId))
-          .toList();
-
-      _portofolioLikelist = userLiked;
-
-      debugPrint(
-          "[PortofolioProvider] ✅ Loaded ${userLiked.length} liked portfolios");
-
-      // ✅ Preload liked portfolios
-      if (preloadImages && userLiked.isNotEmpty) {
-        _preloadService.preloadPortfolios(userLiked);
-      }
-    } catch (e) {
-      debugPrint("[PortofolioProvider] ❌ Error loading liked portfolios: $e");
-      _errorPorto = "Error memuat portofolio";
-    } finally {
-      _isLoadingPorto = false;
-      safeNotify();
-    }
-  }
-
-  /// Load saved portfolios
-  Future<void> loadSavePortofolio(
-    BuildContext context, {
-    bool preloadImages = true,
-  }) async {
-    _isLoadingPorto = true;
-    _errorPorto = null;
-    debugPrint("[PortofolioProvider] 📥 Loading saved portfolios...");
-    safeNotify();
-
-    try {
-      final userProvider = context.read<UserProvider>();
-      final role = userProvider.role;
-      final userId = role == 'customer' ? userProvider.userId : null;
-
-      final result = await portofolioService.getAll(
-        id_customer: userId,
-        status: "aktif",
-      );
-
-      final userSaved = result
-          .where((porto) => userProvider.customer!.saves.contains(porto.noId))
-          .toList();
-
-      _portofolioSaveList = userSaved;
-
-      debugPrint(
-          "[PortofolioProvider] ✅ Loaded ${userSaved.length} saved portfolios");
-
-      // ✅ Preload saved portfolios
-      if (preloadImages && userSaved.isNotEmpty) {
-        _preloadService.preloadPortfolios(userSaved);
-      }
-    } catch (e) {
-      debugPrint("[PortofolioProvider] ❌ Error loading saved portfolios: $e");
-      _errorPorto = "Error memuat portofolio";
-    } finally {
-      _isLoadingPorto = false;
-      safeNotify();
-    }
+    } catch (_) {}
   }
 
   Future<void> refreshSinglePortofolio(
@@ -437,96 +462,55 @@ class PortofolioProvider with ChangeNotifier {
     _isLoadingPorto = true;
     _errorPorto = null;
     notifyListeners();
-
     try {
       final oldId = selectedPortofolio?.noId;
-      debugPrint('[PortofolioProvider] 🔄 Refreshing: $oldId');
-
       await loadPortofolio(context);
-
-      final freshPorto = portofolioList.firstWhere((p) => p.noId == oldId);
-      setSelectedPortofolio(freshPorto);
-
+      final fresh = portofolioList.firstWhere((p) => p.noId == oldId);
+      setSelectedPortofolio(fresh);
       await setPaketPortofolio(
-        idPaket: freshPorto.idPaket.toList(),
-        paketProvider: paketProvider,
-      );
-
-      debugPrint('[PortofolioProvider] ✅ Portfolio refreshed');
-    } catch (e, stackTrace) {
-      _errorPorto = "Gagal refresh portofolio";
+          idPaket: fresh.idPaket.toList(), paketProvider: paketProvider);
+    } catch (e) {
+      _errorPorto = 'Gagal refresh portofolio';
     } finally {
       _isLoadingPorto = false;
       notifyListeners();
     }
   }
 
-  /// Refresh data portofolio (pull-to-refresh)
-  Future<void> refresh(BuildContext context) async {
-    await loadPortofolio(context, forceRefresh: true);
-  }
+  Future<void> refresh(BuildContext context) async =>
+      loadPortofolio(context, forceRefresh: true);
 
-  // ═══════════════════════════════════════════════════════════
-  // PRELOAD CONTROL METHODS
-  // ═══════════════════════════════════════════════════════════
-
-  /// Preload specific portfolio (for detail view)
-  Future<void> preloadPortfolio(PortofolioModel portfolio) async {
-    await _preloadService.preloadPortfolio(portfolio, highPriority: true);
-  }
-
-  /// Get preload statistics
-  Map<String, dynamic> getPreloadStats() {
-    return _preloadService.getStats();
-  }
-
-  /// Clear image cache
-  Future<void> clearImageCache() async {
-    await _preloadService.clearCache();
-    debugPrint("[PortofolioProvider] 🗑️ Image cache cleared");
-  }
-
-  /// Cancel all pending preloads
-  void cancelPreloads() {
-    _preloadService.cancelAll();
-  }
-
-  /// Pause preloading (to save battery/data)
-  void pausePreloads() {
-    _preloadService.pause();
-  }
-
-  /// Resume preloading
-  void resumePreloads() {
-    _preloadService.resume();
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // CACHE MANAGEMENT
-  // ═══════════════════════════════════════════════════════════
-
-  /// Clear all cache
   Future<void> clearCache() async {
     try {
-      debugPrint('[PortofolioProvider] 🗑️ Clearing cache...');
-
       await localService.clearAll();
       _cachedPortfolios = [];
-
-      debugPrint('[PortofolioProvider] ✅ Cache cleared');
       notifyListeners();
-    } catch (e) {
-      debugPrint('[PortofolioProvider] ❌ Clear cache failed: $e');
-    }
+    } catch (_) {}
   }
 
-  /// Get cache statistics
-  Future<Map<String, dynamic>> getCacheStats() async {
-    return await localService.getStats();
+  Future<void> clearCustomerData() async {
+    try {
+      _likeInProgress.clear();
+      _saveInProgress.clear();
+      await localService.clearAll();
+      _portofolioLikelist = [];
+      _portofolioSaveList = [];
+      notifyListeners();
+    } catch (_) {}
   }
 
-  /// Print cache statistics
-  Future<void> printCacheStats() async {
-    await localService.printStats();
+  void setSelectedPaket(List<PaketModel> p) {
+    _selectedPaket = p;
+    notifyListeners();
   }
+
+  Future<void> preloadPortfolio(PortofolioModel p) =>
+      _preloadService.preloadPortfolio(p, highPriority: true);
+  Map<String, dynamic> getPreloadStats() => _preloadService.getStats();
+  Future<void> clearImageCache() => _preloadService.clearCache();
+  void cancelPreloads() => _preloadService.cancelAll();
+  void pausePreloads() => _preloadService.pause();
+  void resumePreloads() => _preloadService.resume();
+  Future<Map<String, dynamic>> getCacheStats() => localService.getStats();
+  Future<void> printCacheStats() => localService.printStats();
 }

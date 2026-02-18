@@ -17,7 +17,8 @@ class CustomerHomePage extends StatefulWidget {
 }
 
 class _CustomerHomePageState extends State<CustomerHomePage>
-    with WidgetsBindingObserver { // ✅ Add observer
+    with WidgetsBindingObserver {
+  // ✅ Add observer
   final ScrollController _scrollController = ScrollController();
 
   bool isScrolled = false;
@@ -31,7 +32,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
+
     // ✅ Listen to app lifecycle
     WidgetsBinding.instance.addObserver(this);
 
@@ -55,13 +56,13 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    
+
     // ✅ Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
-    
+
     // ✅ Cancel preloads when leaving page
     _cancelPreloads();
-    
+
     super.dispose();
   }
 
@@ -69,20 +70,20 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final portofolioProvider = context.read<PortofolioProvider>();
-    
+
     switch (state) {
       case AppLifecycleState.paused:
         // App goes to background - pause preloading to save battery
         debugPrint("[HomePage] ⏸️ App paused - pausing preloads");
         portofolioProvider.pausePreloads();
         break;
-        
+
       case AppLifecycleState.resumed:
         // App returns to foreground - resume preloading
         debugPrint("[HomePage] ▶️ App resumed - resuming preloads");
         portofolioProvider.resumePreloads();
         break;
-        
+
       default:
         break;
     }
@@ -131,12 +132,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       if (!mounted) return;
 
       debugPrint("[HomePage] ✅ Data loaded successfully");
-      
+
       // ✅ Print preload stats
       final stats = portofolioProvider.getPreloadStats();
       debugPrint("[HomePage] 📊 Preload stats: $stats");
       debugPrint("═══════════════════════════════════════════════════");
-
     } catch (e, st) {
       debugPrint("[HomePage] ❌ Error loading data: $e");
       debugPrintStack(stackTrace: st);
@@ -161,11 +161,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void _preloadNextBatch() {
     final portofolioProvider = context.read<PortofolioProvider>();
     final portfolios = portofolioProvider.portofolioList;
-    
+
     if (portfolios.isEmpty) return;
 
     final nextIndex = _lastPreloadIndex + 10;
-    
+
     if (nextIndex >= portfolios.length) {
       debugPrint("[HomePage] ℹ️ All portfolios already queued for preload");
       return;
@@ -174,8 +174,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     final nextBatch = portfolios.skip(_lastPreloadIndex).take(10).toList();
     _lastPreloadIndex = nextIndex;
 
-    debugPrint("[HomePage] 🚀 Preloading next batch (${nextBatch.length} portfolios)");
-    
+    debugPrint(
+        "[HomePage] 🚀 Preloading next batch (${nextBatch.length} portfolios)");
+
     // Preload in background
     portofolioProvider.preloadService.preloadPortfolios(
       nextBatch,
@@ -297,7 +298,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
 
               // ===================== DAFTAR PORTOFOLIO =====================
               PortofolioSection(),
-              
+
               // ✅ Add loading indicator at bottom when preloading
               SliverToBoxAdapter(
                 child: Consumer<PortofolioProvider>(
@@ -305,11 +306,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                     final stats = provider.getPreloadStats();
                     final isPreloading = stats['isPreloading'] as bool;
                     final queueLength = stats['queueLength'] as int;
-                    
+
                     if (!isPreloading || queueLength == 0) {
                       return const SizedBox.shrink();
                     }
-                    
+
                     return Container(
                       padding: const EdgeInsets.all(16),
                       child: Row(
@@ -339,6 +340,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                   },
                 ),
               ),
+              SliverToBoxAdapter(
+                child: Container(
+                  height: 80,
+                ),
+              ),
             ],
           ),
         ),
@@ -356,7 +362,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
 class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   SliverHeaderDelegate({required this.child});
-  
+
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
@@ -365,10 +371,10 @@ class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get maxExtent => 64.0 + 15;
-  
+
   @override
   double get minExtent => 64.0 + 15;
-  
+
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
     return false;
