@@ -97,37 +97,75 @@ class PortofolioService {
     }
   }
 
-// ACTION
-  Future<void> action({
-    required String no_id,
-    required String id_portofolio,
-    required String action_type, // like, unlike, save, unsave
+  Future<List<PortofolioModel>> getLikesPorto({
+    String? noId,
+    String? orderBy,
+    String? orderDir,
   }) async {
-    final body = {
-      "no_id": no_id,
-      "id_portofolio": id_portofolio,
-      "action_type": action_type,
-    };
+    try {
+      final response = await apiClient.get(
+        '/$controller/getLikesPorto',
+        queryParameters: {
+          if (noId != null && noId.toString().isNotEmpty) 'id_customer': noId,
+          if (orderBy != null && orderBy.toString().isNotEmpty)
+            'orderBy': orderBy,
+          if (orderDir != null && orderDir.toString().isNotEmpty)
+            'orderDir': orderDir,
+        },
+      );
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
 
-    print('==============================');
-    print('customer: $no_id');
-    print('portofolio: $id_portofolio');
-    print('action: $action_type');
-    print('==============================');
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> json = jsonDecode(response.body);
+        final List<dynamic> data = json['Data'];
+        return data.map((e) => PortofolioModel.fromJson(e)).toList();
+      } else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
+    }
+  }
 
-    final response = await apiClient.post(
-      '/$controller/action',
-      body: jsonEncode(body),
-      headers: {'Content-Type': 'application/json'},
-    );
+  Future<List<PortofolioModel>> getSavesPorto({
+    String? noId,
+    String? orderBy,
+    String? orderDir,
+  }) async {
+    try {
+      final response = await apiClient.get(
+        '/$controller/getSavesPorto',
+        queryParameters: {
+          if (noId != null && noId.toString().isNotEmpty) 'id_customer': noId,
+          if (orderBy != null && orderBy.toString().isNotEmpty)
+            'orderBy': orderBy,
+          if (orderDir != null && orderDir.toString().isNotEmpty)
+            'orderDir': orderDir,
+        },
+      );
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
 
-    print('==============================');
-    print('Response Body: ${response.body}');
-    print('Status Code: ${response.statusCode}');
-    print('==============================');
-
-    if (response.statusCode != 200) {
-      throw Exception('Gagal melakukan aksi $action_type');
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> json = jsonDecode(response.body);
+        final List<dynamic> data = json['Data'];
+        return data.map((e) => PortofolioModel.fromJson(e)).toList();
+      } else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
     }
   }
 
@@ -136,6 +174,50 @@ class PortofolioService {
     final response = await apiClient.post(
       '/$controller/create',
       body: jsonEncode(model.toJsonCreate()),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menambahkan $entity');
+    }
+  }
+
+  Future<void> likePorto(String idUser, String idPorto) async {
+    final response = await apiClient.post(
+      '/like/create?id_user=$idUser&id_portofolio=$idPorto',
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menambahkan $entity');
+    }
+  }
+
+  Future<void> unlikePorto(String idUser, String idPorto) async {
+    final response = await apiClient.delete(
+      '/like/delete?id_user=$idUser&id_portofolio=$idPorto',
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menambahkan $entity');
+    }
+  }
+
+  Future<void> savePorto(String idUser, String idPorto) async {
+    final response = await apiClient.post(
+      '/save/create?id_user=$idUser&id_portofolio=$idPorto',
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menambahkan $entity');
+    }
+  }
+
+  Future<void> unsavePorto(String idUser, String idPorto) async {
+    final response = await apiClient.delete(
+      '/save/delete?id_user=$idUser&id_portofolio=$idPorto',
       headers: {'Content-Type': 'application/json'},
     );
 

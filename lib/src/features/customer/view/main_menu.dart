@@ -362,7 +362,11 @@ class _MainMenuState extends State<MainMenu> {
           await context.read<UserProvider>().checkLoginGoogle(
                 role: Constants.customer,
               );
-          await context.read<PortofolioProvider>().loadPortofolio(context);
+          if (!mounted) return;
+          final provider = context.read<PortofolioProvider>();
+
+          await provider.refreshLikePortofolio(context);
+          await provider.refreshSavePortofolio(context);
           break;
       }
 

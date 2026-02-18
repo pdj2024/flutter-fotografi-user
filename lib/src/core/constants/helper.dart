@@ -24,6 +24,37 @@ class Helper {
     return "$minutes:$seconds";
   }
 
+  static String formatCaption(String text) {
+    String result = text;
+
+    // 1️⃣ Convert literal \n menjadi newline
+    result = result.replaceAll(r'\n', '\n');
+
+    // 2️⃣ Convert newline menjadi <br>
+    result = result.replaceAll('\n', '<br>');
+
+    // 3️⃣ Auto detect URL
+    final urlRegex = RegExp(
+      r'(https?:\/\/[^\s<]+)',
+      caseSensitive: false,
+    );
+
+    result = result.replaceAllMapped(urlRegex, (match) {
+      final url = match.group(0);
+      return '<a href="$url">$url</a>';
+    });
+
+    // 4️⃣ Auto detect hashtag
+    final hashtagRegex = RegExp(r'(#\w+)');
+
+    result = result.replaceAllMapped(hashtagRegex, (match) {
+      final tag = match.group(0);
+      return '<a href="hashtag:$tag">$tag</a>';
+    });
+
+    return result;
+  }
+
   static Map<String, List<ChatModel>> groupMessagesByDate(
       List<ChatModel> messages) {
     final Map<String, List<ChatModel>> grouped = {};
