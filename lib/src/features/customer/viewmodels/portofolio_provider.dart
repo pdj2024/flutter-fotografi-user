@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/media_preload_service.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
@@ -6,6 +7,7 @@ import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart'
 import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
+import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -255,6 +257,7 @@ class PortofolioProvider with ChangeNotifier {
     try {
       final userId = context.read<UserProvider>().userId;
       if (userId == null) throw Exception('User belum login');
+      final navigationProvider = context.read<NavigationProvider>();
 
       debugPrint(
           '[PortofolioProvider] ${nowLiked ? '❤️' : '💔'} toggleLike: $noId');
@@ -264,6 +267,16 @@ class PortofolioProvider with ChangeNotifier {
         await portofolioService.likePorto(userId, noId);
         // ── 4a. Simpan ke Hive + download media background ──
         await localService.saveLiked(porto);
+
+        // Navigasi ke halaman single post
+        context.read<PortofolioProvider>().setSelectedPortofolio(porto);
+        navigationProvider.navigateToPage(
+          hrsLogin: true,
+          context,
+          const SinglePostPage(),
+          targetTabIndex: 0,
+          targetPage: 'SinglePostPage',
+        );
       } else {
         await portofolioService.unlikePorto(userId, noId);
         // ── 4b. Hapus dari Hive ──────────────────────
@@ -316,7 +329,9 @@ class PortofolioProvider with ChangeNotifier {
 
     try {
       final userId = context.read<UserProvider>().userId;
+
       if (userId == null) throw Exception('User belum login');
+      final navigationProvider = context.read<NavigationProvider>();
 
       debugPrint(
           '[PortofolioProvider] ${nowSaved ? '🔖' : '🗑️'} toggleSave: $noId');
@@ -326,6 +341,16 @@ class PortofolioProvider with ChangeNotifier {
         await portofolioService.savePorto(userId, noId);
         // ── 4a. Simpan ke Hive + download media background ──
         await localService.saveSaved(porto);
+
+        // Navigasi ke halaman single post
+        context.read<PortofolioProvider>().setSelectedPortofolio(porto);
+        navigationProvider.navigateToPage(
+          hrsLogin: true,
+          context,
+          const SinglePostPage(),
+          targetTabIndex: 0,
+          targetPage: 'SinglePostPage',
+        );
       } else {
         await portofolioService.unsavePorto(userId, noId);
         // ── 4b. Hapus dari Hive ──────────────────────

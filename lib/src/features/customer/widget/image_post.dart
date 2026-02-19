@@ -205,7 +205,6 @@ class _ImagePostState extends State<ImagePost> {
               // ── Like button ──────────────────────────────
               _LikeButton(
                 isLiked: widget.isLiked,
-                likeCount: widget.likeCount,
                 isInProgress: widget.isLikeInProgress,
                 onTap: widget.onLike,
               ),
@@ -366,8 +365,7 @@ class _ImagePostState extends State<ImagePost> {
 
   Widget _buildLoadingOverlay() => Center(
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.95),
             borderRadius: BorderRadius.circular(10),
@@ -387,8 +385,7 @@ class _ImagePostState extends State<ImagePost> {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Colors.black87),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
                 ),
               ),
               const SizedBox(width: 12),
@@ -406,8 +403,7 @@ class _ImagePostState extends State<ImagePost> {
       );
 
   Widget _buildPreloadIndicator() => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.6),
           borderRadius: BorderRadius.circular(12),
@@ -420,8 +416,7 @@ class _ImagePostState extends State<ImagePost> {
               height: 12,
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             ),
             const SizedBox(width: 6),
@@ -451,9 +446,7 @@ class _ImagePostState extends State<ImagePost> {
             decoration: BoxDecoration(
               color: isActive
                   ? Colors.black87
-                  : (isPreloaded
-                      ? Colors.grey.shade300
-                      : Colors.grey.shade400),
+                  : (isPreloaded ? Colors.grey.shade300 : Colors.grey.shade400),
               borderRadius: BorderRadius.circular(3),
             ),
           );
@@ -461,8 +454,7 @@ class _ImagePostState extends State<ImagePost> {
       );
 
   Widget _buildCounter(int count) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.6),
           borderRadius: BorderRadius.circular(12),
@@ -491,13 +483,11 @@ class _ImagePostState extends State<ImagePost> {
               const SizedBox(height: 8),
               Text(
                 'Gagal memuat gambar',
-                style: TextStyle(
-                    color: Colors.grey.shade600, fontSize: 12),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () =>
-                    setState(() => _isImageLoaded = false),
+                onPressed: () => setState(() => _isImageLoaded = false),
                 child: Text(
                   'Coba lagi',
                   style: TextStyle(
@@ -524,8 +514,7 @@ class _ImagePostState extends State<ImagePost> {
               const SizedBox(height: 8),
               Text(
                 'Tidak ada gambar',
-                style: TextStyle(
-                    color: Colors.grey.shade600, fontSize: 12),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
             ],
           ),
@@ -541,13 +530,11 @@ class _ImagePostState extends State<ImagePost> {
 
 class _LikeButton extends StatelessWidget {
   final bool isLiked;
-  final int likeCount;
   final bool isInProgress;
   final VoidCallback? onTap;
 
   const _LikeButton({
     required this.isLiked,
-    required this.likeCount,
     required this.isInProgress,
     required this.onTap,
   });
@@ -585,17 +572,6 @@ class _LikeButton extends StatelessWidget {
                     ),
                   ),
           ),
-          if (likeCount > 0) ...[
-            const SizedBox(width: 4),
-            Text(
-              '$likeCount',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ],
         ],
       ),
     );
