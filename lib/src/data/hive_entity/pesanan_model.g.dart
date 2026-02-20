@@ -42,22 +42,23 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       expiryTime: fields[22] as DateTime?,
       paymentNumber1: fields[23] as String?,
       paymentNumber2: fields[24] as String?,
-      linkUrl: fields[25] as String?,
-      subtotal: fields[26] as int,
-      totDpp: fields[27] as double?,
-      ppn: fields[28] as int?,
-      inclPpn: fields[29] as bool?,
-      totPpn: fields[30] as int?,
-      grandTotal: fields[31] as int,
-      createdAt: fields[32] as DateTime?,
-      updatedAt: fields[33] as DateTime?,
+      linkSnap: fields[25] as String?,
+      linkUrl: fields[26] as String?,
+      subtotal: fields[27] as int,
+      totDpp: fields[28] as double?,
+      ppn: fields[29] as int?,
+      inclPpn: fields[30] as bool?,
+      totPpn: fields[31] as int?,
+      grandTotal: fields[32] as int,
+      createdAt: fields[33] as DateTime?,
+      updatedAt: fields[34] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PesananModel obj) {
     writer
-      ..writeByte(34)
+      ..writeByte(35)
       ..writeByte(0)
       ..write(obj.noBukti)
       ..writeByte(1)
@@ -109,22 +110,24 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       ..writeByte(24)
       ..write(obj.paymentNumber2)
       ..writeByte(25)
-      ..write(obj.linkUrl)
+      ..write(obj.linkSnap)
       ..writeByte(26)
-      ..write(obj.subtotal)
+      ..write(obj.linkUrl)
       ..writeByte(27)
-      ..write(obj.totDpp)
+      ..write(obj.subtotal)
       ..writeByte(28)
-      ..write(obj.ppn)
+      ..write(obj.totDpp)
       ..writeByte(29)
-      ..write(obj.inclPpn)
+      ..write(obj.ppn)
       ..writeByte(30)
-      ..write(obj.totPpn)
+      ..write(obj.inclPpn)
       ..writeByte(31)
-      ..write(obj.grandTotal)
+      ..write(obj.totPpn)
       ..writeByte(32)
-      ..write(obj.createdAt)
+      ..write(obj.grandTotal)
       ..writeByte(33)
+      ..write(obj.createdAt)
+      ..writeByte(34)
       ..write(obj.updatedAt);
   }
 

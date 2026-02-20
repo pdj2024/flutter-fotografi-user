@@ -9,19 +9,19 @@ class PesananModel {
   // =======================
   @HiveField(0)
   final String noBukti;
-  
+
   @HiveField(1)
   final String? noTrackingPesanan;
-  
+
   @HiveField(2)
   final String? status;
-  
+
   @HiveField(3)
   final String? statusProgresPesanan;
-  
+
   @HiveField(4)
   final String? deskripsiProgresPesanan;
-  
+
   @HiveField(5)
   final String? noPenawaran;
 
@@ -30,16 +30,16 @@ class PesananModel {
   // =======================
   @HiveField(6)
   final String idVendor;
-  
+
   @HiveField(7)
   final String? namaVendor;
-  
+
   @HiveField(8)
   final String? idMediaVendor;
 
   @HiveField(9)
   final String idCustomer;
-  
+
   @HiveField(10)
   final String? namaCustomer;
 
@@ -48,10 +48,10 @@ class PesananModel {
   // =======================
   @HiveField(11)
   final String idPaket;
-  
+
   @HiveField(12)
   final String namaPaket;
-  
+
   @HiveField(13)
   final int harga;
 
@@ -60,13 +60,13 @@ class PesananModel {
   // =======================
   @HiveField(14)
   final String lokasi;
-  
+
   @HiveField(15)
   final String kota;
-  
+
   @HiveField(16)
   final String? namaKota;
-  
+
   @HiveField(17)
   final DateTime tglRealisasi;
 
@@ -75,59 +75,62 @@ class PesananModel {
   // =======================
   @HiveField(18)
   final String? metodeBayar;
-  
+
   @HiveField(19)
   final String? statusBayar;
-  
+
   @HiveField(20)
   final String? idPaymentGateway;
-  
+
   @HiveField(21)
   final String? orderIdMidtrans;
 
   @HiveField(22)
   final DateTime? expiryTime;
-  
+
   @HiveField(23)
   final String? paymentNumber1;
-  
+
   @HiveField(24)
   final String? paymentNumber2;
+
+  @HiveField(25)
+  final String? linkSnap;
 
   // =======================
   // HASIL
   // =======================
-  @HiveField(25)
+  @HiveField(26)
   final String? linkUrl;
 
   // =======================
   // TOTAL & PAJAK
   // =======================
-  @HiveField(26)
-  final int subtotal;
-  
   @HiveField(27)
-  final double? totDpp;
-  
+  final int subtotal;
+
   @HiveField(28)
-  final int? ppn;
-  
+  final double? totDpp;
+
   @HiveField(29)
-  final bool? inclPpn;
-  
+  final int? ppn;
+
   @HiveField(30)
-  final int? totPpn;
-  
+  final bool? inclPpn;
+
   @HiveField(31)
+  final int? totPpn;
+
+  @HiveField(32)
   final int grandTotal;
 
   // =======================
   // TIMESTAMP
   // =======================
-  @HiveField(32)
-  final DateTime? createdAt;
-  
   @HiveField(33)
+  final DateTime? createdAt;
+
+  @HiveField(34)
   final DateTime? updatedAt;
 
   PesananModel({
@@ -156,6 +159,7 @@ class PesananModel {
     this.expiryTime,
     this.paymentNumber1,
     this.paymentNumber2,
+    this.linkSnap,
     this.linkUrl,
     required this.subtotal,
     this.totDpp,
@@ -215,6 +219,9 @@ class PesananModel {
       expiryTime: parseDate(json['Expiry_Time']),
       paymentNumber1: json['Payment_Number_1'],
       paymentNumber2: json['Payment_Number_2'],
+      linkSnap: (json['Link_Snap'] as String?)?.isNotEmpty == true
+          ? json['Link_Snap']
+          : null,
       linkUrl: (json['Link_Url'] as String?)?.isNotEmpty == true
           ? json['Link_Url']
           : null,
@@ -259,6 +266,7 @@ class PesananModel {
       'Expiry_Time': expiryTime?.toIso8601String(),
       'Payment_Number_1': paymentNumber1,
       'Payment_Number_2': paymentNumber2,
+      'Link_Snap': linkSnap,
       'Link_Url': linkUrl,
       'Subtotal': subtotal,
       'Tot_DPP': totDpp,
@@ -337,6 +345,7 @@ class PesananModel {
     DateTime? expiryTime,
     String? paymentNumber1,
     String? paymentNumber2,
+    String? linkSnap,
     String? linkUrl,
     int? subtotal,
     double? totDpp,
@@ -373,6 +382,7 @@ class PesananModel {
       expiryTime: expiryTime ?? this.expiryTime,
       paymentNumber1: paymentNumber1 ?? this.paymentNumber1,
       paymentNumber2: paymentNumber2 ?? this.paymentNumber2,
+      linkSnap: linkSnap ?? this.linkSnap,
       linkUrl: linkUrl ?? this.linkUrl,
       subtotal: subtotal ?? this.subtotal,
       totDpp: totDpp ?? this.totDpp,

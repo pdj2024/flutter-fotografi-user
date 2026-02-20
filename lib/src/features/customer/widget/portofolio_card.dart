@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:hive_flutter/adapters.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
@@ -67,8 +68,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
     final tp = TextPainter(
       text: TextSpan(
         text: caption,
-        style: const TextStyle(
-            fontSize: 13, height: 1.45, color: Colors.black87),
+        style:
+            const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
       ),
       maxLines: _captionMaxLines,
       textDirection: TextDirection.ltr,
@@ -233,28 +234,50 @@ class _PortofolioCardState extends State<PortofolioCard> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       widget.name,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 13,
+                                        fontSize: 16,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    if (widget.portofolio.namaKategori !=
-                                        null) ...[
-                                      Text(
-                                        widget.portofolio.namaKategori!,
-                                        style: const TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 10,
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          Helper.formatTanggal(
+                                              widget.portofolio.lastUpdated ??
+                                                  widget.portofolio.tglCreated),
+                                          style: const TextStyle(
+                                            color: Colors.black54,
+                                            fontSize: 12,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ]
+                                        Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 5),
+                                          width: 3,
+                                          height: 3,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        Text(
+                                          widget.portofolio.namaKategori!,
+                                          style: const TextStyle(
+                                            color: Colors.black54,
+                                            fontSize: 12,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -338,16 +361,14 @@ class _PortofolioCardState extends State<PortofolioCard> {
                           "body": Style(
                             margin: Margins.zero,
                             padding: HtmlPaddings.zero,
-                            maxLines:
-                                _isCaptionExpanded ? null : 2,
-                            fontSize: FontSize(14),
+                            maxLines: _isCaptionExpanded ? null : 2,
+                            fontSize: FontSize(12),
                             lineHeight: LineHeight(1.5),
                             color: Colors.black87,
                           ),
                           "b": Style(fontWeight: FontWeight.bold),
                           "i": Style(fontStyle: FontStyle.italic),
-                          "u": Style(
-                              textDecoration: TextDecoration.underline),
+                          "u": Style(textDecoration: TextDecoration.underline),
                           "a": Style(
                             color: Colors.blue,
                             textDecoration: TextDecoration.none,
@@ -364,8 +385,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
                     if (_captionHasOverflow) ...[
                       const SizedBox(height: 2),
                       GestureDetector(
-                        onTap: () => setState(() =>
-                            _isCaptionExpanded = !_isCaptionExpanded),
+                        onTap: () => setState(
+                            () => _isCaptionExpanded = !_isCaptionExpanded),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

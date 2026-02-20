@@ -7,7 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 /// 🔐 AuthService - BEST PRACTICE VERSION
 /// ============================================
 /// ✅ NO manual token storage
-/// ✅ NO manual expiry validation
+/// ✅ NO manual expiry validation  
 /// ✅ Trust Google SDK for token lifecycle
 /// ✅ User stays logged in across app restarts
 /// ============================================
@@ -20,8 +20,6 @@ class AuthService {
 
   // ✅ Google Sign-In SDK (NO forceCodeForRefreshToken needed)
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId:
-        '1017834593569-lb4aqlsc67kcbajdotroqdrkseb4bisl.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
 
@@ -43,17 +41,17 @@ class AuthService {
   // =========================================================
   // 🔧 INITIALIZATION
   // =========================================================
-
+  
   Future<void> initialize() async {
     try {
       print("🔧 [AuthService] Initializing...");
-
+      
       if (Hive.isBoxOpen(_boxName)) {
         await Hive.box(_boxName).close();
       }
-
+      
       _authBox = await Hive.openBox(_boxName);
-
+      
       print("✅ [AuthService] Initialized");
     } catch (e) {
       print("❌ [AuthService] Init failed: $e");
@@ -64,7 +62,7 @@ class AuthService {
   // =========================================================
   // 🔄 RESTORE SESSION
   // =========================================================
-
+  
   /// Restore user session from Google SDK
   /// ✅ NO token validation needed - SDK handles it
   Future<bool> restoreSession() async {
@@ -73,9 +71,8 @@ class AuthService {
       print("🔄 [AuthService] Restoring session...");
 
       // Check if user was logged in before
-      final wasLoggedIn =
-          _authBox?.get(_keyIsLoggedIn, defaultValue: false) ?? false;
-
+      final wasLoggedIn = _authBox?.get(_keyIsLoggedIn, defaultValue: false) ?? false;
+      
       if (!wasLoggedIn) {
         print("⚠️  No previous login found");
         return false;
@@ -95,7 +92,7 @@ class AuthService {
       print("✅ Session restored successfully");
       print("   Email: ${_currentUser!.email}");
       print("═══════════════════════════════════════");
-
+      
       return true;
     } catch (e) {
       print("❌ Restore session error: $e");
@@ -107,7 +104,7 @@ class AuthService {
   // =========================================================
   // 🔑 SIGN IN
   // =========================================================
-
+  
   /// Interactive sign-in with Google account picker
   Future<String?> signIn() async {
     try {
@@ -130,7 +127,7 @@ class AuthService {
 
       // Get initial token
       final token = await getIdToken();
-
+      
       print("═══════════════════════════════════════");
       return token;
     } catch (e) {
@@ -142,7 +139,7 @@ class AuthService {
   // =========================================================
   // 🎫 GET ID TOKEN - ALWAYS FRESH
   // =========================================================
-
+  
   /// Get fresh ID token for backend API calls
   /// ✅ SDK auto-refreshes if expired
   /// ✅ NO manual validation needed
@@ -158,7 +155,7 @@ class AuthService {
       if (_currentUser == null) {
         print("🔄 [AuthService] No user, attempting silent sign-in...");
         _currentUser = await _googleSignIn.signInSilently();
-
+        
         if (_currentUser == null) {
           print("❌ No authenticated user");
           return null;
@@ -181,6 +178,7 @@ class AuthService {
       }
 
       return token;
+      
     } catch (e) {
       print("❌ [AuthService] Get token error: $e");
       _notifyRefreshQueue(null);
@@ -193,7 +191,7 @@ class AuthService {
   // =========================================================
   // 📊 STATE QUERIES
   // =========================================================
-
+  
   /// Check if user is logged in
   /// ✅ Based on Google SDK state, NOT token expiry
   bool get isLoggedIn => _currentUser != null;
@@ -216,7 +214,7 @@ class AuthService {
   // =========================================================
   // 🚪 SIGN OUT
   // =========================================================
-
+  
   /// Sign out current user
   Future<void> signOut() async {
     try {
@@ -261,7 +259,7 @@ class AuthService {
   // =========================================================
   // 💾 STORAGE HELPERS
   // =========================================================
-
+  
   /// Save login state to Hive
   /// ✅ ONLY stores flag, NOT token
   Future<void> _saveLoginState() async {
@@ -287,7 +285,7 @@ class AuthService {
   // =========================================================
   // 🔄 REFRESH QUEUE MANAGEMENT
   // =========================================================
-
+  
   /// Wait for ongoing token refresh
   Future<String?> _waitForRefresh() async {
     final completer = Completer<String?>();
@@ -308,7 +306,7 @@ class AuthService {
   // =========================================================
   // 🧪 DEBUG UTILITIES
   // =========================================================
-
+  
   /// Print current auth state
   void printDebugState() {
     print("═══ AuthService State ═══");
@@ -316,13 +314,13 @@ class AuthService {
     print("Is logged in: $isLoggedIn");
     print("Refreshing: $_isRefreshing");
     print("Queue length: ${_refreshQueue.length}");
-
+    
     if (_authBox != null) {
       print("Storage:");
       print("  Was logged in: ${_authBox!.get(_keyIsLoggedIn)}");
       print("  Saved email: ${_authBox!.get(_keyUserEmail)}");
     }
-
+    
     print("═══════════════════════════");
   }
 
@@ -342,8 +340,7 @@ class AuthService {
       if (payload['exp'] != null) {
         final exp = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
         print("   Expires: $exp");
-        print(
-            "   Valid for: ${exp.difference(DateTime.now()).inMinutes} minutes");
+        print("   Valid for: ${exp.difference(DateTime.now()).inMinutes} minutes");
       }
     } catch (e) {
       print("❌ JWT decode error: $e");
@@ -353,7 +350,7 @@ class AuthService {
   // =========================================================
   // 🔧 LEGACY COMPATIBILITY (for migration)
   // =========================================================
-
+  
   /// Alias for signIn() - for backward compatibility
   Future<String?> login({bool silent = false}) async {
     if (silent) {

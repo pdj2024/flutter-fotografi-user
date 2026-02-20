@@ -17,6 +17,7 @@ import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
@@ -187,11 +188,19 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
         // Step 6: Navigate to payment page
         context.read<NavigationProvider>().popAllToRoot();
-        context.read<NavigationProvider>().navigateToPage(
-              context,
-              targetTabIndex: 2,
-              WaitingPaymentPage(paymentData: pesanan.first),
-            );
+        if (pesanan.first.linkSnap == null) {
+          context.read<NavigationProvider>().navigateToPage(
+                context,
+                targetTabIndex: 2,
+                WaitingPaymentPage(paymentData: pesanan.first),
+              );
+        } else {
+          context.read<NavigationProvider>().navigateToPage(
+                context,
+                targetTabIndex: 2,
+                WebviewPage(url: pesanan.first.linkSnap!),
+              );
+        }
       }
     } catch (e) {
       errorMessage = e.toString();

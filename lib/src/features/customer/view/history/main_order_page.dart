@@ -6,9 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/data/models/ulasan_model.dart';
-import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page';
+import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
@@ -205,7 +204,13 @@ class _MainOrderPageState extends State<MainOrderPage> {
           const Spacer(),
           // Shortcut ke pesanan selesai
           GestureDetector(
-            onTap: _goToFinished,
+            onTap: () => context.read<NavigationProvider>().navigateToPage(
+                  context,
+                  FinishedOrderPage(),
+                  targetTabIndex: 2,
+                  targetPage: 'FinishedOrderPage',
+                  hrsLogin: true,
+                ),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
@@ -310,7 +315,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
     ];
 
     return Container(
-      height: 46,
+      height: 50,
       margin: const EdgeInsets.only(top: 16),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -354,14 +359,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
                       ]
                     : [],
               ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                  letterSpacing: 0.1,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.grey.shade700,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -392,10 +405,48 @@ class _MainOrderPageState extends State<MainOrderPage> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _OrderCard(
                     order: o,
-                    onTap: () => _navigateToDetail(o),
-                    onChat: () => _navigateToChat(o),
-                    onPay: () => _navigateToPay(o),
-                    onReview: () => _openReview(o),
+                    onTap: () =>
+                        context.read<NavigationProvider>().navigateToPage(
+                              context,
+                              DetailOrderPage(pesananModel: o),
+                              targetTabIndex: 2,
+                              targetPage: 'DetailOrderPage',
+                              hrsLogin: true,
+                            ),
+                    onChat: () =>
+                        context.read<NavigationProvider>().navigateToPage(
+                              context,
+                              RoomChatPage(partnerId: o.idVendor),
+                              targetTabIndex: 1,
+                              targetPage: 'RoomChatPage',
+                            ),
+                    onPay: () {
+                      if (o.linkSnap == null) {
+                        context.read<NavigationProvider>().navigateToPage(
+                              context,
+                              targetTabIndex: 2,
+                              WaitingPaymentPage(paymentData: o),
+                            );
+                      } else {
+                        context.read<NavigationProvider>().navigateToPage(
+                              context,
+                              targetTabIndex: 2,
+                              WebviewPage(url: o.linkSnap!),
+                            );
+                      }
+                    },
+                    onReview: () => showDialog(
+                      context: context,
+                      builder: (_) => UlasanDialog(
+                        pesanan: o,
+                        onSuccess: () async {
+                          // Reload list setelah submit ulasan
+                          await context
+                              .read<PesananProvider>()
+                              .loadOrder(context);
+                        },
+                      ),
+                    ),
                   ),
                 ))
             .toList(),
@@ -413,7 +464,13 @@ class _MainOrderPageState extends State<MainOrderPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: GestureDetector(
-        onTap: _goToFinished,
+        onTap: () => context.read<NavigationProvider>().navigateToPage(
+              context,
+              FinishedOrderPage(),
+              targetTabIndex: 2,
+              targetPage: 'FinishedOrderPage',
+              hrsLogin: true,
+            ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
@@ -619,55 +676,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // NAVIGATION
-  // ─────────────────────────────────────────────────────────────
-
-  void _goToFinished() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const FinishedOrderPage()),
-    );
-  }
-
-  void _navigateToDetail(PesananModel o) {
-    context.read<NavigationProvider>().navigateToPage(
-          context,
-          DetailOrderPage(pesananModel: o),
-          targetTabIndex: 2,
-        );
-  }
-
-  void _navigateToChat(PesananModel o) {
-    context.read<NavigationProvider>().navigateToPage(
-          context,
-          RoomChatPage(partnerId: o.idVendor),
-          targetTabIndex: 1,
-          targetPage: 'RoomChatPage',
-        );
-  }
-
-  void _navigateToPay(PesananModel o) {
-    context.read<NavigationProvider>().navigateToPage(
-          context,
-          WaitingPaymentPage(paymentData: o),
-          targetTabIndex: 2,
-        );
-  }
-
-  void _openReview(PesananModel o) {
-    showDialog(
-      context: context,
-      builder: (_) => UlasanDialog(
-        pesanan: o,
-        onSuccess: () async {
-          // Reload list setelah submit ulasan
-          await context.read<PesananProvider>().loadOrder(context);
-        },
       ),
     );
   }
@@ -925,7 +933,7 @@ class _OrderCardState extends State<_OrderCard> {
                 _InfoRow(
                   icon: Icons.calendar_today_rounded,
                   text:
-                      '${DateFormat("dd MMM yyyy").format(widget.order.tglRealisasi)}  •  ${Helper.toLocalTime(widget.order.tglRealisasi)}',
+                      '${Helper.formatTanggal(widget.order.tglRealisasi)}  •  ${Helper.toLocalTime(widget.order.tglRealisasi)}',
                 ),
                 const SizedBox(height: 5),
                 _InfoRow(
@@ -979,9 +987,7 @@ class _OrderCardState extends State<_OrderCard> {
           ),
           const Spacer(),
           Text(
-            widget.order.noBukti.length > 8
-                ? '#${widget.order.noBukti.substring(widget.order.noBukti.length - 8)}'
-                : '#${widget.order.noBukti}',
+            '#${widget.order.noTrackingPesanan}',
             style: TextStyle(
               fontSize: 11,
               color: cfg.color.withOpacity(0.7),

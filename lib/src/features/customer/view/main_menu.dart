@@ -282,7 +282,10 @@ class _MainMenuState extends State<MainMenu> {
         chatProv.setActiveRoom(roomId);
         FCMService.instance.setActiveRoom(roomId);
 
-        navigationProvider.onItemTapped(1, context);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return; // mounted dari _MainMenuState
+          navigationProvider.onItemTapped(1, context);
+        });
       };
 
       debugPrint("[MainMenu] ✅ FCM callbacks configured");
