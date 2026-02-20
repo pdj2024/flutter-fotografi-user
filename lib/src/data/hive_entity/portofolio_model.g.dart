@@ -28,32 +28,33 @@ class PortofolioModelAdapter extends TypeAdapter<PortofolioModel> {
       namaVendor: fields[8] as String?,
       kota: fields[9] as String?,
       namaKota: fields[10] as String?,
-      idPaket: (fields[11] as List).cast<String>(),
-      paket: fields[12] as dynamic,
-      tglCreated: fields[13] as DateTime,
-      jumlahPaket: fields[14] as int?,
-      status: fields[15] as String,
-      ratingVendor: fields[16] as int?,
-      hargaMinPaket: fields[17] as int?,
-      hargaMaxPaket: fields[18] as int?,
-      jumlahPortofolio: fields[19] as int?,
-      likes: fields[20] as int,
-      saves: fields[21] as int,
-      matchKota: fields[22] as int?,
-      fromSavedVendor: fields[23] as int?,
-      isSaved: fields[24] as bool?,
-      isLiked: fields[25] as bool?,
-      skorTotal: fields[26] as double?,
-      mediaUrls: (fields[27] as List).cast<MediaUrlModel>(),
-      lastUpdated: fields[28] as DateTime?,
-      lastSynced: fields[29] as DateTime?,
+      caption: fields[11] as String?,
+      idPaket: (fields[12] as List).cast<String>(),
+      paket: fields[13] as dynamic,
+      tglCreated: fields[14] as DateTime,
+      jumlahPaket: fields[15] as int?,
+      status: fields[16] as String,
+      ratingVendor: fields[17] as int?,
+      hargaMinPaket: fields[18] as int?,
+      hargaMaxPaket: fields[19] as int?,
+      jumlahPortofolio: fields[20] as int?,
+      likes: fields[21] as int,
+      saves: fields[22] as int,
+      matchKota: fields[23] as int?,
+      fromSavedVendor: fields[24] as int?,
+      isSaved: fields[25] as bool?,
+      isLiked: fields[26] as bool?,
+      skorTotal: fields[27] as double?,
+      mediaUrls: (fields[28] as List).cast<MediaUrlModel>(),
+      lastUpdated: fields[29] as DateTime?,
+      lastSynced: fields[30] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PortofolioModel obj) {
     writer
-      ..writeByte(30)
+      ..writeByte(31)
       ..writeByte(0)
       ..write(obj.noId)
       ..writeByte(1)
@@ -77,42 +78,44 @@ class PortofolioModelAdapter extends TypeAdapter<PortofolioModel> {
       ..writeByte(10)
       ..write(obj.namaKota)
       ..writeByte(11)
-      ..write(obj.idPaket)
+      ..write(obj.caption)
       ..writeByte(12)
-      ..write(obj.paket)
+      ..write(obj.idPaket)
       ..writeByte(13)
-      ..write(obj.tglCreated)
+      ..write(obj.paket)
       ..writeByte(14)
-      ..write(obj.jumlahPaket)
+      ..write(obj.tglCreated)
       ..writeByte(15)
-      ..write(obj.status)
+      ..write(obj.jumlahPaket)
       ..writeByte(16)
-      ..write(obj.ratingVendor)
+      ..write(obj.status)
       ..writeByte(17)
-      ..write(obj.hargaMinPaket)
+      ..write(obj.ratingVendor)
       ..writeByte(18)
-      ..write(obj.hargaMaxPaket)
+      ..write(obj.hargaMinPaket)
       ..writeByte(19)
-      ..write(obj.jumlahPortofolio)
+      ..write(obj.hargaMaxPaket)
       ..writeByte(20)
-      ..write(obj.likes)
+      ..write(obj.jumlahPortofolio)
       ..writeByte(21)
-      ..write(obj.saves)
+      ..write(obj.likes)
       ..writeByte(22)
-      ..write(obj.matchKota)
+      ..write(obj.saves)
       ..writeByte(23)
-      ..write(obj.fromSavedVendor)
+      ..write(obj.matchKota)
       ..writeByte(24)
-      ..write(obj.isSaved)
+      ..write(obj.fromSavedVendor)
       ..writeByte(25)
-      ..write(obj.isLiked)
+      ..write(obj.isSaved)
       ..writeByte(26)
-      ..write(obj.skorTotal)
+      ..write(obj.isLiked)
       ..writeByte(27)
-      ..write(obj.mediaUrls)
+      ..write(obj.skorTotal)
       ..writeByte(28)
-      ..write(obj.lastUpdated)
+      ..write(obj.mediaUrls)
       ..writeByte(29)
+      ..write(obj.lastUpdated)
+      ..writeByte(30)
       ..write(obj.lastSynced);
   }
 

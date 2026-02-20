@@ -18,22 +18,18 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage>
     with WidgetsBindingObserver {
-  // ✅ Add observer
   final ScrollController _scrollController = ScrollController();
 
   bool isScrolled = false;
   bool firstBuild = true;
 
-  // ✅ Track visible portfolios for smart preloading
   int _lastPreloadIndex = 0;
-  static const int _preloadThreshold = 5; // Preload when 5 items before end
+  static const int _preloadThreshold = 5;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-
-    // ✅ Listen to app lifecycle
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -47,7 +43,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
         return;
       }
 
-      // 🔒 Pastikan hanya 1 pemanggilan data di awal
       await loadData();
     });
   }
@@ -56,34 +51,23 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-
-    // ✅ Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
-
-    // ✅ Cancel preloads when leaving page
     _cancelPreloads();
-
     super.dispose();
   }
 
-  // ✅ Handle app lifecycle changes
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final portofolioProvider = context.read<PortofolioProvider>();
-
     switch (state) {
       case AppLifecycleState.paused:
-        // App goes to background - pause preloading to save battery
         debugPrint("[HomePage] ⏸️ App paused - pausing preloads");
         portofolioProvider.pausePreloads();
         break;
-
       case AppLifecycleState.resumed:
-        // App returns to foreground - resume preloading
         debugPrint("[HomePage] ▶️ App resumed - resuming preloads");
         portofolioProvider.resumePreloads();
         break;
-
       default:
         break;
     }
@@ -95,7 +79,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOut,
     );
-
     await loadData();
   }
 
@@ -103,7 +86,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     await context
         .read<UserProvider>()
         .checkLoginGoogle(role: 'customer', silent: true);
-
     final userId = context.read<UserProvider>().userId;
     debugPrint("[HomePage] User ID: $userId");
   }
@@ -111,7 +93,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   Future<void> loadData() async {
     try {
       await _loadCustomerId();
-
       if (!mounted) return;
 
       final kategoriProvider = context.read<KategoriProvider>();
@@ -120,20 +101,15 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       debugPrint("═══════════════════════════════════════════════════");
       debugPrint("[HomePage] 🔄 Loading data...");
 
-      // ✅ Load kategori & portofolio dengan preloading enabled
       await Future.wait([
         kategoriProvider.loadKategori(),
-        portofolioProvider.loadPortofolio(
-          context,
-          preloadImages: true, // ✅ Enable background preloading
-        ),
+        portofolioProvider.loadPortofolio(context, preloadImages: true),
       ]);
 
       if (!mounted) return;
 
       debugPrint("[HomePage] ✅ Data loaded successfully");
 
-      // ✅ Print preload stats
       final stats = portofolioProvider.getPreloadStats();
       debugPrint("[HomePage] 📊 Preload stats: $stats");
       debugPrint("═══════════════════════════════════════════════════");
@@ -150,22 +126,18 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   }
 
   void _onScroll() {
-    // ✅ Smart preloading based on scroll position
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       _preloadNextBatch();
     }
   }
 
-  // ✅ Preload next batch of portfolios
   void _preloadNextBatch() {
     final portofolioProvider = context.read<PortofolioProvider>();
     final portfolios = portofolioProvider.portofolioList;
-
     if (portfolios.isEmpty) return;
 
     final nextIndex = _lastPreloadIndex + 10;
-
     if (nextIndex >= portfolios.length) {
       debugPrint("[HomePage] ℹ️ All portfolios already queued for preload");
       return;
@@ -177,14 +149,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     debugPrint(
         "[HomePage] 🚀 Preloading next batch (${nextBatch.length} portfolios)");
 
-    // Preload in background
     portofolioProvider.preloadService.preloadPortfolios(
       nextBatch,
       priorityCount: 10,
     );
   }
 
-  // ✅ Cancel all pending preloads
   void _cancelPreloads() {
     try {
       final portofolioProvider = context.read<PortofolioProvider>();
@@ -205,90 +175,33 @@ class _CustomerHomePageState extends State<CustomerHomePage>
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
-              // ===================== HEADER FILTER/SEARCH =====================
+              // ══════════════════════════════════════════════
+              // HEADER — Modern Search Bar
+              // ══════════════════════════════════════════════
               SliverPersistentHeader(
                 pinned: true,
                 delegate: SliverHeaderDelegate(
-                  child: Container(
-                    color: const Color(0xFFF9F9F9),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      context
-                                          .read<NavigationProvider>()
-                                          .navigateToPage(
-                                            context,
-                                            SearchPage(
-                                              id_category: "",
-                                              nama_category: '',
-                                              search: "",
-                                              autoOpenFilter: true,
-                                            ),
-                                            targetTabIndex: 0,
-                                            hrsLogin: false,
-                                          );
-                                    },
-                                    child: AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: isScrolled
-                                            ? Constants.primaryColor
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: Constants.primaryColor,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            "Cari Fotografer",
-                                            style: TextStyle(
-                                              color: isScrolled
-                                                  ? Colors.white
-                                                  : Constants.primaryColor,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Icon(
-                                            Icons.search,
-                                            color: isScrolled
-                                                ? Colors.white
-                                                : Constants.primaryColor,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                  child: _ModernSearchBar(
+                    onTap: () {
+                      context.read<NavigationProvider>().navigateToPage(
+                            context,
+                            SearchPage(
+                              id_category: "",
+                              nama_category: '',
+                              search: "",
+                              autoOpenFilter: true,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                            targetTabIndex: 0,
+                            hrsLogin: false,
+                          );
+                    },
                   ),
                 ),
               ),
 
-              // ===================== KATEGORI DINAMIS =====================
+              // ══════════════════════════════════════════════
+              // KATEGORI DINAMIS
+              // ══════════════════════════════════════════════
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -296,10 +209,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                 ),
               ),
 
-              // ===================== DAFTAR PORTOFOLIO =====================
+              // ══════════════════════════════════════════════
+              // DAFTAR PORTOFOLIO
+              // ══════════════════════════════════════════════
               PortofolioSection(),
 
-              // ✅ Add loading indicator at bottom when preloading
+              // Loading indicator preload
               SliverToBoxAdapter(
                 child: Consumer<PortofolioProvider>(
                   builder: (context, provider, child) {
@@ -340,11 +255,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                   },
                 ),
               ),
-              SliverToBoxAdapter(
-                child: Container(
-                  height: 80,
-                ),
-              ),
+              SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ),
         ),
@@ -359,8 +270,147 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// _ModernSearchBar — StatefulWidget dengan pulse animation
+// Tidak menggunakan SingleTickerProviderStateMixin di luar tree Flutter
+// sehingga aman dipakai di dalam SliverHeaderDelegate
+// ═══════════════════════════════════════════════════════════════════════
+
+class _ModernSearchBar extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _ModernSearchBar({required this.onTap});
+
+  @override
+  State<_ModernSearchBar> createState() => _ModernSearchBarState();
+}
+
+class _ModernSearchBarState extends State<_ModernSearchBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+
+    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Constants.primaryColor;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (context, _) {
+            final glow = 0.06 + (_pulseAnim.value * 0.07);
+
+            return Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFF),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: primary.withOpacity(0.18 + glow),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                children: [
+                  // ── Icon search kiri ─────────────────────
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(15),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.search_rounded,
+                      color: primary.withOpacity(0.85),
+                      size: 22,
+                    ),
+                  ),
+
+                  const SizedBox(width: 4),
+
+                  // ── Teks placeholder dua baris ───────────
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Cari Fotografer',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          'Lokasi, nama, atau kategori...',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Tombol filter kanan ──────────────────
+                  Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    height: 36,
+                    width: 36,
+                    decoration: BoxDecoration(
+                      color: primary,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(
+                      Icons.tune_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SliverHeaderDelegate — tidak berubah
+// ═══════════════════════════════════════════════════════════════════════
+
 class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
+
   SliverHeaderDelegate({required this.child});
 
   @override
@@ -370,10 +420,10 @@ class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => 64.0 + 15;
+  double get maxExtent => 72.0;
 
   @override
-  double get minExtent => 64.0 + 15;
+  double get minExtent => 72.0;
 
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {

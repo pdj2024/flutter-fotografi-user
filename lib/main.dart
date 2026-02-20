@@ -590,8 +590,6 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         debugPrint("🔧 [Splash] Initializing FCM-based providers...");
 
         final chatProvider = context.read<ChatProvider>();
-        final historyOrderProvider = context.read<HistoryOrderProvider>();
-        final pesananProvider = context.read<PesananProvider>();
 
         // Initialize ChatProvider (loads rooms from API)
         await chatProvider.initialize(
@@ -599,14 +597,6 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           userType: Constants.customer,
         );
         debugPrint("✅ [Splash] ChatProvider initialized");
-
-        // Load orders first
-        await pesananProvider.loadOrder(context);
-        debugPrint(
-            "✅ [Splash] Orders loaded: ${pesananProvider.allPesanan.length}");
-
-        // HistoryOrderProvider already initialized in create
-        debugPrint("✅ [Splash] HistoryOrderProvider ready");
 
         // ✅ Register FCM token to backend
         await FCMService.instance.registerToken(userProvider.customer!.noId);

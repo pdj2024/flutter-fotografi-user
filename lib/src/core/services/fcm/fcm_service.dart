@@ -2,6 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:mpjnew/src/core/services/fcm/handlers/payment_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/progres_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
@@ -10,6 +11,7 @@ import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'utils/notification_channel_manager.dart';
@@ -42,6 +44,7 @@ class FCMService {
   // Handlers
   late ChatNotificationHandler _chatHandler;
   late LikeNotificationHandler _likeHandler;
+  late PaymentNotificationHandler _paymentHandler;
   late ProgressNotificationHandler _progressHandler;
   late ReviewNotificationHandler _reviewHandler;
 
@@ -329,6 +332,9 @@ class FCMService {
         case NotificationType.chat:
           await _chatHandler.handleForegroundMessage(message);
           break;
+        case NotificationType.payment:
+          await _paymentHandler.handleMessage(message);
+          break;
         case NotificationType.like:
           await _likeHandler.handleMessage(message);
           break;
@@ -373,6 +379,26 @@ class FCMService {
             getSenderName: null,
           );
           await chatHandler.showNotification(message);
+          break;
+
+        case NotificationType.payment:
+          // ✅ Create temporary handler for background
+          _paymentHandler = PaymentNotificationHandler(
+            notificationsPlugin: _notificationsPlugin,
+            onPaymentReceived: (pesanan) {
+              // Update PesananProvider/UI dengan data terbaru
+              if (_appContext != null) {
+                try {
+                  final pesananProvider = _appContext!.read<PesananProvider>();
+                  pesananProvider
+                      .handlePaymentFromFCM(pesanan); // implement di provider
+                } catch (e) {
+                  debugPrint('[FCM] ⚠️ Error passing to PesananProvider: $e');
+                }
+              }
+            },
+          );
+          // await paymentHandler.showNotification(message);
           break;
 
         case NotificationType.like:

@@ -41,13 +41,9 @@ class FilterOverlay extends StatefulWidget {
   State<FilterOverlay> createState() => _FilterOverlayState();
 }
 
-class _FilterOverlayState extends State<FilterOverlay> {
-  // List fetched dari API
-  // List<Map<String, String>> kategoriList = [];
-  // List<Map<String, String>> locationList = [];
-  // List<Map<String, String>> photographerList = [];
-
-  // Filtered for autocomplete
+class _FilterOverlayState extends State<FilterOverlay>
+    with SingleTickerProviderStateMixin {
+  // Filtered lists
   List<Map<String, String>> filteredCategories = [];
   List<Map<String, String>> filteredLocations = [];
   List<Map<String, String>> filteredPhotographers = [];
@@ -71,58 +67,72 @@ class _FilterOverlayState extends State<FilterOverlay> {
   bool locationHasError = false;
   bool photographerHasError = false;
 
-  // Selected ID
+  // Selected IDs
   String? selectedCategoryId;
   String? selectedLocationId;
   String? selectedPhotographerId;
 
-  // Error flags
+  // Dropdown open state
   bool isCategoryOpen = false;
   bool isLocationOpen = false;
   bool isPhotographerOpen = false;
 
+  // Loading state
   bool isCategoryLoading = false;
   bool isLocationLoading = false;
   bool isPhotographerLoading = false;
 
+  // Debounce timers
   Timer? _locationDebounce;
   Timer? _categoryDebounce;
   Timer? _photographerDebounce;
 
   bool firstBuild = true;
 
+  // Slide-in animation
+  late AnimationController _animController;
+  late Animation<Offset> _slideAnim;
+  late Animation<double> _fadeAnim;
+
   @override
   void initState() {
     super.initState();
 
-    print('🔍 selectedCategory: ${widget.selectedCategory}');
-    print('📍 selectedLocation: ${widget.selectedLocation}');
-    print('📸 selectedPhotographer: ${widget.selectedPhotographer}');
-    print('📸 usernamePhotographer: ${widget.usernamePhotographer}');
-    print('💰 minPrice: ${widget.minPrice}');
-    print('💎 maxPrice: ${widget.maxPrice}');
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.04),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    ));
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
+    _animController.forward();
 
-    // Set min/max price
     minPriceController.text = widget.minPrice ?? '';
     maxPriceController.text = widget.maxPrice ?? '';
 
-    // ================== Listeners ==================
+    // ── Listeners ──────────────────────────────────────
     locationController.addListener(() {
-      if (firstBuild) return; // ❌ skip kalau masih build pertama
+      if (firstBuild) return;
       _debounceLocation();
     });
-
     categoryController.addListener(() {
       if (firstBuild) return;
       _debounceCategory();
     });
-
     photographerController.addListener(() {
       if (firstBuild) return;
       _debouncePhotographer();
     });
 
-    // ================== Focus Listeners ==================
+    // ── Focus listeners ─────────────────────────────────
     categoryFocusNode.addListener(() {
       if (categoryFocusNode.hasFocus) {
         _closeAllExcept('category');
@@ -131,7 +141,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
         setState(() => isCategoryOpen = false);
       }
     });
-
     locationFocusNode.addListener(() {
       if (locationFocusNode.hasFocus) {
         _closeAllExcept('location');
@@ -140,7 +149,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
         setState(() => isLocationOpen = false);
       }
     });
-
     photographerFocusNode.addListener(() {
       if (photographerFocusNode.hasFocus) {
         _closeAllExcept('photographer');
@@ -149,20 +157,15 @@ class _FilterOverlayState extends State<FilterOverlay> {
         setState(() => isPhotographerOpen = false);
       }
     });
-
     minPriceFocusNode.addListener(() {
       if (minPriceFocusNode.hasFocus) _closeAllExcept();
     });
-
     maxPriceFocusNode.addListener(() {
       if (maxPriceFocusNode.hasFocus) _closeAllExcept();
     });
 
-    // ================== Post Frame untuk init fetch ==================
+    // ── Post frame init fetch ───────────────────────────
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Apply teks awal tanpa trigger listener
-
-      // Fetch awal (hanya sekali)
       if (widget.selectedLocation?.isNotEmpty ?? false) {
         await fetchLocationsFromApi(widget.selectedLocation!, null);
       }
@@ -171,22 +174,19 @@ class _FilterOverlayState extends State<FilterOverlay> {
       }
       if (widget.selectedPhotographer?.isNotEmpty ?? false) {
         await fetchPhotographersFromApi(widget.selectedPhotographer!, null);
-      } else {
-        if (widget.usernamePhotographer?.isNotEmpty ?? false) {
-          await fetchPhotographersFromApi(null, widget.usernamePhotographer!);
-        }
+      } else if (widget.usernamePhotographer?.isNotEmpty ?? false) {
+        await fetchPhotographersFromApi(null, widget.usernamePhotographer!);
       }
 
       applySelectedIdsToController();
-
-      // ✅ Setelah semua init selesai, listener aktif
       firstBuild = false;
     });
   }
 
-// ================== Debounce Helpers ==================
+  // ── Debounce helpers ──────────────────────────────────
+
   void _debounceLocation() {
-    if (_locationDebounce?.isActive ?? false) _locationDebounce!.cancel();
+    _locationDebounce?.cancel();
     setState(() => isLocationLoading = true);
     _locationDebounce = Timer(const Duration(milliseconds: 500), () {
       fetchLocationsFromApi(null, locationController.text);
@@ -194,7 +194,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
   }
 
   void _debounceCategory() {
-    if (_categoryDebounce?.isActive ?? false) _categoryDebounce!.cancel();
+    _categoryDebounce?.cancel();
     setState(() => isCategoryLoading = true);
     _categoryDebounce = Timer(const Duration(milliseconds: 500), () {
       fetchCategorysFromApi(null, categoryController.text);
@@ -202,8 +202,7 @@ class _FilterOverlayState extends State<FilterOverlay> {
   }
 
   void _debouncePhotographer() {
-    if (_photographerDebounce?.isActive ?? false)
-      _photographerDebounce!.cancel();
+    _photographerDebounce?.cancel();
     setState(() => isPhotographerLoading = true);
     _photographerDebounce = Timer(const Duration(milliseconds: 500), () {
       fetchPhotographersFromApi(null, photographerController.text);
@@ -214,7 +213,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
     if (except != 'category') categoryFocusNode.unfocus();
     if (except != 'location') locationFocusNode.unfocus();
     if (except != 'photographer') photographerFocusNode.unfocus();
-
     setState(() {
       if (except != 'category') isCategoryOpen = false;
       if (except != 'location') isLocationOpen = false;
@@ -222,108 +220,77 @@ class _FilterOverlayState extends State<FilterOverlay> {
     });
   }
 
-  Future<void> fetchLocationsFromApi(String? no_id, String? query) async {
-    setState(() {
-      isLocationLoading = true; // mulai loading
-    });
+  // ── API fetch ─────────────────────────────────────────
 
+  Future<void> fetchLocationsFromApi(String? noId, String? query) async {
+    setState(() => isLocationLoading = true);
     try {
-      final locationRes = await KotaService().getAll(
-          orderBy: 'nama_kota',
-          namaKota: query,
-          noId: no_id // kalau kosong, kirim null
-          );
-
-      final lokasi = locationRes
-          .map((e) => {
-                'id': e.noId,
-                'label': e.namaKota,
-              })
-          .toList();
-
+      final res = await KotaService()
+          .getAll(orderBy: 'nama_kota', namaKota: query, noId: noId);
+      final list = res.map((e) => {'id': e.noId, 'label': e.namaKota}).toList();
       setState(() {
-        filteredLocations = lokasi;
-        locationHasError = lokasi.isEmpty;
-        isLocationLoading = false; // selesai loading
+        filteredLocations = list;
+        locationHasError = list.isEmpty;
+        isLocationLoading = false;
       });
-    } catch (e) {
-      print('====== Error fetching lokasi: $e');
+    } catch (_) {
       setState(() {
         filteredLocations = [];
         locationHasError = true;
-        isLocationLoading = false; // selesai loading
+        isLocationLoading = false;
       });
     }
   }
 
-  Future<void> fetchCategorysFromApi(String? no_id, String? query) async {
-    setState(() {
-      isCategoryLoading = true; // mulai loading
-    });
-
+  Future<void> fetchCategorysFromApi(String? noId, String? query) async {
+    setState(() => isCategoryLoading = true);
     try {
-      final categoryRes = await KategoriService().getAll(
-        orderBy: 'nama_kategori',
-        namaKategori: query,
-        noId: no_id, // kalau kosong, kirim null
-      );
-
-      final lokasi = categoryRes
-          .map((e) => {
-                'id': e.no_id,
-                'label': e.nama_kategori,
-              })
-          .toList();
-
+      final res = await KategoriService()
+          .getAll(orderBy: 'nama_kategori', namaKategori: query, noId: noId);
+      final list =
+          res.map((e) => {'id': e.no_id, 'label': e.nama_kategori}).toList();
       setState(() {
-        filteredCategories = lokasi;
-        categoryHasError = lokasi.isEmpty;
-        isCategoryLoading = false; // selesai loading
+        filteredCategories = list;
+        categoryHasError = list.isEmpty;
+        isCategoryLoading = false;
       });
-    } catch (e) {
-      print('====== Error fetching kategori: $e');
+    } catch (_) {
       setState(() {
         filteredCategories = [];
         categoryHasError = true;
-        isCategoryLoading = false; // selesai loading
+        isCategoryLoading = false;
       });
     }
   }
 
   Future<void> fetchPhotographersFromApi(String? noId, String? query) async {
-    setState(() {
-      isPhotographerLoading = true; // mulai loading
-    });
-
+    setState(() => isPhotographerLoading = true);
     try {
-      final photographerRes = await VendorService().getAll(
+      final res = await VendorService().getAll(
         orderBy: 'username',
-        status: "aktif",
+        status: 'aktif',
         username: query,
         namaDisplay: query,
-        no_id: noId, // kalau kosong, kirim null
+        no_id: noId,
       );
-
-      final lokasi = photographerRes
+      final list = res
           .map((e) => {
-                'id': e.noId, // "ven_1", "ven_2"
-                'username': e.username, // "vendA", "brandon.honanta"
-                'name': e.namaDisplay, // "Vendor A", "Brandon H"
-                'avatar': e.idMedia, // URL avatar (nullable)
+                'id': e.noId,
+                'username': e.username,
+                'name': e.namaDisplay,
+                'avatar': e.idMedia,
               })
           .toList();
-
       setState(() {
-        filteredPhotographers = lokasi;
-        photographerHasError = lokasi.isEmpty;
-        isPhotographerLoading = false; // selesai loading
+        filteredPhotographers = list;
+        photographerHasError = list.isEmpty;
+        isPhotographerLoading = false;
       });
-    } catch (e) {
-      print('====== Error fetching vendor: $e');
+    } catch (_) {
       setState(() {
         filteredPhotographers = [];
         photographerHasError = true;
-        isPhotographerLoading = false; // selesai loading
+        isPhotographerLoading = false;
       });
     }
   }
@@ -337,7 +304,6 @@ class _FilterOverlayState extends State<FilterOverlay> {
       categoryController.text = match['label']!;
       selectedCategoryId = widget.selectedCategory;
     }
-
     if (widget.selectedLocation != null) {
       final match = filteredLocations.firstWhere(
         (item) => item['id'] == widget.selectedLocation,
@@ -346,28 +312,32 @@ class _FilterOverlayState extends State<FilterOverlay> {
       locationController.text = match['label']!;
       selectedLocationId = widget.selectedLocation;
     }
-
-    if (widget.selectedPhotographer != null &&
-        widget.selectedPhotographer!.isNotEmpty) {
+    if (widget.selectedPhotographer?.isNotEmpty ?? false) {
       final match = filteredPhotographers.firstWhere(
         (item) => item['id'] == widget.selectedPhotographer,
         orElse: () => {'username': ''},
       );
       photographerController.text = match['username'] ?? '';
       selectedPhotographerId = widget.selectedPhotographer;
-    } else if (widget.usernamePhotographer != null &&
-        widget.usernamePhotographer!.isNotEmpty) {
-      // final match = filteredPhotographers.firstWhere(
-      //   (item) => item['username'] == widget.usernamePhotographer,
-      //   orElse: () => {'username': ''},
-      // );
+    } else if (widget.usernamePhotographer?.isNotEmpty ?? false) {
       photographerController.text = widget.usernamePhotographer!;
-      // selectedPhotographerId = match['id'] ?? null;
     }
   }
 
+  Map<String, String?> _buildFilterMap() => {
+        'id_vendor': selectedPhotographerId,
+        'username_vendor': photographerController.text.trim(),
+        'id_kategori': selectedCategoryId,
+        'nama_kategori': categoryController.text.trim(),
+        'min_price': minPriceController.text.trim(),
+        'max_price': maxPriceController.text.trim(),
+        'id_lokasi': selectedLocationId,
+        'nama_lokasi': locationController.text.trim(),
+      };
+
   @override
   void dispose() {
+    _animController.dispose();
     categoryController.dispose();
     locationController.dispose();
     photographerController.dispose();
@@ -381,10 +351,15 @@ class _FilterOverlayState extends State<FilterOverlay> {
     filteredCategories.clear();
     filteredLocations.clear();
     filteredPhotographers.clear();
-
     _locationDebounce?.cancel();
+    _categoryDebounce?.cancel();
+    _photographerDebounce?.cancel();
     super.dispose();
   }
+
+  // ══════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -395,530 +370,719 @@ class _FilterOverlayState extends State<FilterOverlay> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () {
-          FocusScope.of(context).unfocus();
-        },
-        child: Scaffold(
-          backgroundColor: Colors.white.withOpacity(0.96),
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              buildHeader(),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    buildLabel('Kategori'),
-                    const SizedBox(height: 8),
-                    buildSearchableDropdown(
-                        controller: categoryController,
-                        focusNode: categoryFocusNode,
-                        hint: 'Pilih Kategori',
-                        items: filteredCategories,
-                        // allItems: kategoriList,
-                        hasError: categoryHasError,
-                        isLoading: isCategoryLoading,
-                        onSelected: (value) {
-                          selectedCategoryId = value['id']; // ✅ simpan ID
-                        },
-                        onClear: () {
-                          setState(() {
-                            selectedCategoryId = null; // ✅ beneran null di luar
-                          });
-                        }),
-                    const SizedBox(height: 20),
-                    buildLabel('Lokasi'),
-                    const SizedBox(height: 8),
-                    buildSearchableDropdown(
-                        controller: locationController,
-                        focusNode: locationFocusNode,
-                        hint: 'Cari Lokasi',
-                        items: filteredLocations,
-                        // allItems: locationList,
-                        hasError: locationHasError,
-                        isLoading: isLocationLoading,
-                        onSelected: (value) {
-                          selectedLocationId = value['id']; // ✅ simpan ID
-                        },
-                        onClear: () {
-                          setState(() {
-                            selectedLocationId = null; // ✅ beneran null di luar
-                          });
-                        }),
-                    const SizedBox(height: 20),
-                    buildLabel('Harga (Rp)'),
-                    const SizedBox(height: 8),
-                    Row(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: SlideTransition(
+            position: _slideAnim,
+            child: Scaffold(
+              backgroundColor: const Color(0xFFF7F7F5),
+              body: Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                       children: [
-                        Expanded(
-                          child: buildTextInput(
-                              controller: minPriceController,
-                              focusNode: minPriceFocusNode,
-                              hint: 'Min',
-                              onChanged: (value) => {} // tempMinPrice = value,
-                              ),
+                        _buildSection(
+                          label: 'Kategori',
+                          icon: Icons.grid_view_rounded,
+                          child: _buildDropdown(
+                            controller: categoryController,
+                            focusNode: categoryFocusNode,
+                            hint: 'Pilih kategori',
+                            items: filteredCategories,
+                            hasError: categoryHasError,
+                            isLoading: isCategoryLoading,
+                            onSelected: (value) {
+                              selectedCategoryId = value['id'];
+                            },
+                            onClear: () =>
+                                setState(() => selectedCategoryId = null),
+                          ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: buildTextInput(
-                              controller: maxPriceController,
-                              focusNode: maxPriceFocusNode,
-                              hint: 'Max',
-                              onChanged: (value) => {} // tempMaxPrice = value,
+                        const SizedBox(height: 20),
+                        _buildSection(
+                          label: 'Lokasi',
+                          icon: Icons.location_on_outlined,
+                          child: _buildDropdown(
+                            controller: locationController,
+                            focusNode: locationFocusNode,
+                            hint: 'Cari kota atau daerah',
+                            items: filteredLocations,
+                            hasError: locationHasError,
+                            isLoading: isLocationLoading,
+                            onSelected: (value) {
+                              selectedLocationId = value['id'];
+                            },
+                            onClear: () =>
+                                setState(() => selectedLocationId = null),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildSection(
+                          label: 'Rentang Harga',
+                          icon: Icons.payments_outlined,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildPriceInput(
+                                  controller: minPriceController,
+                                  focusNode: minPriceFocusNode,
+                                  hint: 'Minimum',
+                                ),
                               ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 10),
+                                child: Container(
+                                  width: 18,
+                                  height: 1.5,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildPriceInput(
+                                  controller: maxPriceController,
+                                  focusNode: maxPriceFocusNode,
+                                  hint: 'Maksimum',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildSection(
+                          label: 'Fotografer',
+                          icon: Icons.person_search_outlined,
+                          child: _buildPhotographerSearch(),
+                        ),
+                        const SizedBox(height: 100), // space before buttons
+                      ],
+                    ),
+                  ),
+                  _buildBottomActions(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Header ─────────────────────────────────────────────
+
+  Widget _buildHeader() {
+    return Container(
+      color: Colors.white,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  // Back / close button
+                  IconButton(
+                    icon:
+                        const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                    color: Colors.black87,
+                    onPressed: () async {
+                      widget.onApply(_buildFilterMap());
+                      final provider = Provider.of<NavigationProvider>(context,
+                          listen: false);
+                      bool allow = await provider.onWillPop(context);
+                      if (allow) Navigator.of(context).pop();
+                    },
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Filter Pencarian',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  // Active filter badge
+                  if (_hasAnyFilter)
+                    Container(
+                      margin: const EdgeInsets.only(right: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Constants.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${_activeFilterCount} aktif',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Constants.primaryColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: Colors.grey.shade200),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool get _hasAnyFilter =>
+      selectedCategoryId != null ||
+      selectedLocationId != null ||
+      selectedPhotographerId != null ||
+      minPriceController.text.isNotEmpty ||
+      maxPriceController.text.isNotEmpty;
+
+  int get _activeFilterCount {
+    int count = 0;
+    if (selectedCategoryId != null) count++;
+    if (selectedLocationId != null) count++;
+    if (selectedPhotographerId != null ||
+        photographerController.text.isNotEmpty) count++;
+    if (minPriceController.text.isNotEmpty ||
+        maxPriceController.text.isNotEmpty) count++;
+    return count;
+  }
+
+  // ── Section wrapper ────────────────────────────────────
+
+  Widget _buildSection({
+    required String label,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 15, color: Colors.grey.shade600),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+
+  // ── Generic dropdown ───────────────────────────────────
+
+  Widget _buildDropdown({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hint,
+    required List<Map<String, String>> items,
+    required bool hasError,
+    required bool isLoading,
+    required ValueChanged<Map<String, String>> onSelected,
+    required VoidCallback onClear,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTextField(
+          controller: controller,
+          focusNode: focusNode,
+          hint: hint,
+          hasError: hasError,
+          suffixIcon: controller.text.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    controller.clear();
+                    focusNode.unfocus();
+                    onClear();
+                  },
+                  child: Icon(Icons.close_rounded,
+                      size: 18, color: Colors.grey.shade500),
+                )
+              : Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.grey.shade400),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: focusNode.hasFocus
+              ? _buildDropdownList(
+                  isLoading: isLoading,
+                  items: items,
+                  onTap: (item) {
+                    controller.text = item['label']!;
+                    onSelected(item);
+                    FocusScope.of(context).unfocus();
+                  },
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownList({
+    required bool isLoading,
+    required List<Map<String, String>> items,
+    required ValueChanged<Map<String, String>> onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      constraints: const BoxConstraints(maxHeight: 220),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: isLoading
+          ? const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          : items.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      'Tidak ada hasil',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: Colors.grey.shade100,
+                  ),
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    return InkWell(
+                      onTap: () => onTap(item),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Text(
+                          item['label'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+
+  // ── Photographer search ────────────────────────────────
+
+  Widget _buildPhotographerSearch() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTextField(
+          controller: photographerController,
+          focusNode: photographerFocusNode,
+          hint: 'Cari nama atau username',
+          hasError: false,
+          suffixIcon: photographerController.text.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    photographerController.clear();
+                    setState(() => selectedPhotographerId = null);
+                    photographerFocusNode.unfocus();
+                  },
+                  child: Icon(Icons.close_rounded,
+                      size: 18, color: Colors.grey.shade500),
+                )
+              : Icon(Icons.search_rounded, color: Colors.grey.shade400),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: photographerFocusNode.hasFocus
+              ? _buildPhotographerList()
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotographerList() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: isPhotographerLoading
+          ? const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          : filteredPhotographers.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off_rounded,
+                            size: 36, color: Colors.grey.shade300),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Fotografer tidak ditemukan',
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade500),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    buildLabel('Nama Fotografer'),
-                    const SizedBox(height: 8),
-                    buildPhotographerSearch(),
-                  ],
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  itemCount: filteredPhotographers.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    indent: 72,
+                    color: Colors.grey.shade100,
+                  ),
+                  itemBuilder: (_, i) {
+                    final p = filteredPhotographers[i];
+                    final avatar = p['avatar'] ?? '';
+                    final username = p['username'] ?? '';
+                    final name = p['name'] ?? '';
+                    final isSelected = selectedPhotographerId == p['id'];
+
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          photographerController.text = username;
+                          selectedPhotographerId = p['id'];
+                        });
+                        FocusScope.of(context).unfocus();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            // Avatar
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(22),
+                              child: avatar.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: avatar,
+                                      width: 40,
+                                      height: 40,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) =>
+                                          Shimmer.fromColors(
+                                        baseColor: Colors.grey.shade200,
+                                        highlightColor: Colors.grey.shade50,
+                                        child: Container(
+                                          width: 40,
+                                          height: 40,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) =>
+                                          _avatarFallback(),
+                                    )
+                                  : _avatarFallback(),
+                            ),
+                            const SizedBox(width: 12),
+                            // Info
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    username,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Constants.primaryColor
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                  if (name.isNotEmpty && name != username)
+                                    Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            // Selected checkmark
+                            if (isSelected)
+                              Icon(
+                                Icons.check_circle_rounded,
+                                size: 18,
+                                color: Constants.primaryColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+
+  Widget _avatarFallback() => Container(
+        width: 40,
+        height: 40,
+        color: Colors.grey.shade100,
+        child: Icon(Icons.person, size: 20, color: Colors.grey.shade400),
+      );
+
+  // ── Price input ────────────────────────────────────────
+
+  Widget _buildPriceInput({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hint,
+  }) {
+    return _buildTextField(
+      controller: controller,
+      focusNode: focusNode,
+      hint: hint,
+      hasError: false,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      prefixText: 'Rp ',
+      onChanged: (value) {
+        if (value.isEmpty) return;
+        final formatted = NumberFormat('#,###', 'id_ID')
+            .format(int.parse(value))
+            .replaceAll(',', '.');
+        controller.value = TextEditingValue(
+          text: formatted,
+          selection: TextSelection.collapsed(offset: formatted.length),
+        );
+      },
+      onTap: () => _closeAllExcept(
+          focusNode == minPriceFocusNode ? 'minPrice' : 'maxPrice'),
+    );
+  }
+
+  // ── Generic text field ─────────────────────────────────
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hint,
+    required bool hasError,
+    Widget? suffixIcon,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? prefixText,
+    ValueChanged<String>? onChanged,
+    VoidCallback? onTap,
+  }) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      onChanged: onChanged,
+      onTap: onTap,
+      style: const TextStyle(
+        fontSize: 14,
+        color: Colors.black87,
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+          fontSize: 14,
+          color: Colors.grey.shade400,
+        ),
+        prefixText: prefixText,
+        prefixStyle: TextStyle(
+          fontSize: 14,
+          color: Colors.grey.shade600,
+        ),
+        suffixIcon: suffixIcon != null
+            ? Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: suffixIcon,
+              )
+            : null,
+        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: hasError ? Colors.red.shade300 : Colors.grey.shade200,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: hasError ? Colors.red.shade300 : Colors.grey.shade200,
+            width: 1.5,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: hasError ? Colors.red.shade400 : Constants.primaryColor,
+            width: 1.8,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Bottom action buttons ──────────────────────────────
+
+  Widget _buildBottomActions() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              // Reset button
+              OutlinedButton.icon(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  categoryController.clear();
+                  locationController.clear();
+                  photographerController.clear();
+                  minPriceController.clear();
+                  maxPriceController.clear();
+                  setState(() {
+                    selectedCategoryId = null;
+                    selectedLocationId = null;
+                    selectedPhotographerId = null;
+                  });
+                  widget.onApply({
+                    'id_vendor': '',
+                    'username_vendor': '',
+                    'id_kategori': '',
+                    'nama_kategori': '',
+                    'min_price': '',
+                    'max_price': '',
+                    'id_lokasi': '',
+                    'nama_lokasi': '',
+                  });
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Atur Ulang'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.black54,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  textStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          widget.onApply({
-                            'id_vendor': '',
-                            'username_vendor': '',
-                            'id_kategori': '',
-                            'nama_kategori': '',
-                            'min_price': '',
-                            'max_price': '',
-                            'id_lokasi': '',
-                            'nama_lokasi': '',
-                          });
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Constants.primaryColor),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Atur Ulang',
-                            style: TextStyle(color: Constants.primaryColor)),
-                      ),
+              const SizedBox(width: 12),
+              // Apply button
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    widget.onApply(_buildFilterMap());
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Constants.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          print("===== DALAM USERNAME: " +
-                              photographerController.text.trim());
-                          widget.onApply({
-                            'id_vendor':
-                                selectedPhotographerId, // atau id vendor yang kamu ambil
-                            'username_vendor':
-                                photographerController.text.trim(),
-                            'id_kategori': selectedCategoryId,
-                            'nama_kategori': categoryController.text.trim(),
-                            'min_price': minPriceController.text.trim(),
-                            'max_price': maxPriceController.text.trim(),
-                            'id_lokasi': selectedLocationId,
-                            'nama_lokasi': locationController.text.trim(),
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Constants.primaryColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Pakai',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
+                  ),
+                  child: const Text('Terapkan Filter'),
                 ),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget buildHeader() {
-    return Container(
-      color: Constants.primaryColor,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(
-              Icons.arrow_back,
-              color: Colors.white,
-            ),
-            onPressed: () async {
-              // ✅ Jalankan logic apply filter sebelum pop
-              widget.onApply({
-                'id_vendor':
-                    selectedPhotographerId, // atau id vendor yang kamu ambil
-                'username_vendor': photographerController.text.trim(),
-                'id_kategori': selectedCategoryId,
-                'nama_kategori': categoryController.text.trim(),
-                'min_price': minPriceController.text.trim(),
-                'max_price': maxPriceController.text.trim(),
-                'id_lokasi': selectedLocationId,
-                'nama_lokasi': locationController.text.trim(),
-              });
-
-              // ✅ Navigasi tetap seperti CustomBackButton
-              final provider =
-                  Provider.of<NavigationProvider>(context, listen: false);
-              bool allowPop = await provider.onWillPop(context);
-              if (allowPop) {
-                Navigator.of(context).pop();
-              }
-            },
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Filter',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget buildLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-    );
-  }
-
-  // Build functions (buildSearchableDropdown, buildPhotographerSearch, buildTextInput) aku lanjutkan di bawah (karena kepanjangan limit post)...
-  Widget buildSearchableDropdown(
-      {required TextEditingController controller,
-      required FocusNode focusNode,
-      required String hint,
-      required List<Map<String, String>> items,
-      // required List<Map<String, String>> allItems,
-      required bool hasError,
-      required bool isLoading,
-      required ValueChanged<Map<String, String>> onSelected,
-      required VoidCallback onClear}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: controller,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            hintText: hint,
-            suffixIcon: controller.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      controller.clear();
-                      focusNode.unfocus();
-                      onClear();
-                    },
-                  )
-                : null,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : Constants.primaryColor,
-                width: 2,
-              ),
-            ),
-          ),
-          style: TextStyle(
-            color: hasError ? Colors.red : Colors.black,
-          ),
-        ),
-        if (focusNode.hasFocus)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: isLoading
-                ? Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : items.isEmpty
-                    ? Text(
-                        'Pencarian tidak ada',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      )
-                    : Scrollbar(
-                        child: ListView(
-                          physics: NeverScrollableScrollPhysics(),
-                          shrinkWrap: true,
-                          children: items.map((item) {
-                            return ListTile(
-                              title: Text(item['label'] ?? ''),
-                              onTap: () {
-                                controller.text = item['label']!;
-                                onSelected(
-                                    item); // return full map: {id, label}
-                                FocusScope.of(context).unfocus();
-                              },
-                            );
-                          }).toList(),
-                        ),
-                      ),
-          ),
-      ],
-    );
-  }
-
-  Widget buildPhotographerSearch() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: photographerController,
-          focusNode: photographerFocusNode,
-          onChanged: (value) {},
-          decoration: InputDecoration(
-            hintText: 'Cari Nama Fotografer',
-            suffixIcon: photographerController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      photographerController.clear();
-                      // Reset filter juga kalau perlu
-                      setState(() {
-                        // filteredPhotographers = List.from(photographerList);
-                        selectedPhotographerId = null;
-                      });
-                      photographerFocusNode.unfocus();
-                    },
-                  )
-                : null,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: photographerHasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: photographerHasError ? Colors.red : Colors.grey,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color:
-                    photographerHasError ? Colors.red : Constants.primaryColor,
-                width: 2,
-              ),
-            ),
-          ),
-          style: TextStyle(
-            color: photographerHasError ? Colors.red : Colors.black,
-          ),
-        ),
-        if (photographerFocusNode.hasFocus)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            constraints: BoxConstraints(
-              maxHeight: 200, // batas tinggi supaya list bisa scroll
-            ),
-            child: isPhotographerLoading
-                ? Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : filteredPhotographers.isEmpty
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.list_alt_rounded,
-                              size: 50, color: Colors.grey),
-                          SizedBox(height: 10),
-                          Center(
-                            child: Text(
-                              "Data yang anda cari tidak ditemukan",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Scrollbar(
-                        thumbVisibility:
-                            true, // agar scrollbar selalu muncul saat scroll
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: filteredPhotographers.length,
-                          itemBuilder: (context, index) {
-                            final photographer = filteredPhotographers[index];
-                            // Amanin null dengan ?? '' supaya gak error
-                            final String avatarUrl =
-                                photographer['avatar'] ?? '';
-                            final String name = photographer['username'] ?? '';
-
-                            return ListTile(
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: avatarUrl.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: avatarUrl,
-                                        width: 40,
-                                        height: 40,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            Shimmer.fromColors(
-                                          baseColor: Colors.grey.shade300,
-                                          highlightColor: Colors.grey.shade100,
-                                          child: Container(
-                                            width: 40,
-                                            height: 40,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        errorWidget: (context, url, error) =>
-                                            CircleAvatar(
-                                          radius: 20,
-                                          backgroundColor: Colors.grey.shade200,
-                                          child: const Icon(Icons.person,
-                                              color: Colors.grey),
-                                        ),
-                                      )
-                                    : CircleAvatar(
-                                        radius: 20,
-                                        backgroundColor: Colors.grey.shade200,
-                                        child: const Icon(Icons.person,
-                                            color: Colors.grey),
-                                      ),
-                              ),
-                              title: Text(name),
-                              onTap: () {
-                                setState(() {
-                                  photographerController.text = name;
-                                  selectedPhotographerId = photographer[
-                                      'id']; // ✅ simpan ID di variabel state
-                                });
-                                FocusScope.of(context).unfocus();
-                              },
-                            );
-                          },
-                        ),
-                      ),
-          ),
-      ],
-    );
-  }
-
-  Widget buildTextInput({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String hint,
-    required ValueChanged<String> onChanged,
-  }) {
-    // Listener fokus: cuma untuk select all text
-    focusNode.addListener(() {
-      if (focusNode.hasFocus) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          controller.selection = TextSelection(
-            baseOffset: 0,
-            extentOffset: controller.text.length,
-          );
-        });
-      }
-    });
-
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      keyboardType: TextInputType.number,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly, // ✅ hanya angka
-      ],
-      onTap: () => _closeAllExcept(
-          focusNode == minPriceFocusNode ? 'minPrice' : 'maxPrice'),
-      decoration: InputDecoration(
-        hintText: hint,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.grey),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Constants.primaryColor,
-            width: 2,
-          ),
-        ),
-      ),
-      onChanged: (value) {
-        if (value.isEmpty) {
-          onChanged('');
-          return;
-        }
-
-        // Format ribuan pakai titik
-        String formatted = NumberFormat('#,###', 'id_ID')
-            .format(int.parse(value))
-            .replaceAll(',', '.');
-
-        // Update text dan posisikan kursor di akhir
-        controller.value = TextEditingValue(
-          text: formatted,
-          selection: TextSelection.collapsed(offset: formatted.length),
-        );
-
-        onChanged(value); // kirim angka mentah tanpa titik
-      },
     );
   }
 }

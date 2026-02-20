@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
@@ -63,6 +65,19 @@ class PesananProvider with ChangeNotifier {
 
   // ✅ Track loading state for single order fetch
   bool _isFetchingSingleOrder = false;
+
+  final StreamController<PesananModel> _paymentUpdateController =
+      StreamController<PesananModel>.broadcast();
+
+  Stream<PesananModel> get paymentUpdateStream =>
+      _paymentUpdateController.stream;
+
+  // Helper static: cek apakah statusBayar = berhasil
+  static bool isPaymentSettled(String? statusBayar) {
+    if (statusBayar == null) return false;
+    return ['settlement', 'berhasil', 'success']
+        .contains(statusBayar.toLowerCase());
+  }
 
   // ═══════════════════════════════════════════════════════════
   // GETTERS
@@ -146,9 +161,12 @@ class PesananProvider with ChangeNotifier {
 
       final updatedOrder = orders.first;
       debugPrint("[PesananProvider] ✅ Order fetched from API");
-      debugPrint("[PesananProvider]    Status: ${updatedOrder.statusProgresPesanan}");
-      debugPrint("[PesananProvider]    Status Bayar: ${updatedOrder.statusBayar}");
-      debugPrint("[PesananProvider]    Grand Total: ${updatedOrder.grandTotal}");
+      debugPrint(
+          "[PesananProvider]    Status: ${updatedOrder.statusProgresPesanan}");
+      debugPrint(
+          "[PesananProvider]    Status Bayar: ${updatedOrder.statusBayar}");
+      debugPrint(
+          "[PesananProvider]    Grand Total: ${updatedOrder.grandTotal}");
 
       // Fetch histories
       List<HistoryOrderModel> histories = [];
@@ -170,7 +188,7 @@ class PesananProvider with ChangeNotifier {
 
       // Update in-memory
       final index = _allPesanan.indexWhere((p) => p.noBukti == noBukti);
-      
+
       if (index != -1) {
         _allPesanan[index] = updatedOrder;
         debugPrint("[PesananProvider] ✅ Updated in-memory at index $index");
@@ -408,6 +426,8 @@ class PesananProvider with ChangeNotifier {
 
         for (int i = 0; i < orders.length; i++) {
           final order = orders[i];
+          debugPrint(
+              '[PesananProvider]    is Using Snap Payment => ${order.linkSnap}');
 
           try {
             final orderHistories = await historyService.getAll(
@@ -515,6 +535,48 @@ class PesananProvider with ChangeNotifier {
     }
 
     debugPrint("═══════════════════════════════════════════════════");
+  }
+
+  Future<void> handlePaymentFromFCM(PesananModel updated) async {
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('[PesananProvider] 💳 PAYMENT FROM FCM');
+    debugPrint('[PesananProvider]    noBukti  : ${updated.noBukti}');
+    debugPrint('[PesananProvider]    statusBayar: ${updated.statusBayar}');
+    debugPrint(
+        '[PesananProvider]    statusProgres: ${updated.statusProgresPesanan}');
+
+    try {
+      // STEP 1: Update di memory
+      final idx = _allPesanan.indexWhere((p) => p.noBukti == updated.noBukti);
+      if (idx != -1) {
+        _allPesanan[idx] = updated;
+        debugPrint('[PesananProvider] ✅ Updated in memory (idx: $idx)');
+      } else {
+        _allPesanan.insert(0, updated);
+        debugPrint('[PesananProvider] ✅ Added to memory (new order)');
+      }
+
+      // STEP 2: Update cache
+      try {
+        await localService.saveOrder(updated);
+        debugPrint('[PesananProvider] ✅ Cache updated');
+      } catch (e) {
+        debugPrint('[PesananProvider] ⚠️ Cache update failed: $e');
+      }
+
+      // STEP 3: Re-filter list
+      _filterPesanan();
+
+      // STEP 4: Broadcast ke stream → UI react otomatis
+      _paymentUpdateController.add(updated);
+      debugPrint('[PesananProvider] 📡 Broadcast to paymentUpdateStream');
+
+      notifyListeners();
+    } catch (e, st) {
+      debugPrint('[PesananProvider] ❌ handlePaymentFromFCM error: $e\n$st');
+    }
+
+    debugPrint('═══════════════════════════════════════════════════');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -742,6 +804,7 @@ class PesananProvider with ChangeNotifier {
   @override
   void dispose() {
     _orderHistories.clear();
+    _paymentUpdateController.close(); // ← tambahkan baris ini
     super.dispose();
   }
 }
