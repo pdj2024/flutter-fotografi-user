@@ -77,7 +77,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
         children: [
           // ===== Header =====
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -111,7 +111,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
           // ===== Kondisi Error =====
           if (!isLoadingPorto && error != null)
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(10),
               child: Center(
                 child: Column(
                   children: [
@@ -145,7 +145,7 @@ class _PortofolioSectionState extends State<PortofolioSection> {
           // ===== Kondisi Kosong =====
           if (!isLoadingPorto && error == null && portofolioList.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(10),
               child: Center(
                 child: Column(
                   children: [

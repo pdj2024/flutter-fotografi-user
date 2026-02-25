@@ -11,7 +11,6 @@ import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -176,7 +175,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     debugPrint('[DetailOrderPage] 🔄 Fetching updated data...');
     _fetchUpdatedData();
   }
-  
+
   // 🆕 Separate method untuk fetch updated data
   Future<void> _fetchUpdatedData() async {
     if (!mounted) return;
@@ -341,7 +340,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

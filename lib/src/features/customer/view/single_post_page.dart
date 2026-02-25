@@ -82,8 +82,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
       debugPrint('[SinglePost] ❌ $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -128,14 +127,11 @@ class _SinglePostPageState extends State<SinglePostPage> {
 
         if (selectedPortfolio == null) return _buildEmptyScaffold();
 
-        final isDataReady =
-            _currentPortfolioId == selectedPortfolio.noId;
+        final isDataReady = _currentPortfolioId == selectedPortfolio.noId;
 
         // Baca state like/save langsung dari provider (sudah sinkron dengan Hive)
-        final isLiked =
-            portofolioProvider.isLiked(selectedPortfolio.noId);
-        final isSaved =
-            portofolioProvider.isSaved(selectedPortfolio.noId);
+        final isLiked = portofolioProvider.isLiked(selectedPortfolio.noId);
+        final isSaved = portofolioProvider.isSaved(selectedPortfolio.noId);
         final isLikeInProgress =
             portofolioProvider.isLikeInProgress(selectedPortfolio.noId);
         final isSaveInProgress =
@@ -148,8 +144,8 @@ class _SinglePostPageState extends State<SinglePostPage> {
             elevation: 1,
             title: const Text(
               'Portofolio',
-              style: TextStyle(
-                  color: Colors.black, fontWeight: FontWeight.bold),
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
             ),
           ),
           body: RefreshIndicator(
@@ -203,9 +199,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  if (!isDataReady ||
-                      _isLoadingData ||
-                      paketProvider.isLoading)
+                  if (!isDataReady || _isLoadingData || paketProvider.isLoading)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(30),
@@ -234,7 +228,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
   ) {
     if (paketProvider.error != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -247,8 +241,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
               const SizedBox(height: 10),
               Text(paketProvider.error!, textAlign: TextAlign.center),
               const SizedBox(height: 10),
-              ElevatedButton(
-                  onPressed: _loadData, child: const Text('Retry')),
+              ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
             ],
           ),
         ),
@@ -263,21 +256,18 @@ class _SinglePostPageState extends State<SinglePostPage> {
     if (filteredPakets.isEmpty) {
       return Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
+          margin: const EdgeInsets.symmetric(horizontal: 10),
           width: double.infinity,
           decoration: BoxDecoration(
             color: Colors.white60,
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [
               BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 6,
-                  offset: Offset(1, 2)),
+                  color: Colors.black12, blurRadius: 6, offset: Offset(1, 2)),
             ],
           ),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 30),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 30),
             child: Column(
               children: [
                 const Icon(Icons.shelves, size: 100, color: Colors.grey),
@@ -326,8 +316,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
         title: const Text('Portofolio',
-            style: TextStyle(
-                color: Colors.black, fontWeight: FontWeight.bold)),
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
       body: Center(
         child: Column(
@@ -336,8 +325,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
             const Icon(Icons.error_outline, size: 80, color: Colors.grey),
             const SizedBox(height: 16),
             Text('Portfolio not found',
-                style:
-                    TextStyle(fontSize: 16, color: Colors.grey.shade700)),
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
@@ -377,16 +365,14 @@ class _ExpandableCaptionState extends State<_ExpandableCaption> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _measureOverflow());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureOverflow());
   }
 
   @override
   void didUpdateWidget(_ExpandableCaption oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.caption != widget.caption) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _measureOverflow());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measureOverflow());
     }
   }
 
@@ -445,8 +431,7 @@ class _ExpandableCaptionState extends State<_ExpandableCaption> {
           if (_hasOverflow) ...[
             const SizedBox(height: 4),
             GestureDetector(
-              onTap: () =>
-                  setState(() => _isExpanded = !_isExpanded),
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

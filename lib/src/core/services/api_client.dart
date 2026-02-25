@@ -30,13 +30,13 @@ class ApiClient {
   // =========================================================
   // 📡 HTTP METHODS
   // =========================================================
-  
+
   Future<http.Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
-    final uri = Uri.parse('$baseUrl$path')
-        .replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
@@ -55,8 +55,8 @@ class ApiClient {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri = Uri.parse('$baseUrl$path')
-        .replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
@@ -82,8 +82,8 @@ class ApiClient {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    final uri = Uri.parse('$baseUrl$path')
-        .replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
@@ -108,8 +108,8 @@ class ApiClient {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
   }) async {
-    final uri = Uri.parse('$baseUrl$path')
-        .replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
@@ -125,7 +125,7 @@ class ApiClient {
   // =========================================================
   // 🔄 RETRY MECHANISM WITH EXPONENTIAL BACKOFF
   // =========================================================
-  
+
   Future<http.Response> _executeWithRetry(
     Future<http.Response> Function() request, {
     required String method,
@@ -136,7 +136,7 @@ class ApiClient {
     try {
       // Execute request
       final response = await request();
-      
+
       print("📊 [$method $path] Status: ${response.statusCode}");
 
       // Success - return immediately
@@ -158,18 +158,19 @@ class ApiClient {
       }
 
       // Refresh token
-      print("🔄 [$method $path] Token invalid, refreshing (attempt $attempt/$maxAttempts)...");
-      
+      print(
+          "🔄 [$method $path] Token invalid, refreshing (attempt $attempt/$maxAttempts)...");
+
       final refreshed = await _refreshToken();
-      
+
       if (!refreshed) {
         print("❌ [$method $path] Token refresh failed");
-        
+
         if (attempt >= maxAttempts - 1) {
           _triggerSessionExpired();
           throw Exception('Token refresh failed');
         }
-        
+
         return response;
       }
 
@@ -187,7 +188,6 @@ class ApiClient {
         attempt: attempt + 1,
         maxAttempts: maxAttempts,
       );
-      
     } catch (e) {
       print("❌ [$method $path] Error: $e");
       rethrow;
@@ -197,23 +197,23 @@ class ApiClient {
   // =========================================================
   // 🔄 TOKEN REFRESH
   // =========================================================
-  
+
   Future<bool> _refreshToken() async {
     try {
       print("🔄 [ApiClient] Requesting token refresh...");
 
-      // AuthService will handle queue if multiple requests come in
-      final newToken = await authService.getIdToken();
+      // ✅ WAJIB forceRefresh: true → trigger _doRefreshAccessToken()
+      // Tanpa ini, hanya baca dari storage → return token lama yang sudah 401
+      final newToken = await authService.getIdToken(forceRefresh: true);
 
       if (newToken != null && newToken.isNotEmpty) {
         print("✅ [ApiClient] Token refreshed successfully");
-        print("🔑 New token (first 30): ${newToken.substring(0, 30)}...");
+        print("🔑 New token (first 30): ${newToken}");
         return true;
       }
 
       print("❌ [ApiClient] Token refresh returned null");
       return false;
-      
     } catch (e) {
       print("❌ [ApiClient] Token refresh error: $e");
       return false;
@@ -223,17 +223,17 @@ class ApiClient {
   // =========================================================
   // 🔍 HELPER METHODS
   // =========================================================
-  
+
   /// Check if response indicates a token error
   bool _isTokenError(http.Response response) {
     if (response.statusCode != 401) return false;
 
     final body = response.body.toLowerCase();
     return body.contains('invalid token') ||
-           body.contains('invalid_token') ||
-           body.contains('token expired') ||
-           body.contains('unauthorized') ||
-           body.contains('token') && body.contains('invalid');
+        body.contains('invalid_token') ||
+        body.contains('token expired') ||
+        body.contains('unauthorized') ||
+        body.contains('token') && body.contains('invalid');
   }
 
   /// Calculate exponential backoff delay
@@ -253,7 +253,7 @@ class ApiClient {
   // =========================================================
   // 🔐 HEADERS
   // =========================================================
-  
+
   Future<Map<String, String>> _headers() async {
     final token = await authService.getIdToken();
 
@@ -276,7 +276,7 @@ class ApiClient {
   // =========================================================
   // 🛠️ UTILITIES
   // =========================================================
-  
+
   Map<String, dynamic> toJsonSafe(Map<String, dynamic> original) {
     return original.map((key, value) => MapEntry(key, value ?? ""));
   }

@@ -179,7 +179,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               // HEADER — Modern Search Bar
               // ══════════════════════════════════════════════
               SliverPersistentHeader(
-                pinned: true,
                 delegate: SliverHeaderDelegate(
                   child: _ModernSearchBar(
                     onTap: () {
@@ -204,7 +203,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               // ══════════════════════════════════════════════
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: KategoriSection(),
                 ),
               ),
@@ -227,7 +226,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                     }
 
                     return Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(10),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -314,7 +313,7 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
     final primary = Constants.primaryColor;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedBuilder(

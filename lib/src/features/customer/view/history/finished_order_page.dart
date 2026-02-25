@@ -31,48 +31,18 @@ class FinishedOrderPage extends StatelessWidget {
         backgroundColor: const Color(0xFFF4F4F2),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Center(
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.07),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: Color(0xFF0F0F0F),
-                ),
-              ),
-            ),
-          ),
-        ),
         title: const Text(
           'Pesanan Selesai',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF0F0F0F),
-            letterSpacing: -0.3,
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
       body: orders.isEmpty
           ? _buildEmpty()
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 48),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 48),
               itemCount: orders.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (ctx, i) => _FinishedCard(order: orders[i]),
@@ -154,8 +124,7 @@ class _FinishedCardState extends State<_FinishedCard> {
 
   Future<void> _fetchUlasan() async {
     try {
-      final list =
-          await UlasanService().getAll(noOrder: widget.order.noBukti);
+      final list = await UlasanService().getAll(noOrder: widget.order.noBukti);
       if (mounted) {
         setState(() {
           _ulasan = list.isNotEmpty ? list.first : null;
@@ -309,8 +278,7 @@ class _FinishedCardState extends State<_FinishedCard> {
               ),
               const SizedBox(height: 3),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: Constants.primaryColor.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(6),
@@ -548,8 +516,7 @@ class _FinishedCardState extends State<_FinishedCard> {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9A825),
                 borderRadius: BorderRadius.circular(8),
@@ -624,8 +591,7 @@ class _VendorAvatar extends StatelessWidget {
       return CircleAvatar(
         radius: 22,
         backgroundColor: Constants.primaryColor.withOpacity(0.12),
-        child:
-            Icon(Icons.person, size: 20, color: Constants.primaryColor),
+        child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
       );
     }
     return CircleAvatar(

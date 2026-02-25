@@ -382,7 +382,7 @@ class _FilterOverlayState extends State<FilterOverlay>
                   _buildHeader(),
                   Expanded(
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      padding: const EdgeInsets.fromLTRB(10, 20, 10, 0),
                       children: [
                         _buildSection(
                           label: 'Kategori',

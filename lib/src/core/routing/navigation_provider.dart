@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
-import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// =========================================================
-// ✨ VENDOR NAVIGATION PROVIDER - COMPLETE VERSION
-// =========================================================
-
 class NavigationProvider with ChangeNotifier {
-  DeviceTokenService deviceTokenService = DeviceTokenService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // ─────────────── State
@@ -27,13 +20,12 @@ class NavigationProvider with ChangeNotifier {
 
   DateTime? _lastPressedAt;
 
-  // ✅ Bottom Navigation Visibility
   bool _isBottomNavVisible = true;
   bool get isBottomNavVisible => _isBottomNavVisible;
 
   // 🔑 Storage keys
   static const String _keyStatusUser = 'status_user';
-  static const String _keyRole = 'user_role';
+  static const String _keyRole       = 'user_role';
 
   // 📚 Navigation Keys
   final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
@@ -41,7 +33,6 @@ class NavigationProvider with ChangeNotifier {
     (_) => GlobalKey<NavigatorState>(),
   );
 
-  // ✅ Route Observers for each tab
   final List<RouteObserver<PageRoute>> routeObservers = List.generate(
     4,
     (_) => RouteObserver<PageRoute>(),
@@ -110,9 +101,8 @@ class NavigationProvider with ChangeNotifier {
   // 🔐 AUTH METHODS
   // =========================================================
 
-  Future<void> checkLogin(
-      BuildContext context, String role, bool silent) async {
-    debugPrint("===== [checkLogin] start for role: $role");
+  Future<void> checkLogin(BuildContext context, String role, bool silent) async {
+    debugPrint("[checkLogin] 🔐 start for role: $role | silent: $silent");
 
     try {
       final userProv = context.read<UserProvider>();
@@ -122,8 +112,11 @@ class NavigationProvider with ChangeNotifier {
         silent: silent,
       );
 
-      if (status == null) {
-        debugPrint("❌ Status null, logout");
+      // ✅ Error / tokenInvalid → force logout
+      if (status == null ||
+          status.name == 'error' ||
+          status.name == 'tokenInvalid') {
+        debugPrint("❌ [checkLogin] Status: ${status?.name} → force logout");
         await handleLogout(context);
         return;
       }
@@ -132,68 +125,84 @@ class NavigationProvider with ChangeNotifier {
       await saveStatusUser(_statusUser!);
       await saveRole(role);
 
-      debugPrint("✅ Status updated: $_statusUser, Role: $role");
+      debugPrint("✅ [checkLogin] Status: $_statusUser");
       notifyListeners();
-    } catch (e, stackTrace) {
-      debugPrint("❌ Error checkLogin: $e");
-      debugPrint(stackTrace.toString());
-      // await AppLogger.logError(
-      //   e,
-      //   stackTrace: stackTrace,
-      //   tag: 'CheckLogin',
-      //   extra: {'page': 'navigation_provider.dart'},
-      // );
+    } catch (e) {
+      debugPrint("❌ [checkLogin] Error: $e");
       await handleLogout(context);
     }
   }
 
   Future<void> handleLogout(BuildContext context) async {
-    debugPrint("===== [handleLogout] start");
+    debugPrint("[handleLogout] 🚪 Starting...");
 
     try {
       final userProv = context.read<UserProvider>();
-      if (userProv.customer != null) {
-        try {
-          await deviceTokenService.removeDeviceToken(userProv.customer!.noId, null);
-        } catch (e, stackTrace) {
-          debugPrint("⚠️ Error remove device token: $e");
-          // await AppLogger.logError(
-          //   e,
-          //   stackTrace: stackTrace,
-          //   tag: 'removeDeviceToken',
-          //   extra: {'page': 'navigation_provider.dart'},
-          // );
-        }
-      }
 
+      // Hapus token dari storage + disconnect Google
       await authService.signOut();
+      debugPrint("[handleLogout] ✅ AuthService sign-out complete");
+
       await clearStatusUser();
       await clearRole();
       clearSelectedIndex();
       showBottomNav();
-
       userProv.clear();
       popAllToRoot();
 
-      debugPrint("✅ Semua data berhasil dihapus");
-
-      if (context.mounted) {
-        popAllToRoot();
-      }
-
-      debugPrint("===== [handleLogout] selesai");
-    } catch (e, stackTrace) {
-      debugPrint("❌ Error saat handleLogout: $e");
-
-      if (context.mounted) {
-        popAllToRoot();
-      }
+      debugPrint("[handleLogout] ✅ All data cleared");
+    } catch (e) {
+      debugPrint("❌ [handleLogout] Error: $e");
+      // Tetap clear meskipun error
+      if (context.mounted) popAllToRoot();
     }
   }
 
   Future<bool> isAuthenticated() async {
     final token = await authService.getIdToken();
     return token != null && token.isNotEmpty;
+  }
+
+  // =========================================================
+  // 🚀 NAVIGATE AFTER LOGIN
+  // =========================================================
+
+  /// Navigate customer setelah login berhasil
+  /// Customer hanya ada 2 status: aktif / created
+  Future<void> startNavigateCustomer(BuildContext context) async {
+    final status = _statusUser ?? await getStatusUser();
+    debugPrint("🚀 [startNavigateCustomer] Status: $status");
+
+    if (status == null) {
+      debugPrint("❌ Status null");
+      if (context.mounted) popAllToRoot();
+      return;
+    }
+
+    switch (status) {
+      case 'aktif':
+        debugPrint("➡️ → MainMenu (aktif)");
+        if (context.mounted) {
+          final userProv = context.read<UserProvider>();
+          CustomSnackbar.showSuccessSnackbar(
+            context,
+            "Selamat Datang, ${userProv.customer?.namaDisplay ?? ""}",
+          );
+          // Customer langsung kembali ke MainMenu yang sudah ada
+          popAllToRoot();
+        }
+        break;
+
+      case 'created':
+        // Customer baru — langsung aktif, tidak ada flow registrasi tambahan
+        debugPrint("➡️ → MainMenu (created/new user)");
+        if (context.mounted) popAllToRoot();
+        break;
+
+      default:
+        debugPrint("❌ Unknown status '$status' → logout");
+        await handleLogout(context);
+    }
   }
 
   // =========================================================
@@ -206,27 +215,24 @@ class NavigationProvider with ChangeNotifier {
     int targetTabIndex = 0,
     bool hrsLogin = true,
     bool fullscreen = false,
-    String targetPage = 'VendorHome',
+    String targetPage = 'Home',
     String searchPageArg = '',
     PageTransitionType transitionType = PageTransitionType.slideRight,
   }) async {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint(
-        "[navigateToPage] 🎯 TARGET: $targetPage (fullscreen: $fullscreen)");
+    debugPrint("[navigateToPage] 🎯 $targetPage | fullscreen: $fullscreen");
 
-    // ✅ Check auth
     final isAuth = await isAuthenticated();
 
     if (!isAuth && hrsLogin) {
       debugPrint("[navigateToPage] 🔒 Redirect to login");
-
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(
             builder: (_) => const UserLogin(),
             settings: RouteSettings(arguments: {
-              'targetPage': 'userLogin',
-              'tabIndex': 0,
+              'targetPage': targetPage,
+              'tabIndex':   targetTabIndex,
+              'searchPageArg': searchPageArg,
             }),
           ),
         );
@@ -239,46 +245,23 @@ class NavigationProvider with ChangeNotifier {
     final route = _createPageRoute(page, transitionType);
 
     if (fullscreen) {
-      // ✅ Fullscreen: Use root navigator
       await Navigator.of(context, rootNavigator: true).push(route);
-      debugPrint("[navigateToPage] ✅ Fullscreen complete");
     } else {
-      // ✅ Nested: Use tab navigator
-      int targetIndex = targetTabIndex;
-
-      // Switch tab if needed
-      if (_selectedIndex != targetIndex) {
-        debugPrint(
-            "[navigateToPage] 🔄 Switching tab $_selectedIndex → $targetIndex");
-        _selectedIndex = targetIndex;
+      if (_selectedIndex != targetTabIndex) {
+        _selectedIndex = targetTabIndex;
         notifyListeners();
-
         await WidgetsBinding.instance.endOfFrame;
         await Future.delayed(const Duration(milliseconds: 50));
       }
 
-      // Get navigator
-      final navigator = navigatorKeys[targetIndex].currentState;
-
+      final navigator = navigatorKeys[targetTabIndex].currentState;
       if (navigator != null) {
-        debugPrint("[navigateToPage] 📄 Pushing to tab $targetIndex");
         await navigator.push(route);
-        debugPrint("[navigateToPage] ✅ Complete");
       } else {
-        debugPrint("[navigateToPage] ❌ Navigator null, retrying...");
-
         await Future.delayed(const Duration(milliseconds: 200));
-        final retryNavigator = navigatorKeys[targetIndex].currentState;
-
-        if (retryNavigator != null) {
-          await retryNavigator.push(route);
-        } else {
-          debugPrint("[navigateToPage] ❌ Retry failed");
-        }
+        await navigatorKeys[targetTabIndex].currentState?.push(route);
       }
     }
-
-    debugPrint("═══════════════════════════════════════════════════");
   }
 
   // =========================================================
@@ -289,18 +272,13 @@ class NavigationProvider with ChangeNotifier {
     switch (type) {
       case PageTransitionType.slideRight:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(1.0, 0.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOutCubic;
-
-            var tween = Tween(begin: begin, end: end).chain(
-              CurveTween(curve: curve),
-            );
-
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) {
             return SlideTransition(
-              position: animation.drive(tween),
+              position: animation.drive(
+                Tween(begin: const Offset(1.0, 0.0), end: Offset.zero)
+                    .chain(CurveTween(curve: Curves.easeInOutCubic)),
+              ),
               child: child,
             );
           },
@@ -309,18 +287,13 @@ class NavigationProvider with ChangeNotifier {
 
       case PageTransitionType.slideUp:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(0.0, 1.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOutCubic;
-
-            var tween = Tween(begin: begin, end: end).chain(
-              CurveTween(curve: curve),
-            );
-
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) {
             return SlideTransition(
-              position: animation.drive(tween),
+              position: animation.drive(
+                Tween(begin: const Offset(0.0, 1.0), end: Offset.zero)
+                    .chain(CurveTween(curve: Curves.easeInOutCubic)),
+              ),
               child: child,
             );
           },
@@ -329,32 +302,26 @@ class NavigationProvider with ChangeNotifier {
 
       case PageTransitionType.fade:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 250),
         );
 
       case PageTransitionType.scale:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const curve = Curves.easeInOutCubic;
-            var scaleTween = Tween(begin: 0.8, end: 1.0).chain(
-              CurveTween(curve: curve),
-            );
-            var fadeTween = Tween(begin: 0.0, end: 1.0).chain(
-              CurveTween(curve: curve),
-            );
-
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) {
             return ScaleTransition(
-              scale: animation.drive(scaleTween),
+              scale: animation.drive(
+                Tween(begin: 0.8, end: 1.0)
+                    .chain(CurveTween(curve: Curves.easeInOutCubic)),
+              ),
               child: FadeTransition(
-                opacity: animation.drive(fadeTween),
+                opacity: animation.drive(
+                  Tween(begin: 0.0, end: 1.0)
+                      .chain(CurveTween(curve: Curves.easeInOutCubic)),
+                ),
                 child: child,
               ),
             );
@@ -379,23 +346,21 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-  /// ✅ Vendor tab handler
-  void onItemTappedVendor(int index, BuildContext context) async {
-    debugPrint("🔘 [NavProvider] Vendor tab tapped: $index");
+  void onItemTapped(int index, BuildContext context) async {
+    debugPrint("🔘 [NavProvider] Tab tapped: $index");
 
-    // Check auth
     final isAuth = await isAuthenticated();
 
+    // Tab 0 (Home) bisa diakses tanpa login
     if (!isAuth && index != 0) {
       debugPrint("🔒 [NavProvider] Redirect to login");
-
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(
             builder: (_) => const UserLogin(),
             settings: RouteSettings(arguments: {
               'targetPage': 'Tab$index',
-              'tabIndex': index,
+              'tabIndex':   index,
             }),
           ),
         );
@@ -403,69 +368,45 @@ class NavigationProvider with ChangeNotifier {
       return;
     }
 
-    // Handle tab navigation
     if (_selectedIndex != index) {
-      debugPrint("🔀 [NavProvider] Switching tab $_selectedIndex → $index");
       _selectedIndex = index;
       resetExitTimer();
       notifyListeners();
-    } else {
-      debugPrint("🔄 [NavProvider] Same tab tapped ($index)");
-      // Refresh handled by VendorBottomNav._handleTabRefresh
     }
   }
 
-  /// ✅ Generic tab handler (alias)
-  void onItemTapped(int index, BuildContext context) async {
-    onItemTappedVendor(index, context);
-  }
+  // Alias
+  void onItemTappedVendor(int index, BuildContext context) =>
+      onItemTapped(index, context);
 
-  /// ✅ Change tab (with optional pop to root)
   void changeTab(int index, BuildContext context, {bool popToRoot = false}) {
-    debugPrint("🔄 [NavProvider] changeTab to $index (popToRoot: $popToRoot)");
-
     if (popToRoot) {
       navigatorKeys[index].currentState?.popUntil((r) => r.isFirst);
     }
-
-    onItemTappedVendor(index, context);
+    onItemTapped(index, context);
   }
 
-  /// ✅ Pop all navigators to root
   void popAllToRoot() {
-    debugPrint("🔙 [NavProvider] Pop all navigators to root");
-
+    debugPrint("🔙 [NavProvider] Pop all to root");
     for (int i = 0; i < navigatorKeys.length; i++) {
       navigatorKeys[i].currentState?.popUntil((r) => r.isFirst);
     }
-
     showBottomNav();
     notifyListeners();
   }
 
-  /// ✅ Push on specific tab
   Future<void> pushOnTab(int tabIndex, Route route) async {
     await navigatorKeys[tabIndex].currentState?.push(route);
   }
 
-  /// ✅ WillPop handler
   Future<bool> onWillPop(BuildContext context) async {
     final currentNavigator = navigatorKeys[_selectedIndex].currentState;
-
     if (currentNavigator == null) return true;
 
-    bool didPop = await currentNavigator.maybePop();
+    final didPop = await currentNavigator.maybePop();
+    if (didPop) return false;
 
-    debugPrint("🔙 [onWillPop] Tab: $_selectedIndex, didPop: $didPop");
-
-    if (didPop) {
-      // Successfully popped
-      return false;
-    }
-
-    // Can't pop - switch to home if not already there
     if (_selectedIndex != 0) {
-      debugPrint("🏠 [onWillPop] Switch to home");
       _selectedIndex = 0;
       showBottomNav();
       resetExitTimer();
@@ -473,32 +414,22 @@ class NavigationProvider with ChangeNotifier {
       return false;
     }
 
-    // Already at home - exit confirmation
     showBottomNav();
     return await _handleExitConfirmation(context);
   }
 
   Future<bool> _handleExitConfirmation(BuildContext context) async {
     final now = DateTime.now();
-
     if (_lastPressedAt == null ||
         now.difference(_lastPressedAt!) > const Duration(seconds: 2)) {
       _lastPressedAt = now;
-
-      CustomSnackbar.showExitAppSnackbar(
-        context,
-        'Tekan sekali lagi untuk keluar',
-      );
-
+      CustomSnackbar.showExitAppSnackbar(context, 'Tekan sekali lagi untuk keluar');
       return false;
     }
-
     return true;
   }
 
-  void resetExitTimer() {
-    _lastPressedAt = null;
-  }
+  void resetExitTimer() => _lastPressedAt = null;
 
   NavigatorState? getNavigator(int index) => navigatorKeys[index].currentState;
 
@@ -507,51 +438,32 @@ class NavigationProvider with ChangeNotifier {
   // =========================================================
 
   String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
-    final now = DateTime.now();
+    final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-
-    if (date == null) {
-      date = now;
-    }
-
+    date ??= now;
     final messageDate = DateTime(date.year, date.month, date.day);
 
     if (messageDate == today) {
-      if (showTodaysJam) {
-        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      } else {
-        return "Hari ini";
-      }
+      return showTodaysJam
+          ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
+          : "Hari ini";
     }
-
-    if (messageDate == today.subtract(const Duration(days: 1))) {
-      return "Kemarin";
-    }
-
+    if (messageDate == today.subtract(const Duration(days: 1))) return "Kemarin";
     return DateFormat("d MMM yyyy", "id_ID").format(date);
   }
 
   String ambilGambar(String img, {bool umum = false}) {
-    if (umum) {
-      return "https://fotoapi.pdj.web.id/api/files/umum@gmail.com/$img";
-    }
-    return "https://fotoapi.pdj.web.id/api/files/finance.pdj@gmail.com/$img";
+    return umum
+        ? "https://fotoapi.pdj.web.id/api/files/umum@gmail.com/$img"
+        : "https://fotoapi.pdj.web.id/api/files/finance.pdj@gmail.com/$img";
   }
 
   String? getMediaUrl(dynamic p) {
-    final mediaList = p.mediaUrls ?? [];
+    final mediaList  = p.mediaUrls ?? [];
     final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-    final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
-    return isVideo
-        ? (firstMedia?.thumbUrl ?? firstMedia?.url)
-        : firstMedia?.url;
+    final isVideo    = (firstMedia?.contentType ?? '').startsWith('video');
+    return isVideo ? (firstMedia?.thumbUrl ?? firstMedia?.url) : firstMedia?.url;
   }
 }
 
-enum PageTransitionType {
-  slideRight,
-  slideUp,
-  fade,
-  scale,
-  material,
-}
+enum PageTransitionType { slideRight, slideUp, fade, scale, material }

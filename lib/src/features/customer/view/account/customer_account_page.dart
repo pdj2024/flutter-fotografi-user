@@ -110,7 +110,7 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
           headerSliverBuilder: (context, _) => [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -299,7 +299,7 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
 
           /// PENTING: jangan bungkus TabBarView dengan Padding (BREAK refresh)
           body: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: TabBarView(
               children: [
                 PortofolioAccountSection(data: "like"),

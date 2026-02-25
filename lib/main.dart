@@ -466,21 +466,22 @@ class MyApp extends StatelessWidget {
 
   /// ✅ Setup session expired handler
   void _setupSessionExpiredHandler() {
+    // Dari ApiClient (401 max retry)
     apiClient.onSessionExpired = () {
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('🚪 [MyApp] SESSION EXPIRED');
-      debugPrint('═══════════════════════════════════════════════════');
-
       final context = navigatorKey.currentContext;
-      if (context == null) {
-        debugPrint('❌ [MyApp] No context available');
-        return;
-      }
-
+      if (context == null) return;
       _handleSessionExpired(context);
     };
 
-    debugPrint('✅ [MyApp] Session expired handler registered');
+    // ✅ Dari AuthService (refresh token gagal)
+    authService.onSessionExpired = () {
+      print("🚪 [MyApp] AuthService session expired");
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+      _handleSessionExpired(context);
+    };
+
+    debugPrint('✅ [MyApp] Session expired handlers registered');
   }
 
   /// ✅ Handle session expired

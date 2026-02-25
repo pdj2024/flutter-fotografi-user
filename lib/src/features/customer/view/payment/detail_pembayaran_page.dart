@@ -231,7 +231,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           /// =======================
           if (isLoading) {
             return Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 children: const [
                   ShimmerPlaceholder(
@@ -294,7 +294,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             children: [
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(10, 20, 10, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

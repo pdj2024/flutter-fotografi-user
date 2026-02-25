@@ -591,7 +591,7 @@ class _RoomChatPageState extends State<RoomChatPage>
       child: ListView(
         controller: _scrollController,
         reverse: true,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
         children: grouped.entries.expand((entry) {
           final dateLabel = entry.key;
           final groupMsgs = entry.value;

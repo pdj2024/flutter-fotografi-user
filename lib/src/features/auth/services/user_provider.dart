@@ -7,19 +7,7 @@ import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
-import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
-
-/// ============================================
-/// 👤 UserProvider - COMPATIBLE WITH NEW AuthService
-/// ============================================
-/// Changes:
-/// 1. ✅ Use authService.signIn() instead of login()
-/// 2. ✅ Use authService.getIdToken() without forceRefresh by default
-/// 3. ✅ Use authService.signOut() instead of logout()
-/// 4. ✅ Use authService.disconnect() for account switching
-/// 5. ✅ Remove all token caching logic
-/// ============================================
 
 class UserProvider with ChangeNotifier {
   final CustomerService _customerService;
@@ -29,53 +17,50 @@ class UserProvider with ChangeNotifier {
     required VendorService vendorService,
   }) : _customerService = customerService;
 
-  DeviceTokenService get deviceTokenService => DeviceTokenService();
-
   // ✅ Hive box
   static const String _userBoxName = 'user_box';
   Box? _userBox;
 
   // 🔑 Hive keys
-  static const String _keyRole = 'user_role';
-  static const String _keyCustomer = 'user_customer_data';
+  static const String _keyRole       = 'user_role';
+  static const String _keyCustomer   = 'user_customer_data';
   static const String _keyIsLoggedIn = 'user_is_logged_in';
-  static const String _keyLastSync = 'user_last_sync';
+  static const String _keyLastSync   = 'user_last_sync';
 
   // State
-  String _role = Constants.customer;
-  String? _photoUrl;
+  String        _role          = Constants.customer;
+  String?       _photoUrl;
   CustomerModel? _customer;
-  bool _isLoading = false;
-  String? _error;
-  bool _isInitialized = false;
+  bool          _isLoading     = false;
+  String?       _error;
+  bool          _isInitialized = false;
 
   // Getters
-  String? get role => _role;
-  String? get photoUrl => _photoUrl;
-  CustomerModel? get customer => _customer;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  bool get isInitialized => _isInitialized;
-  bool get isLoggedIn => _customer != null && authService.isLoggedIn;
-  String? get userId => _customer?.noId;
-  String get displayName => _customer?.namaDisplay ?? '';
+  String?        get role          => _role;
+  String?        get photoUrl      => _photoUrl;
+  CustomerModel? get customer      => _customer;
+  bool           get isLoading     => _isLoading;
+  String?        get error         => _error;
+  bool           get isInitialized => _isInitialized;
+  bool           get isLoggedIn    => _customer != null && authService.isLoggedIn;
+  String?        get userId        => _customer?.noId;
+  String         get displayName   => _customer?.namaDisplay ?? '';
 
   // =========================================================
   // 🔧 INITIALIZATION
   // =========================================================
-  
+
   Future<void> initialize() async {
     try {
       print("🔧 [UserProvider] Initializing...");
-      
+
       if (Hive.isBoxOpen(_userBoxName)) {
         await Hive.box(_userBoxName).close();
       }
-      
+
       _userBox = await Hive.openBox(_userBoxName);
       print("✅ [UserProvider] Hive box opened");
-      
-      // Load user data immediately
+
       await loadUserData();
     } catch (e) {
       print("❌ [UserProvider] Hive init error: $e");
@@ -85,25 +70,23 @@ class UserProvider with ChangeNotifier {
   // =========================================================
   // 💾 STORAGE OPERATIONS
   // =========================================================
-  
+
   Future<void> _saveCustomerData() async {
     try {
       if (_customer == null || _userBox == null) return;
 
       final customerJson = jsonEncode(_customer!.toJson());
-      
+
       await _userBox!.putAll({
-        _keyCustomer: customerJson,
-        _keyRole: _role,
+        _keyCustomer:   customerJson,
+        _keyRole:       _role,
         _keyIsLoggedIn: true,
-        _keyLastSync: DateTime.now().toIso8601String(),
+        _keyLastSync:   DateTime.now().toIso8601String(),
       });
 
       await _userBox!.flush();
 
-      print("💾 [UserProvider] Customer data saved");
-      print("   User: ${_customer!.namaDisplay}");
-      print("   Role: $_role");
+      print("💾 [UserProvider] Customer data saved: ${_customer!.namaDisplay}");
     } catch (e) {
       print("❌ [UserProvider] Save error: $e");
     }
@@ -113,17 +96,13 @@ class UserProvider with ChangeNotifier {
     try {
       print("🔄 [UserProvider] Loading user data...");
 
-      if (_userBox == null) {
-        await initialize();
-      }
+      if (_userBox == null) await initialize();
 
-      // Load customer data
       final customerJson = _userBox?.get(_keyCustomer);
-      
+
       if (customerJson != null && customerJson.isNotEmpty) {
         try {
-          final customerMap = jsonDecode(customerJson);
-          _customer = CustomerModel.fromJson(customerMap);
+          _customer = CustomerModel.fromJson(jsonDecode(customerJson));
           print("✅ [UserProvider] Customer loaded: ${_customer?.namaDisplay}");
         } catch (e) {
           print("❌ [UserProvider] Parse error: $e");
@@ -135,7 +114,6 @@ class UserProvider with ChangeNotifier {
         _customer = null;
       }
 
-      // Load role
       final savedRole = _userBox?.get(_keyRole);
       if (savedRole != null && savedRole.isNotEmpty) {
         _role = savedRole;
@@ -167,9 +145,7 @@ class UserProvider with ChangeNotifier {
   // =========================================================
   // 🔐 AUTHENTICATION
   // =========================================================
-  
-  /// Login with Google
-  /// ✅ Uses new AuthService.signIn()
+
   Future<GoogleLoginStatus> checkLoginGoogle({
     required String role,
     bool silent = false,
@@ -178,77 +154,77 @@ class UserProvider with ChangeNotifier {
     _error = null;
 
     try {
-      print("═══════════════════════════════════════");
-      print("🔐 [UserProvider] checkLoginGoogle");
-      print("   Role: $role");
-      print("   Silent: $silent");
-      print("═══════════════════════════════════════");
+      print("🔐 [UserProvider] checkLoginGoogle | Role: $role | Silent: $silent");
 
-      // 1️⃣ Sign in with Google
-      String? idToken;
-      
       if (silent) {
-        // Try silent restore
+        // ── SILENT: restore dari storage ─────────────────
         final restored = await authService.restoreSession();
-        if (restored) {
-          idToken = await authService.getIdToken();
+        if (!restored) {
+          print("❌ Silent restore failed");
+          return GoogleLoginStatus.tokenInvalid;
         }
-      } else {
-        // Interactive sign-in
-        idToken = await authService.signIn();
-      }
 
-      if (idToken == null) {
-        print("❌ [UserProvider] Sign-in failed, token null");
-        if (!silent) {
+        await loadUserData();
+
+        if (_customer == null) {
+          print("❌ No customer data after restore");
+          return GoogleLoginStatus.tokenInvalid;
+        }
+
+        setRole(role);
+        print("✅ Silent restore success");
+        return GoogleLoginStatus.aktif;
+
+      } else {
+        // ── INTERACTIVE: Google sign-in ───────────────────
+        // signIn() sudah hit backend & simpan token — tidak perlu hit lagi
+        final accessToken = await authService.signIn();
+
+        if (accessToken == null) {
+          print("❌ Sign-in failed");
           await _clearUserData();
           clear();
+          return GoogleLoginStatus.tokenInvalid;
         }
-        return GoogleLoginStatus.tokenInvalid;
-      }
 
-      print("✅ [UserProvider] Token obtained (${idToken.length} chars)");
-      print("🔄 [UserProvider] Checking backend status...");
+        // ✅ Ambil data dari lastLoginData — tidak hit backend lagi
+        final loginData = authService.lastLoginData;
+        authService.clearLastLoginData();
 
-      // 2️⃣ Check status on backend
-      final result = await _customerService.checkGoogleLogin();
+        if (loginData == null) {
+          print("❌ No login data");
+          return GoogleLoginStatus.error;
+        }
 
-      print("📊 [UserProvider] Backend response: ${result.status}");
+        final status = (loginData['Status'] as String?)?.toLowerCase() ?? 'error';
+        final noId   = loginData['No_Id'] as String?;
 
-      // 3️⃣ Handle CREATED status (new user)
-      if (result.status == GoogleLoginStatus.created) {
-        print("✅ [UserProvider] New user created");
-        setRole(role);
-        _customer = result.customer;
-        await _saveCustomerData();
-        notifyListeners();
-        return GoogleLoginStatus.created;
-      }
+        print("📊 Status: $status, No_Id: $noId");
 
-      // 4️⃣ Handle AKTIF status (existing user)
-      if (result.status == GoogleLoginStatus.aktif && result.customer != null) {
-        _customer = result.customer!;
-        print("✅ [UserProvider] User active: ${_customer!.namaDisplay}");
-        
-        await _saveCustomerData();
-
-        // Register device token
-        try {
-          await deviceTokenService.addDeviceToken(_customer!.noId, null);
-          print("✅ [UserProvider] Device token registered");
-        } catch (e) {
-          print("⚠️  [UserProvider] Device token registration failed: $e");
+        // Fetch customer detail pakai access_token yang sudah tersimpan
+        if (noId != null) {
+          try {
+            final customers = await _customerService.getAll(no_id: noId);
+            if (customers.isNotEmpty) {
+              _customer = customers.first;
+              await _saveCustomerData();
+            }
+          } catch (e) {
+            print("⚠️ Fetch customer detail error: $e");
+          }
         }
 
         setRole(role);
         notifyListeners();
-        return GoogleLoginStatus.aktif;
+
+        // ✅ Customer hanya ada 2 status
+        switch (status) {
+          case 'aktif':   return GoogleLoginStatus.aktif;
+          case 'created': return GoogleLoginStatus.created;
+          default:        return GoogleLoginStatus.error;
+        }
       }
 
-      // 5️⃣ Other statuses
-      print("⚠️  [UserProvider] Status: ${result.status}");
-      return result.status;
-      
     } catch (e, stackTrace) {
       _error = "Login gagal: $e";
       print("❌ [UserProvider] checkLoginGoogle error: $e");
@@ -257,77 +233,62 @@ class UserProvider with ChangeNotifier {
       return GoogleLoginStatus.error;
     } finally {
       _setLoading(false);
-      print("═══════════════════════════════════════");
     }
   }
 
   // =========================================================
   // 🔄 SESSION RESTORE
   // =========================================================
-  
-  /// Restore user session
-  /// ✅ Uses new AuthService.restoreSession()
+
   Future<bool> restoreSession() async {
     try {
-      print("═══════════════════════════════════════");
       print("🔄 [UserProvider] Restoring session...");
 
-      // 1️⃣ Restore auth session (Google Sign-In)
       final sessionRestored = await authService.restoreSession();
 
       if (!sessionRestored) {
-        print("❌ [UserProvider] Auth session restore failed");
+        print("❌ Auth session restore failed");
         _customer = null;
         _isInitialized = true;
         notifyListeners();
         return false;
       }
 
-      print("✅ [UserProvider] Auth session restored");
-      print("   Email: ${authService.email}");
+      print("✅ Auth session restored | Email: ${authService.email}");
 
-      // 2️⃣ Load user data from local storage
       await loadUserData();
 
-      // 3️⃣ If no customer data, fetch from backend
+      // Jika tidak ada data lokal, fetch dari backend
       if (_customer == null) {
-        print("⚠️  [UserProvider] No local customer data");
-        print("🔄 [UserProvider] Fetching from backend...");
-        
+        print("⚠️ No local customer data, fetching from backend...");
         final fetched = await _refreshCustomerFromBackend();
-        
         if (!fetched) {
-          print("❌ [UserProvider] Failed to fetch customer data");
+          print("❌ Failed to fetch customer data");
           await authService.signOut();
           return false;
         }
       }
 
-      // 4️⃣ Check if data is stale (older than 24 hours)
+      // Refresh jika data sudah lebih dari 24 jam
       final lastSync = _userBox?.get(_keyLastSync);
       if (lastSync != null) {
         try {
-          final lastSyncDate = DateTime.parse(lastSync);
-          final hoursSinceSync = DateTime.now().difference(lastSyncDate).inHours;
-          
-          print("ℹ️  [UserProvider] Last sync: ${hoursSinceSync}h ago");
-          
+          final hoursSinceSync = DateTime.now()
+              .difference(DateTime.parse(lastSync))
+              .inHours;
+          print("ℹ️ Last sync: ${hoursSinceSync}h ago");
           if (hoursSinceSync > 24) {
-            print("🔄 [UserProvider] Data stale, refreshing...");
+            print("🔄 Data stale, refreshing...");
             await _refreshCustomerFromBackend();
           }
         } catch (e) {
-          print("⚠️  [UserProvider] Last sync parse error: $e");
+          print("⚠️ Last sync parse error: $e");
         }
       }
 
-      print("✅ [UserProvider] Session restored successfully");
-      print("   User: ${_customer!.namaDisplay}");
-      print("   Role: $_role");
-      print("═══════════════════════════════════════");
-      
+      print("✅ Session restored: ${_customer!.namaDisplay}");
       return true;
-      
+
     } catch (e, stackTrace) {
       print("❌ [UserProvider] Restore error: $e");
       print(stackTrace);
@@ -337,32 +298,35 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  /// Refresh customer data from backend
-  /// ✅ Uses fresh token from AuthService
   Future<bool> _refreshCustomerFromBackend() async {
     try {
       print("🔄 [UserProvider] Refreshing customer from backend...");
-      
-      // Verify token is valid
+
       final token = await authService.getIdToken();
       if (token == null) {
-        print("❌ [UserProvider] No valid token");
+        print("❌ No valid token");
         return false;
       }
 
-      final result = await _customerService.checkGoogleLogin();
-      
-      if (result.customer != null) {
-        _customer = result.customer;
+      // Gunakan getAll dengan email dari authService jika tersedia
+      final email = authService.email;
+      if (email == null) {
+        print("❌ No email available");
+        return false;
+      }
+
+      final customers = await _customerService.getAll(email: email);
+      if (customers.isNotEmpty) {
+        _customer = customers.first;
         await _saveCustomerData();
         notifyListeners();
-        print("✅ [UserProvider] Customer refreshed: ${_customer!.namaDisplay}");
+        print("✅ Customer refreshed: ${_customer!.namaDisplay}");
         return true;
       }
-      
-      print("❌ [UserProvider] No customer data from backend");
+
+      print("❌ No customer data from backend");
       return false;
-      
+
     } catch (e) {
       print("❌ [UserProvider] Backend refresh error: $e");
       return false;
@@ -372,36 +336,18 @@ class UserProvider with ChangeNotifier {
   // =========================================================
   // 🚪 LOGOUT
   // =========================================================
-  
-  /// Normal logout
-  /// ✅ Uses new AuthService.signOut()
+
   Future<void> logout() async {
     try {
-      print("═══════════════════════════════════════");
       print("🚪 [UserProvider] Logging out...");
 
-      // 1️⃣ Remove device token
-      if (_customer != null) {
-        try {
-          await deviceTokenService.removeDeviceToken(_customer!.noId, null);
-          print("✅ [UserProvider] Device token removed");
-        } catch (e) {
-          print("⚠️  [UserProvider] Device token removal failed: $e");
-        }
-      }
-
-      // 2️⃣ Sign out from Google
+      // Hapus token dari storage + disconnect Google
       await authService.signOut();
-      print("✅ [UserProvider] Google sign-out complete");
-
-      // 3️⃣ Clear all local data
       await _clearUserData();
       clear();
       apiClient.clearRole();
 
       print("✅ [UserProvider] Logout complete");
-      print("═══════════════════════════════════════");
-      
       notifyListeners();
     } catch (e) {
       print("❌ [UserProvider] Logout error: $e");
@@ -410,35 +356,17 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  /// Logout and switch account
-  /// ✅ Uses new AuthService.disconnect()
   Future<void> logoutAndSwitchAccount() async {
     try {
-      print("═══════════════════════════════════════");
       print("🔄 [UserProvider] Switching account...");
 
-      // 1️⃣ Remove device token
-      if (_customer != null) {
-        try {
-          await deviceTokenService.removeDeviceToken(_customer!.noId, null);
-          print("✅ [UserProvider] Device token removed");
-        } catch (e) {
-          print("⚠️  [UserProvider] Device token removal failed: $e");
-        }
-      }
-
-      // 2️⃣ Disconnect Google account (revoke access)
+      // disconnect → user HARUS pilih akun lagi
       await authService.disconnect();
-      print("✅ [UserProvider] Google account disconnected");
-
-      // 3️⃣ Clear all local data
       await _clearUserData();
       clear();
       apiClient.clearRole();
 
       print("✅ [UserProvider] Account switch complete");
-      print("═══════════════════════════════════════");
-      
       notifyListeners();
     } catch (e) {
       print("❌ [UserProvider] Switch account error: $e");
@@ -448,9 +376,9 @@ class UserProvider with ChangeNotifier {
   }
 
   // =========================================================
-  // 🛠️  UTILITIES
+  // 🛠️ UTILITIES
   // =========================================================
-  
+
   void setRole(String role) {
     _role = role;
     apiClient.setRole(role);
@@ -466,10 +394,10 @@ class UserProvider with ChangeNotifier {
 
   void clear() {
     _customer = null;
-    _role = Constants.customer;
-    _error = null;
+    _role     = Constants.customer;
+    _error    = null;
     _isLoading = false;
-    _photoUrl = null;
+    _photoUrl  = null;
   }
 
   void _setLoading(bool value) {
@@ -477,14 +405,11 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Force refresh user data from backend
-  /// ✅ Uses fresh token from AuthService
   Future<void> refreshUserData() async {
-    print("🔄 [UserProvider] Force refresh user data...");
+    print("🔄 [UserProvider] Force refresh...");
     await _refreshCustomerFromBackend();
   }
 
-  /// Get current auth state
   void printDebugState() {
     print("═══ UserProvider State ═══");
     print("Customer: ${_customer?.namaDisplay ?? 'null'}");
@@ -493,17 +418,11 @@ class UserProvider with ChangeNotifier {
     print("Is loading: $_isLoading");
     print("Error: $_error");
     print("Initialized: $_isInitialized");
-    
     if (_userBox != null) {
-      print("Storage:");
-      print("  Is logged in: ${_userBox!.get(_keyIsLoggedIn)}");
-      print("  Role: ${_userBox!.get(_keyRole)}");
-      print("  Last sync: ${_userBox!.get(_keyLastSync)}");
+      print("Storage - Is logged in: ${_userBox!.get(_keyIsLoggedIn)}");
+      print("Storage - Role: ${_userBox!.get(_keyRole)}");
+      print("Storage - Last sync: ${_userBox!.get(_keyLastSync)}");
     }
-    
     print("═══════════════════════════");
-    
-    // Also print auth state
-    authService.printDebugState();
   }
 }

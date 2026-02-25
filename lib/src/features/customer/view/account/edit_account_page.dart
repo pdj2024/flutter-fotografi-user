@@ -108,7 +108,7 @@ class _EditAccountPageState extends State<EditAccountPage> {
       ),
       body: SingleChildScrollView(
           child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Form(
           key: _formKey,
           child: Column(
