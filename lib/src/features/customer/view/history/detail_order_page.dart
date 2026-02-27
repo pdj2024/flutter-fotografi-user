@@ -24,7 +24,9 @@ import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart'
 import 'package:mpjnew/src/features/customer/widget/dialog/revisi_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/selesaikan_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 class DetailOrderPage extends StatefulWidget {
   final PesananModel pesananModel;
@@ -35,6 +37,8 @@ class DetailOrderPage extends StatefulWidget {
 }
 
 class _DetailOrderPageState extends State<DetailOrderPage> {
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   UlasanModel? ulasan;
   PaketModel? paket;
   PesananModel? pesanan;
@@ -219,6 +223,23 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     }
   }
 
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      await Future.wait([
+        fetchData(),
+        _fetchUpdatedData(),
+      ]);
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[HomePage] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
+    }
+  }
+
   // =====================================================
   // 📝 SHOW REVISI DIALOG
   // =====================================================
@@ -333,13 +354,13 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              await fetchData();
-              await _fetchUpdatedData();
-            },
+          return SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
+            physics: const AlwaysScrollableScrollPhysics(),
+            header: buildRefreshHeader(),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1160,6 +1181,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     padding: EdgeInsets.zero,
                   ),
                   onPressed: () {
+                    context.read<NavigationProvider>().popAllToRoot();
                     context.read<NavigationProvider>().navigateToPage(
                           context,
                           RoomChatPage(

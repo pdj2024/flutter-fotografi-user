@@ -35,8 +35,8 @@ class CustomDialog {
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
             padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
+              left: 10,
+              right: 10,
               bottom: 20,
               top: 16,
             ),

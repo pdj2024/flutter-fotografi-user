@@ -21,6 +21,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_penawaran_card.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_pesanan_card.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
@@ -587,6 +588,7 @@ class _RoomChatPageState extends State<RoomChatPage>
     return SmartRefresher(
       enablePullUp: true,
       controller: _refreshController,
+      header: buildRefreshHeader(reverse: true),
       onRefresh: _refreshChat,
       child: ListView(
         controller: _scrollController,

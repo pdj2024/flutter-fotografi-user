@@ -56,8 +56,7 @@ class _WebviewPageState extends State<WebviewPage>
     _initWebView();
     // Pasang FCM listener hanya untuk mode pembayaran
     if (_isPaymentMode) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _listenFCM());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _listenFCM());
     }
   }
 
@@ -134,10 +133,9 @@ class _WebviewPageState extends State<WebviewPage>
         vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
         CurvedAnimation(parent: _animController, curve: Curves.easeIn));
-    _slideAnim =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-            CurvedAnimation(
-                parent: _animController, curve: Curves.easeOutCubic));
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+        .animate(CurvedAnimation(
+            parent: _animController, curve: Curves.easeOutCubic));
   }
 
   void _initWebView() {
@@ -203,8 +201,7 @@ class _WebviewPageState extends State<WebviewPage>
             _openExternal(_toWhatsAppUrl(req.url));
             return NavigationDecision.prevent;
           }
-          if (req.url == 'about:blank' ||
-              req.url.startsWith('javascript:')) {
+          if (req.url == 'about:blank' || req.url.startsWith('javascript:')) {
             return NavigationDecision.prevent;
           }
           return NavigationDecision.navigate;
@@ -280,8 +277,8 @@ class _WebviewPageState extends State<WebviewPage>
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                            Colors.green.shade600),
+                        valueColor:
+                            AlwaysStoppedAnimation(Colors.green.shade600),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -294,22 +291,22 @@ class _WebviewPageState extends State<WebviewPage>
                 ),
               ),
             // ── Tombol buka langsung (hanya mode non-payment) ─────────────
-            if (!_isPaymentMode && !_isNavigating) ...[
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF9F9F9),
-                  foregroundColor: Constants.primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                        color: Colors.deepPurple.shade400, width: 1),
-                  ),
-                ),
-                onPressed: () => _openExternal(widget.url),
-                child: const Text('Buka Langsung'),
-              ),
-              const SizedBox(width: 20),
-            ],
+            // if (!_isPaymentMode && !_isNavigating) ...[
+            //   ElevatedButton(
+            //     style: ElevatedButton.styleFrom(
+            //       backgroundColor: const Color(0xFFF9F9F9),
+            //       foregroundColor: Constants.primaryColor,
+            //       shape: RoundedRectangleBorder(
+            //         borderRadius: BorderRadius.circular(20),
+            //         side: BorderSide(
+            //             color: Colors.deepPurple.shade400, width: 1),
+            //       ),
+            //     ),
+            //     onPressed: () => _openExternal(widget.url),
+            //     child: const Text('Buka Langsung'),
+            //   ),
+            //   const SizedBox(width: 20),
+            // ],
           ],
         ),
         body: SafeArea(
@@ -356,8 +353,7 @@ class _WebviewPageState extends State<WebviewPage>
               height: 32,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                valueColor:
-                    AlwaysStoppedAnimation(Colors.green.shade400),
+                valueColor: AlwaysStoppedAnimation(Colors.green.shade400),
               ),
             ),
           ],
@@ -378,8 +374,7 @@ class _WebviewPageState extends State<WebviewPage>
               height: 50,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                valueColor:
-                    AlwaysStoppedAnimation(Colors.deepPurple.shade400),
+                valueColor: AlwaysStoppedAnimation(Colors.deepPurple.shade400),
               ),
             ),
             const SizedBox(height: 24),
@@ -551,9 +546,22 @@ class _WebviewPageState extends State<WebviewPage>
     try {
       final scheme = Uri.parse(url).scheme.toLowerCase();
       return [
-        'whatsapp','wa','tel','mailto','sms','intent',
-        'market','fb','facebook','instagram','twitter',
-        'tg','viber','line','maps','geo',
+        'whatsapp',
+        'wa',
+        'tel',
+        'mailto',
+        'sms',
+        'intent',
+        'market',
+        'fb',
+        'facebook',
+        'instagram',
+        'twitter',
+        'tg',
+        'viber',
+        'line',
+        'maps',
+        'geo',
       ].contains(scheme);
     } catch (_) {
       return false;

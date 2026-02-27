@@ -72,34 +72,35 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer<PortofolioProvider>(
-      builder: (context, provider, _) {
-        final isLoading =
-            _isLike ? provider.isLoadingLike : provider.isLoadingSave;
-        final dataList =
-            _isLike ? provider.portofolioLikelist : provider.portofolioSaveList;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+      child: Consumer<PortofolioProvider>(
+        builder: (context, provider, _) {
+          final isLoading =
+              _isLike ? provider.isLoadingLike : provider.isLoadingSave;
+          final dataList = _isLike
+              ? provider.portofolioLikelist
+              : provider.portofolioSaveList;
 
-        // ── Loading skeleton ──────────────────────────────
-        if (isLoading && dataList.isEmpty) {
-          return GridView.builder(
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(top: 8),
-            itemCount: 6,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemBuilder: (_, __) => const ShimmerPlaceholder(radius: 10),
-          );
-        }
+          // ── Loading skeleton ──────────────────────────────
+          if (isLoading && dataList.isEmpty) {
+            return GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(top: 8),
+              itemCount: 6,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemBuilder: (_, __) => const ShimmerPlaceholder(radius: 10),
+            );
+          }
 
-        // ── Kosong ────────────────────────────────────────
-        if (dataList.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: _onRefresh,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
+          // ── Kosong ────────────────────────────────────────
+          if (dataList.isEmpty) {
+            return ListView(
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 const SizedBox(height: 60),
                 Center(
@@ -129,15 +130,12 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
                   ),
                 ),
               ],
-            ),
-          );
-        }
+            );
+          }
 
-        // ── Grid ─────────────────────────────────────────
-        return RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: GridView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
+          // ── Grid ─────────────────────────────────────────
+          return GridView.builder(
+            physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.only(top: 8),
             itemCount: dataList.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -149,9 +147,9 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
               final porto = dataList[index];
               return _PortoGridItem(porto: porto, isLikeSection: _isLike);
             },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

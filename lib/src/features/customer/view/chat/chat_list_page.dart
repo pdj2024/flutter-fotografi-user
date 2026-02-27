@@ -6,15 +6,10 @@ import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
-/// ✅ REFACTORED: Chat List Page using Hive Streams
-///
-/// Changes:
-/// - Uses StreamBuilder untuk reactive updates dari Hive
-/// - Data loads instantly dari Hive cache
-/// - Background sync berjalan otomatis
-/// - No manual notifyListeners needed
 class ChatListPage extends StatefulWidget {
   const ChatListPage({super.key});
 
@@ -23,27 +18,23 @@ class ChatListPage extends StatefulWidget {
 }
 
 class _ChatListPageState extends State<ChatListPage> {
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-
-    // ✅ NO async work in initState - instant display!
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
       final roomChatProv = context.read<RoomChatProvider>();
       final chatProv = context.read<ChatProvider>();
 
-      // ✅ Ensure bottom nav is shown at root
       context.read<NavigationProvider>().showBottomNav();
-
-      // Reset room chat provider
       roomChatProv.reset();
 
-      // ✅ Background sync (non-blocking)
       if (chatProv.isInitialized) {
         debugPrint('[RoomList] 🔄 Starting background sync...');
         chatProv.loadRooms(forceRefresh: true, silent: true).then((_) {
@@ -61,6 +52,41 @@ class _ChatListPageState extends State<ChatListPage> {
     super.dispose();
   }
 
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      await context.read<ChatProvider>().loadRooms(
+            forceRefresh: true,
+            silent: false,
+          );
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[ChatList] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
+    }
+  }
+
+  List<RoomChatEntity> _filterAndSortRooms(List<RoomChatEntity> rooms) {
+    final filtered = rooms.where((room) {
+      if (_searchQuery.isEmpty) return true;
+      final name = room.displayName.toLowerCase();
+      final preview = room.previewMessage.toLowerCase();
+      final query = _searchQuery.toLowerCase();
+      return name.contains(query) || preview.contains(query);
+    }).toList();
+
+    filtered.sort((a, b) {
+      if (a.hasUnread && !b.hasUnread) return -1;
+      if (!a.hasUnread && b.hasUnread) return 1;
+      return b.lastMessageAt.compareTo(a.lastMessageAt);
+    });
+
+    return filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatProv = context.watch<ChatProvider>();
@@ -76,97 +102,61 @@ class _ChatListPageState extends State<ChatListPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          if (chatProv.isLoading)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Tooltip(
-                message: 'Menyinkronkan...',
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(
-                      Constants.primaryColorVendor.withOpacity(0.5),
+      ),
+
+      // ✅ Struktur: SmartRefresher di luar segalanya
+      //    SmartRefresher
+      //      └── StreamBuilder
+      //            └── CustomScrollView
+      //                  ├── SliverToBoxAdapter (search bar) ← ikut scroll
+      //                  └── SliverList / SliverFillRemaining (content)
+      body: StreamBuilder<List<RoomChatEntity>>(
+        stream: chatProv.repository.getRoomsStream(),
+        builder: (context, snapshot) {
+          final allRooms = snapshot.data ?? [];
+          final filtered = _filterAndSortRooms(allRooms);
+
+          return SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
+            physics: const AlwaysScrollableScrollPhysics(),
+            header: buildRefreshHeader(),
+            child: CustomScrollView(
+              slivers: [
+                // Search bar — ikut scroll ke atas saat pull-to-refresh
+                SliverToBoxAdapter(child: _buildSearchBar()),
+
+                // Content
+                if (!snapshot.hasData && chatProv.isLoading)
+                  // Loading shimmer
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (_, __) => _buildShimmerItem(),
+                      childCount: 6,
+                    ),
+                  )
+                else if (filtered.isEmpty)
+                  // Empty state — SliverFillRemaining agar mengisi sisa layar
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _buildEmptyState(
+                      isSearchResult: _searchQuery.isNotEmpty,
+                    ),
+                  )
+                else
+                  // Room list
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (_, index) => _buildRoomItem(filtered[index]),
+                      childCount: filtered.length,
                     ),
                   ),
-                ),
-              ),
+              ],
             ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search bar
-          _buildSearchBar(),
-
-          // ✅ MAIN CHANGE: StreamBuilder untuk rooms
-          Expanded(
-            child: StreamBuilder<List<RoomChatEntity>>(
-              stream: chatProv.repository.getRoomsStream(),
-              builder: (context, snapshot) {
-                // ════════════════════════════════════════════════════════
-                // LOADING STATE (hanya untuk initial load)
-                // ════════════════════════════════════════════════════════
-                if (!snapshot.hasData) {
-                  // Cek apakah sedang loading initial data
-                  if (chatProv.isLoading) {
-                    return _buildLoadingState();
-                  }
-                  // Jika tidak loading tapi tidak ada data = empty
-                  return _buildEmptyState();
-                }
-
-                // ════════════════════════════════════════════════════════
-                // DATA STATE
-                // ════════════════════════════════════════════════════════
-                final allRooms = snapshot.data!;
-
-                // Filter & sort
-                final filtered = _filterAndSortRooms(allRooms);
-
-                // Empty state setelah filter
-                if (filtered.isEmpty) {
-                  return _buildEmptyState(
-                    isSearchResult: _searchQuery.isNotEmpty,
-                  );
-                }
-
-                // ✅ Room list
-                return _buildRoomList(chatProv, filtered);
-              },
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
-  }
-
-  // =========================================
-  // FILTER & SORT
-  // =========================================
-
-  List<RoomChatEntity> _filterAndSortRooms(List<RoomChatEntity> rooms) {
-    final filtered = rooms.where((room) {
-      if (_searchQuery.isEmpty) return true;
-      final name = room.displayName.toLowerCase();
-      final preview = room.previewMessage.toLowerCase();
-      final query = _searchQuery.toLowerCase();
-      return name.contains(query) || preview.contains(query);
-    }).toList();
-
-    // Sort: unread first, then by time
-    filtered.sort((a, b) {
-      // First, prioritize unread
-      if (a.hasUnread && !b.hasUnread) return -1;
-      if (!a.hasUnread && b.hasUnread) return 1;
-
-      // Then by time
-      return b.lastMessageAt.compareTo(a.lastMessageAt);
-    });
-
-    return filtered;
   }
 
   // =========================================
@@ -190,15 +180,8 @@ class _ChatListPageState extends State<ChatListPage> {
         controller: _searchController,
         decoration: InputDecoration(
           hintText: 'Cari percakapan...',
-          hintStyle: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 14,
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            size: 20,
-            color: Colors.grey.shade600,
-          ),
+          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+          prefixIcon: Icon(Icons.search, size: 20, color: Colors.grey.shade600),
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           filled: true,
           fillColor: Colors.grey.shade100,
@@ -218,23 +201,7 @@ class _ChatListPageState extends State<ChatListPage> {
             ),
           ),
         ),
-        onChanged: (value) {
-          setState(() => _searchQuery = value);
-        },
-      ),
-    );
-  }
-
-  Widget _buildRoomList(ChatProvider chatProv, List<RoomChatEntity> rooms) {
-    return RefreshIndicator(
-      onRefresh: () => chatProv.loadRooms(forceRefresh: true, silent: false),
-      color: Constants.primaryColorVendor,
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: rooms.length,
-        itemBuilder: (context, index) {
-          return _buildRoomItem(rooms[index]);
-        },
+        onChanged: (value) => setState(() => _searchQuery = value),
       ),
     );
   }
@@ -243,9 +210,6 @@ class _ChatListPageState extends State<ChatListPage> {
     return InkWell(
       onTap: () {
         debugPrint('[RoomList] 🚀 Opening room: ${room.roomId}');
-
-        // ✅ Navigate to chat page
-        // RouteObserver will automatically hide bottom nav
         context.read<NavigationProvider>().navigateToPage(
               context,
               RoomChatPage(
@@ -264,66 +228,31 @@ class _ChatListPageState extends State<ChatListPage> {
               ? Constants.primaryColor.withOpacity(0.05)
               : Colors.white,
           border: Border(
-            bottom: BorderSide(
-              color: Colors.grey.shade200,
-              width: 0.5,
-            ),
+            bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
           ),
         ),
         child: Row(
           children: [
-            // ✅ Avatar with better styling
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.grey.shade300,
-                  child: room.idMediaLawan != null &&
-                          room.idMediaLawan!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: room.idMediaLawan!,
-                          imageBuilder: (_, img) => CircleAvatar(
-                            radius: 28,
-                            backgroundImage: img,
-                          ),
-                          placeholder: (_, __) => CircleAvatar(
-                            radius: 28,
-                            backgroundColor: Colors.grey.shade300,
-                            child: Icon(
-                              Icons.person,
-                              color: Colors.grey.shade500,
-                              size: 28,
-                            ),
-                          ),
-                          errorWidget: (_, __, ___) => CircleAvatar(
-                            radius: 28,
-                            backgroundColor:
-                                Constants.primaryColorVendor.withOpacity(0.2),
-                            child: Text(
-                              room.displayName[0].toUpperCase(),
-                              style: TextStyle(
-                                color: Constants.primaryColorVendor,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        )
-                      : CircleAvatar(
-                          radius: 28,
-                          backgroundColor:
-                              Constants.primaryColorVendor.withOpacity(0.2),
-                          child: Text(
-                            room.displayName[0].toUpperCase(),
-                            style: TextStyle(
-                              color: Constants.primaryColorVendor,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                ),
-              ],
+            // Avatar
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: Colors.grey.shade300,
+              child: room.idMediaLawan != null && room.idMediaLawan!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: room.idMediaLawan!,
+                      imageBuilder: (_, img) => CircleAvatar(
+                        radius: 28,
+                        backgroundImage: img,
+                      ),
+                      placeholder: (_, __) => CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.grey.shade300,
+                        child: Icon(Icons.person,
+                            color: Colors.grey.shade500, size: 28),
+                      ),
+                      errorWidget: (_, __, ___) => _buildInitialAvatar(room),
+                    )
+                  : _buildInitialAvatar(room),
             ),
 
             const SizedBox(width: 14),
@@ -368,7 +297,7 @@ class _ChatListPageState extends State<ChatListPage> {
 
                   const SizedBox(height: 4),
 
-                  // Preview & unread badge
+                  // Preview & badge
                   Row(
                     children: [
                       Expanded(
@@ -388,17 +317,12 @@ class _ChatListPageState extends State<ChatListPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-
                       const SizedBox(width: 8),
-
-                      // ✅ Unread badge with better styling
                       if (room.hasUnread)
                         Container(
                           constraints: const BoxConstraints(minWidth: 20),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Constants.primaryColorVendor,
                             borderRadius: BorderRadius.circular(10),
@@ -432,140 +356,120 @@ class _ChatListPageState extends State<ChatListPage> {
     );
   }
 
+  Widget _buildInitialAvatar(RoomChatEntity room) {
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: Constants.primaryColorVendor.withOpacity(0.2),
+      child: Text(
+        room.displayName[0].toUpperCase(),
+        style: TextStyle(
+          color: Constants.primaryColorVendor,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
   // =========================================
   // STATES
   // =========================================
 
-  Widget _buildLoadingState() {
-    return ListView.builder(
-      itemCount: 6,
-      itemBuilder: (_, __) => _buildShimmerItem(),
-    );
-  }
-
   Widget _buildEmptyState({bool isSearchResult = false}) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white,
-            Constants.primaryColorVendor.withOpacity(0.05),
-          ],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon with animation
-            TweenAnimationBuilder(
-              tween: Tween<double>(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.elasticOut,
-              builder: (context, double value, child) {
-                return Transform.scale(
-                  scale: value,
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Constants.primaryColorVendor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      isSearchResult
-                          ? Icons.search_off
-                          : Icons.chat_bubble_outline,
-                      size: 56,
-                      color: Constants.primaryColorVendor,
-                    ),
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TweenAnimationBuilder(
+            tween: Tween<double>(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.elasticOut,
+            builder: (context, double value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Constants.primaryColorVendor.withOpacity(0.1),
+                    shape: BoxShape.circle,
                   ),
-                );
-              },
+                  child: Icon(
+                    isSearchResult
+                        ? Icons.search_off
+                        : Icons.chat_bubble_outline,
+                    size: 56,
+                    color: Constants.primaryColorVendor,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
+            isSearchResult ? 'Tidak ditemukan' : 'Belum ada pesan',
+            style: TextStyle(
+              color: Colors.grey.shade800,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
-
-            const SizedBox(height: 24),
-
-            // Title
-            Text(
-              isSearchResult ? 'Tidak ditemukan' : 'Belum ada pesan',
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48),
+            child: Text(
+              isSearchResult
+                  ? 'Coba gunakan kata kunci lain'
+                  : 'Pesan dari customer akan muncul di sini',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.grey.shade800,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade600,
+                fontSize: 14,
+                height: 1.5,
               ),
             ),
-
-            const SizedBox(height: 8),
-
-            // Subtitle
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 48),
-              child: Text(
-                isSearchResult
-                    ? 'Coba gunakan kata kunci lain'
-                    : 'Pesan dari customer akan muncul di sini',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 14,
-                  height: 1.5,
+          ),
+          if (!isSearchResult) ...[
+            const SizedBox(height: 32),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Constants.primaryColorVendor.withOpacity(0.2),
+                  width: 1.5,
                 ),
-              ),
-            ),
-
-            if (!isSearchResult) ...[
-              const SizedBox(height: 32),
-
-              // Hint card
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 48),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Constants.primaryColorVendor.withOpacity(0.2),
-                    width: 1.5,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 18,
-                      color: Constants.primaryColorVendor,
-                    ),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Text(
-                        'Chat otomatis muncul saat customer menghubungi',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 18, color: Constants.primaryColorVendor),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      'Chat otomatis muncul saat customer menghubungi',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -581,7 +485,6 @@ class _ChatListPageState extends State<ChatListPage> {
       ),
       child: Row(
         children: [
-          // Avatar shimmer
           Container(
             width: 56,
             height: 56,
@@ -595,7 +498,6 @@ class _ChatListPageState extends State<ChatListPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Name shimmer
                 Container(
                   width: 140,
                   height: 14,
@@ -605,7 +507,6 @@ class _ChatListPageState extends State<ChatListPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Preview shimmer
                 Container(
                   width: double.infinity,
                   height: 12,
@@ -641,17 +542,13 @@ class _ChatListPageState extends State<ChatListPage> {
     final messageDate = DateTime(time.year, time.month, time.day);
 
     if (messageDate == today) {
-      // Today: show time
       return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
     } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      // Yesterday
       return 'Kemarin';
     } else if (now.difference(time).inDays < 7) {
-      // This week: show day name
       const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
       return days[time.weekday % 7];
     } else {
-      // Older: show date
       return '${time.day}/${time.month}/${time.year}';
     }
   }

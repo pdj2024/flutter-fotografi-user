@@ -18,7 +18,9 @@ import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.d
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN ORDER PAGE
@@ -33,6 +35,8 @@ class MainOrderPage extends StatefulWidget {
 
 class _MainOrderPageState extends State<MainOrderPage> {
   // Filter: null = semua aktif
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   String? _selectedFilter; // null = 'semua', atau nilai status
 
   bool _isInitialized = false;
@@ -80,6 +84,20 @@ class _MainOrderPageState extends State<MainOrderPage> {
         .toList();
   }
 
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      await Future.wait([_checkAndInit()]);
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[HomePage] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch untuk reactive rebuild
@@ -87,16 +105,73 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F9F9),
+        title: Text(
+          'Pesanan',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF0F0F0F),
+            letterSpacing: -0.5,
+          ),
+        ),
+        actions: [
+          GestureDetector(
+            onTap: () => context.read<NavigationProvider>().navigateToPage(
+                  context,
+                  FinishedOrderPage(),
+                  targetTabIndex: 2,
+                  targetPage: 'FinishedOrderPage',
+                  hrsLogin: true,
+                ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Text(
+                    'Selesai',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F0F0F),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: Colors.grey.shade500,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 20,
+          )
+        ],
+      ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _checkAndInit,
-          color: Constants.primaryColor,
+        child: SmartRefresher(
+          controller: _refreshController,
+          onRefresh: _onRefresh,
+          physics: const AlwaysScrollableScrollPhysics(),
+          header: buildRefreshHeader(),
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              // ── App bar ──────────────────────────────────────
-              SliverToBoxAdapter(child: _buildHeader()),
-
               // ── Summary cards ─────────────────────────────────
               SliverToBoxAdapter(child: _buildSummaryRow()),
 
