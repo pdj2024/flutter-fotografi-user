@@ -11,6 +11,7 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -632,7 +633,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                       context.read<NavigationProvider>().navigateToPage(
                             context,
                             targetTabIndex: 2,
-                            DetailOrderPage(pesananModel: pesanan),
+                            DetailOrderPageV2(pesananModel: pesanan),
+                            // DetailOrderPage(pesananModel: pesanan),
                           );
                     }
                   },
@@ -814,7 +816,8 @@ class _RoomChatPageState extends State<RoomChatPage>
         context.read<NavigationProvider>().navigateToPage(
               context,
               targetTabIndex: 2,
-              DetailOrderPage(pesananModel: pesanan.first),
+              DetailOrderPageV2(pesananModel: pesanan.first),
+              // DetailOrderPage(pesananModel: pesanan.first),
             );
       }
     } else {

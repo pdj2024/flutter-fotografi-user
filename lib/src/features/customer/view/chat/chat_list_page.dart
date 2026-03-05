@@ -419,7 +419,7 @@ class _ChatListPageState extends State<ChatListPage> {
             child: Text(
               isSearchResult
                   ? 'Coba gunakan kata kunci lain'
-                  : 'Pesan dari customer akan muncul di sini',
+                  : 'Pesan dari anda akan muncul di sini',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade600,
@@ -456,7 +456,7 @@ class _ChatListPageState extends State<ChatListPage> {
                   const SizedBox(width: 10),
                   Flexible(
                     child: Text(
-                      'Chat otomatis muncul saat customer menghubungi',
+                      'Silahkan hubungi vendor yang ingin anda hubungi dari halaman Jelajah',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade700,

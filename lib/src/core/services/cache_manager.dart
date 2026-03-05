@@ -14,6 +14,8 @@ import 'package:hive/hive.dart';
 /// - ✅ Lazy init: tidak perlu panggil initialize() secara manual
 ///   dari luar. _ensureInitialized() akan auto-init jika belum siap.
 /// - ✅ Satu Future _initFuture untuk guard concurrent init calls
+/// - ✅ evict(mediaId)    → hapus satu file dari disk
+/// - ✅ evictAll(ids)     → hapus banyak file, scan direktori sekali
 /// ═══════════════════════════════════════════════════════════════
 
 enum CachePriority { high, normal, low }
@@ -304,6 +306,128 @@ class CacheManager {
     } catch (_) {
       return null;
     }
+  }
+
+  // ── Evict ─────────────────────────────────────────────────
+
+  /// Hapus file cache untuk satu media ID dari disk.
+  ///
+  /// Dipanggil dari PortofolioLocalService._cleanupMedia()
+  /// saat portofolio di-unlike / un-save dan tidak ada di box lain.
+  ///
+  /// Mengapa pakai contains(mediaId) bukan exact match?
+  /// Karena nama file di disk menggunakan format: {safeId}_{timestamp}.{ext}
+  /// Contoh: "porto_abc123_1720000000000.jpg"
+  /// Sehingga mediaId perlu dicari sebagai substring.
+  ///
+  /// Return true jika minimal satu file berhasil dihapus.
+  Future<bool> evict(String mediaId) async {
+    if (mediaId.isEmpty) return false;
+    await _ensureInitialized();
+
+    try {
+      final targets = _cacheDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains(_sanitizeFilename(mediaId)))
+          .toList();
+
+      if (targets.isEmpty) {
+        debugPrint('[CacheManager] ℹ️ evict: no file for $mediaId');
+        return false;
+      }
+
+      int deleted = 0;
+      for (final file in targets) {
+        try {
+          await file.delete();
+          deleted++;
+          debugPrint('[CacheManager] 🗑️ evict: ${file.path.split('/').last}');
+        } catch (e) {
+          debugPrint('[CacheManager] ⚠️ evict delete failed: ${file.path}: $e');
+        }
+      }
+
+      debugPrint('[CacheManager] 🗑️ evict($mediaId): $deleted file(s) deleted');
+      return deleted > 0;
+    } catch (e) {
+      debugPrint('[CacheManager] ❌ evict error ($mediaId): $e');
+      return false;
+    }
+  }
+
+  /// Hapus file cache untuk banyak media ID sekaligus.
+  ///
+  /// Lebih efisien dari memanggil evict() satu per satu karena
+  /// hanya perlu scan direktori SEKALI untuk semua ID.
+  ///
+  /// Cocok dipakai di clearAll() portofolio saat logout:
+  ///   final ids = portfolios.expand((p) => p.mediaUrls)
+  ///       .map((m) => m.idMedia ?? '')
+  ///       .where((id) => id.isNotEmpty)
+  ///       .toList();
+  ///   await CacheManager.instance.evictAll(ids);
+  ///
+  /// Return jumlah file yang berhasil dihapus.
+  Future<int> evictAll(List<String> mediaIds) async {
+    if (mediaIds.isEmpty) return 0;
+    await _ensureInitialized();
+
+    try {
+      // Sanitize semua ID agar konsisten dengan nama file di disk
+      final sanitizedIds = mediaIds
+          .where((id) => id.isNotEmpty)
+          .map(_sanitizeFilename)
+          .toSet();
+
+      if (sanitizedIds.isEmpty) return 0;
+
+      // Scan direktori SEKALI — O(files), bukan O(files × ids)
+      final allFiles = _cacheDir.listSync().whereType<File>().toList();
+      final targets = allFiles.where((f) {
+        final name = f.path.split('/').last;
+        return sanitizedIds.any((id) => name.contains(id));
+      }).toList();
+
+      if (targets.isEmpty) {
+        debugPrint('[CacheManager] ℹ️ evictAll: no files found for ${sanitizedIds.length} IDs');
+        return 0;
+      }
+
+      int deleted = 0;
+      int failed = 0;
+      for (final file in targets) {
+        try {
+          await file.delete();
+          deleted++;
+        } catch (e) {
+          failed++;
+          debugPrint('[CacheManager] ⚠️ evictAll skip: ${file.path.split('/').last}: $e');
+        }
+      }
+
+      final mb = targets.isEmpty
+          ? '0'
+          : '~${((await _estimateSize(targets)) / 1024 / 1024).toStringAsFixed(2)}';
+      debugPrint(
+          '[CacheManager] 🗑️ evictAll: $deleted deleted, $failed failed ($mb MB freed)');
+
+      return deleted;
+    } catch (e) {
+      debugPrint('[CacheManager] ❌ evictAll error: $e');
+      return 0;
+    }
+  }
+
+  /// Helper: estimasi total ukuran file (best-effort, tidak throw)
+  Future<int> _estimateSize(List<File> files) async {
+    int total = 0;
+    for (final f in files) {
+      try {
+        total += await f.length();
+      } catch (_) {}
+    }
+    return total;
   }
 
   // ── Stats ──────────────────────────────────────────────────

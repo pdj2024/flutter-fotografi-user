@@ -6,14 +6,21 @@ import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart';
 import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioProvider with ChangeNotifier {
   final PortofolioService portofolioService;
+
+  // ✅ Pakai CustomerPortofolioLocalService (bukan PortofolioLocalService lama)
+  // CustomerPortofolioLocalService sudah handle guard hasActiveCustomer
+  // sehingga aman dipanggil saat guest mode (saveLiked/saveSaved di-skip)
   final PortofolioLocalService localService;
+
   final MediaPreloadService _preloadService = MediaPreloadService();
   bool _disposed = false;
 
@@ -114,10 +121,6 @@ class PortofolioProvider with ChangeNotifier {
   // SELECTED PORTFOLIO
   // ═══════════════════════════════════════════════════
 
-  /// Set selected porto dan navigate ke SinglePostPage.
-  /// Preload TIDAK dipanggil di sini karena:
-  /// - URL sudah ada di _preloadedUrls → _shouldPreload() = false → skip
-  /// - CachedNetworkImage sudah cache di disk, bisa load langsung tanpa preload
   void setSelectedPortofolio(PortofolioModel? porto) {
     _selectedPortofolio = porto;
     notifyListeners();
@@ -167,6 +170,8 @@ class PortofolioProvider with ChangeNotifier {
       final userId =
           userProvider.role == 'customer' ? userProvider.userId : null;
 
+      // ✅ Sync dari local hanya jika customer sudah login
+      // Guest mode: _portofolioLikelist & _portofolioSaveList tetap kosong
       await _syncLikedAndSavedFromLocal();
 
       if (!forceRefresh && _isInitialized) {
@@ -215,6 +220,12 @@ class PortofolioProvider with ChangeNotifier {
     required BuildContext context,
     required PortofolioModel porto,
   }) async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null) {
+      return context
+          .read<NavigationProvider>()
+          .navigateToPage(context, UserLogin(), targetTabIndex: 0);
+    }
     final noId = porto.noId;
     if (_likeInProgress.contains(noId)) return;
 
@@ -226,18 +237,15 @@ class PortofolioProvider with ChangeNotifier {
     safeNotify();
 
     try {
-      final userId = context.read<UserProvider>().userId;
-      if (userId == null) throw Exception('User belum login');
-
       debugPrint(
           '[PortofolioProvider] ${nowLiked ? '❤️' : '💔'} toggleLike: $noId');
 
       if (nowLiked) {
         await portofolioService.likePorto(userId, noId);
+
+        // ✅ saveLiked aman: sudah ada guard hasActiveCustomer di service
         await localService.saveLiked(porto);
 
-        // ✅ FIX: Set selected porto TANPA memanggil preload
-        // Navigate dari luar provider (caller yang navigasi)
         setSelectedPortofolio(porto);
         if (context.mounted) {
           context.read<NavigationProvider>().navigateToPage(
@@ -282,6 +290,12 @@ class PortofolioProvider with ChangeNotifier {
     required BuildContext context,
     required PortofolioModel porto,
   }) async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null) {
+      return context
+          .read<NavigationProvider>()
+          .navigateToPage(context, UserLogin(), targetTabIndex: 0);
+    }
     final noId = porto.noId;
     if (_saveInProgress.contains(noId)) return;
 
@@ -293,17 +307,15 @@ class PortofolioProvider with ChangeNotifier {
     safeNotify();
 
     try {
-      final userId = context.read<UserProvider>().userId;
-      if (userId == null) throw Exception('User belum login');
-
       debugPrint(
           '[PortofolioProvider] ${nowSaved ? '🔖' : '🗑️'} toggleSave: $noId');
 
       if (nowSaved) {
         await portofolioService.savePorto(userId, noId);
+
+        // ✅ saveSaved aman: sudah ada guard hasActiveCustomer di service
         await localService.saveSaved(porto);
 
-        // ✅ FIX: Set selected porto TANPA memanggil preload
         setSelectedPortofolio(porto);
         if (context.mounted) {
           context.read<NavigationProvider>().navigateToPage(
@@ -361,6 +373,9 @@ class PortofolioProvider with ChangeNotifier {
           if (userId != null) {
             final apiLiked =
                 await portofolioService.getLikesPorto(noId: userId);
+
+            // ✅ syncLiked memanggil saveLiked di dalamnya.
+            // Aman karena saveLiked sekarang silent-skip jika belum login.
             await localService.syncLiked(apiLiked);
             _portofolioLikelist = await localService.getLikedPortfolios();
           }
@@ -393,6 +408,9 @@ class PortofolioProvider with ChangeNotifier {
           if (userId != null) {
             final apiSaved =
                 await portofolioService.getSavesPorto(noId: userId);
+
+            // ✅ syncSaved memanggil saveSaved di dalamnya.
+            // Aman karena saveSaved sekarang silent-skip jika belum login.
             await localService.syncSaved(apiSaved);
             _portofolioSaveList = await localService.getSavedPortfolios();
           }

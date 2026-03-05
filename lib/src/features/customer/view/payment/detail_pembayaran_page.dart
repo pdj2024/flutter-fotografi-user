@@ -187,7 +187,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         );
 
         // Step 6: Navigate to payment page
-        context.read<NavigationProvider>().popAllToRoot();
         if (pesanan.first.linkSnap == null) {
           context.read<NavigationProvider>().navigateToPage(
                 context,
@@ -198,7 +197,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           context.read<NavigationProvider>().navigateToPage(
                 context,
                 targetTabIndex: 2,
-                WebviewPage(url: pesanan.first.linkSnap!),
+                WebviewPage(
+                  url: pesanan.first.linkSnap!,
+                  paymentData: pesanan.first,
+                ),
               );
         }
       }

@@ -828,6 +828,83 @@ class HiveChatRepository {
     await clearRoomReceivedList(roomId);
   }
 
+  static Future<void> deleteAllBoxes() async {
+    debugPrint('[HiveChatRepo] 🗑️ Deleting all chat boxes from disk...');
+
+    // Tutup dulu jika masih open
+    const boxesToDelete = [
+      'chat_rooms',
+      'chat_meta',
+    ];
+
+    for (final boxName in boxesToDelete) {
+      try {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box(boxName).close();
+        }
+        await Hive.deleteBoxFromDisk(boxName);
+        debugPrint('[HiveChatRepo]    Deleted: $boxName');
+      } catch (e) {
+        debugPrint('[HiveChatRepo]    ⚠️ Failed to delete $boxName: $e');
+      }
+    }
+
+    // Hapus semua message boxes (tidak tahu room ID-nya,
+    // gunakan compact scan atau simpan daftar room ID di meta)
+    // Alternatif: hapus semua box yang punya prefix "chat_messages_"
+    // via Hive.deleteBoxFromDisk — tapi perlu tahu nama boxnya.
+    //
+    // Solusi terbaik: simpan daftar roomId di meta box sebelum dihapus.
+    // Jika meta sudah terhapus, lewati (message boxes akan orphan di disk
+    // tapi tidak akan pernah dibuka lagi karena rooms sudah kosong).
+
+    debugPrint('[HiveChatRepo] ✅ Chat boxes deleted from disk');
+  }
+
+  Future<void> closeAndClearInMemory() async {
+    debugPrint('[HiveChatRepo] 🚪 Closing all boxes (data on disk intact)...');
+
+    // Cancel semua box watch subscriptions
+    for (final sub in _boxWatchSubscriptions.values) {
+      await sub.cancel();
+    }
+    _boxWatchSubscriptions.clear();
+
+    // Close semua message boxes
+    for (final entry in _messagesBoxes.entries) {
+      if (entry.value.isOpen) {
+        await entry.value.close();
+        debugPrint('[HiveChatRepo]    Closed: ${entry.key}');
+      }
+    }
+    _messagesBoxes.clear();
+
+    // Close stream controllers message (tanpa hapus data)
+    for (final ctrl in _messagesStreamControllers.values) {
+      await ctrl.close();
+    }
+    _messagesStreamControllers.clear();
+
+    // Close rooms box
+    if (_roomsBox?.isOpen ?? false) {
+      await _roomsBox!.close();
+      _roomsBox = null;
+    }
+
+    // Close meta box
+    if (_metaBox?.isOpen ?? false) {
+      await _metaBox!.close();
+      _metaBox = null;
+    }
+
+    // Close rooms stream (tanpa hapus data)
+    if (!_roomsStreamController.isClosed) {
+      await _roomsStreamController.close();
+    }
+
+    debugPrint('[HiveChatRepo] ✅ All boxes closed (data on disk preserved)');
+  }
+
   // =========================================
   // METADATA
   // =========================================

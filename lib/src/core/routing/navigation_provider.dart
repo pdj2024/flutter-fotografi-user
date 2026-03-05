@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
+import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -25,7 +29,7 @@ class NavigationProvider with ChangeNotifier {
 
   // 🔑 Storage keys
   static const String _keyStatusUser = 'status_user';
-  static const String _keyRole       = 'user_role';
+  static const String _keyRole = 'user_role';
 
   // 📚 Navigation Keys
   final List<GlobalKey<NavigatorState>> navigatorKeys = List.generate(
@@ -112,7 +116,6 @@ class NavigationProvider with ChangeNotifier {
         silent: silent,
       );
 
-      // ✅ Error / tokenInvalid → force logout
       if (status == null ||
           status.name == 'error' ||
           status.name == 'tokenInvalid') {
@@ -133,16 +136,37 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
+  /// ✅ Logout: clear local storage customer → signOut → navigate
+  ///
+  /// Urutan ini penting:
+  /// 1. clearOnLogout() harus sebelum authService.signOut()
+  ///    karena clearOnLogout() masih butuh context (chatProvider)
+  /// 2. authService.signOut() setelah data cleared
+  /// 3. popAllToRoot() terakhir agar widget masih mounted saat cleanup
   Future<void> handleLogout(BuildContext context) async {
     debugPrint("[handleLogout] 🚪 Starting...");
 
     try {
       final userProv = context.read<UserProvider>();
+      final chatProvider = context.read<ChatProvider>();
 
-      // Hapus token dari storage + disconnect Google
+      // ✅ 1. Clear semua local storage customer
+      //    - Portofolio liked + saved: Hive di-clear + file media dihapus
+      //    - Pesanan + history: Hive di-clear
+      //    - Chat: stream di-close, Hive box di-tutup (data tetap di disk)
+      //    - activeCustomerId di-clear
+      await LocalStorageService.instance.clearOnLogout(
+        portofolioService: PortofolioLocalService(),
+        pesananService: PesananLocalService(),
+        chatProvider: chatProvider,
+      );
+      debugPrint("[handleLogout] ✅ Local storage cleared");
+
+      // ✅ 2. Hapus token + disconnect Google
       await authService.signOut();
       debugPrint("[handleLogout] ✅ AuthService sign-out complete");
 
+      // ✅ 3. Clear sisa state
       await clearStatusUser();
       await clearRole();
       clearSelectedIndex();
@@ -150,7 +174,7 @@ class NavigationProvider with ChangeNotifier {
       userProv.clear();
       popAllToRoot();
 
-      debugPrint("[handleLogout] ✅ All data cleared");
+      debugPrint("[handleLogout] ✅ Logout complete");
     } catch (e) {
       debugPrint("❌ [handleLogout] Error: $e");
       // Tetap clear meskipun error
@@ -167,8 +191,6 @@ class NavigationProvider with ChangeNotifier {
   // 🚀 NAVIGATE AFTER LOGIN
   // =========================================================
 
-  /// Navigate customer setelah login berhasil
-  /// Customer hanya ada 2 status: aktif / created
   Future<void> startNavigateCustomer(BuildContext context) async {
     final status = _statusUser ?? await getStatusUser();
     debugPrint("🚀 [startNavigateCustomer] Status: $status");
@@ -188,13 +210,11 @@ class NavigationProvider with ChangeNotifier {
             context,
             "Selamat Datang, ${userProv.customer?.namaDisplay ?? ""}",
           );
-          // Customer langsung kembali ke MainMenu yang sudah ada
           popAllToRoot();
         }
         break;
 
       case 'created':
-        // Customer baru — langsung aktif, tidak ada flow registrasi tambahan
         debugPrint("➡️ → MainMenu (created/new user)");
         if (context.mounted) popAllToRoot();
         break;
@@ -231,7 +251,7 @@ class NavigationProvider with ChangeNotifier {
             builder: (_) => const UserLogin(),
             settings: RouteSettings(arguments: {
               'targetPage': targetPage,
-              'tabIndex':   targetTabIndex,
+              'tabIndex': targetTabIndex,
               'searchPageArg': searchPageArg,
             }),
           ),
@@ -351,7 +371,6 @@ class NavigationProvider with ChangeNotifier {
 
     final isAuth = await isAuthenticated();
 
-    // Tab 0 (Home) bisa diakses tanpa login
     if (!isAuth && index != 0) {
       debugPrint("🔒 [NavProvider] Redirect to login");
       if (context.mounted) {
@@ -360,7 +379,7 @@ class NavigationProvider with ChangeNotifier {
             builder: (_) => const UserLogin(),
             settings: RouteSettings(arguments: {
               'targetPage': 'Tab$index',
-              'tabIndex':   index,
+              'tabIndex': index,
             }),
           ),
         );
@@ -375,7 +394,6 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-  // Alias
   void onItemTappedVendor(int index, BuildContext context) =>
       onItemTapped(index, context);
 
@@ -423,7 +441,8 @@ class NavigationProvider with ChangeNotifier {
     if (_lastPressedAt == null ||
         now.difference(_lastPressedAt!) > const Duration(seconds: 2)) {
       _lastPressedAt = now;
-      CustomSnackbar.showExitAppSnackbar(context, 'Tekan sekali lagi untuk keluar');
+      CustomSnackbar.showExitAppSnackbar(
+          context, 'Tekan sekali lagi untuk keluar');
       return false;
     }
     return true;
@@ -438,7 +457,7 @@ class NavigationProvider with ChangeNotifier {
   // =========================================================
 
   String formatDateLabel(DateTime? date, {bool showTodaysJam = false}) {
-    final now   = DateTime.now();
+    final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     date ??= now;
     final messageDate = DateTime(date.year, date.month, date.day);
@@ -459,9 +478,9 @@ class NavigationProvider with ChangeNotifier {
   }
 
   String? getMediaUrl(dynamic p) {
-    final mediaList  = p.mediaUrls ?? [];
+    final mediaList = p.mediaUrls ?? [];
     final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
-    final isVideo    = (firstMedia?.contentType ?? '').startsWith('video');
+    final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
     return isVideo ? (firstMedia?.thumbUrl ?? firstMedia?.url) : firstMedia?.url;
   }
 }

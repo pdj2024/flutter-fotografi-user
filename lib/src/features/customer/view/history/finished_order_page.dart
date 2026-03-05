@@ -8,6 +8,7 @@ import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
@@ -542,7 +543,8 @@ class _FinishedCardState extends State<_FinishedCard> {
       onTap: () {
         context.read<NavigationProvider>().navigateToPage(
               context,
-              DetailOrderPage(pesananModel: widget.order),
+              DetailOrderPageV2(pesananModel: widget.order),
+              // DetailOrderPage(pesananModel: widget.order),
               targetTabIndex: 2,
             );
       },

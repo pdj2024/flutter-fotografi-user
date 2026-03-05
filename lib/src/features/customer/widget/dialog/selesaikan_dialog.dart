@@ -38,7 +38,7 @@ class _SelesaikanDialogState extends State<SelesaikanDialog> {
       final updatedPesanan = widget.pesanan.copyWith(
         statusProgresPesanan: 'selesai',
       );
-      
+
       await PesananService().update(updatedPesanan);
 
       if (!mounted) return;
@@ -65,7 +65,7 @@ class _SelesaikanDialogState extends State<SelesaikanDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(16),
+      insetPadding: const EdgeInsets.all(10),
       child: Container(
         constraints: const BoxConstraints(
           maxWidth: 400,
@@ -225,7 +225,8 @@ class _SelesaikanDialogState extends State<SelesaikanDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      onPressed:
+                          _isLoading ? null : () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: BorderSide(color: Colors.grey.shade400),

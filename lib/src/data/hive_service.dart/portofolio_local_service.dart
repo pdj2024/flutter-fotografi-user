@@ -3,6 +3,27 @@ import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/cache_manager.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
+
+/// ═══════════════════════════════════════════════════════════════
+/// CUSTOMER PORTOFOLIO LOCAL SERVICE
+///
+/// Menyimpan portofolio yang di-like & di-save oleh customer.
+///
+/// Dua box terpisah:
+/// - customer_liked_porto_box  → portofolio yang di-like
+/// - customer_saved_porto_box  → portofolio yang di-save/bookmark
+///
+/// Tidak menggunakan key prefix karena:
+/// - Data ini sangat personal (like/save adalah tindakan user)
+/// - Saat logout, seluruh box di-clear (bukan filter by user)
+/// - Berbeda dengan vendor yang share satu box multi-vendor
+///
+/// Lifecycle:
+///   Login  → initialize() → load liked/saved
+///   Logout → clearAll() (hapus data + media cache)
+///   Delete → clearAll() (sama, karena sudah hapus semua)
+/// ═══════════════════════════════════════════════════════════════
 
 class PortofolioLocalService {
   static const String _likedBoxName = 'customer_liked_porto_box';
@@ -34,8 +55,6 @@ class PortofolioLocalService {
   }
 
   Future<void> _ensureReady() async {
-    // Init Hive box lokal + CacheManager secara paralel.
-    // CacheManager.initialize() aman dipanggil berkali-kali (lazy + idempotent).
     final needsHiveInit = _likedBox == null || !_likedBox!.isOpen ||
         _savedBox == null || !_savedBox!.isOpen;
 
@@ -49,12 +68,17 @@ class PortofolioLocalService {
   // LIKE — WRITE
   // ═══════════════════════════════════════════════════
 
-  /// Simpan portfolio ke liked box.
-  /// Otomatis download semua gambar ke lokal (background).
   Future<void> saveLiked(PortofolioModel portfolio) async {
     await _ensureReady();
+
+    // Guard: silent skip jika belum login (guest mode).
+    // Tidak throw karena syncLiked() bisa dipanggil sebelum setActiveCustomer().
+    if (!LocalStorageService.instance.hasActiveCustomer) {
+      debugPrint('[CustomerPortoLocal] ⚠️ saveLiked skipped: no active customer');
+      return;
+    }
+
     try {
-      // Merge dengan cache existing agar tidak re-download gambar yang sudah ada
       final existing = _likedBox!.get(portfolio.noId);
       final toSave = existing != null
           ? _mergeMedia(portfolio, existing)
@@ -63,7 +87,6 @@ class PortofolioLocalService {
       await _likedBox!.put(portfolio.noId, toSave);
       debugPrint('[CustomerPortoLocal] ❤️  saveLiked: ${portfolio.noId}');
 
-      // Download gambar background — tidak block UI
       _downloadMediaBackground(toSave, _likedBox!);
     } catch (e) {
       debugPrint('❌ [CustomerPortoLocal] saveLiked: $e');
@@ -71,8 +94,6 @@ class PortofolioLocalService {
     }
   }
 
-  /// Hapus dari liked box.
-  /// Media hanya di-cleanup jika porto tidak ada di saved box juga.
   Future<void> removeLiked(String noId) async {
     await _ensureReady();
     try {
@@ -92,11 +113,17 @@ class PortofolioLocalService {
   }
 
   // ═══════════════════════════════════════════════════
-  // SAVE — WRITE
+  // SAVE / BOOKMARK — WRITE
   // ═══════════════════════════════════════════════════
 
   Future<void> saveSaved(PortofolioModel portfolio) async {
     await _ensureReady();
+    // Guard: silent skip jika belum login (guest mode).
+    if (!LocalStorageService.instance.hasActiveCustomer) {
+      debugPrint('[CustomerPortoLocal] ⚠️ saveSaved skipped: no active customer');
+      return;
+    }
+
     try {
       final existing = _savedBox!.get(portfolio.noId);
       final toSave = existing != null
@@ -119,7 +146,6 @@ class PortofolioLocalService {
       final p = _savedBox!.get(noId);
       if (p == null) return;
 
-      // Jangan hapus media jika masih di-like
       final isAlsoLiked = _likedBox!.containsKey(noId);
       if (!isAlsoLiked) await _cleanupMedia(p);
 
@@ -135,7 +161,6 @@ class PortofolioLocalService {
   // READ
   // ═══════════════════════════════════════════════════
 
-  /// Semua portfolio yang di-like oleh user, urut terbaru.
   Future<List<PortofolioModel>> getLikedPortfolios() async {
     await _ensureReady();
     try {
@@ -147,7 +172,6 @@ class PortofolioLocalService {
     }
   }
 
-  /// Semua portfolio yang di-save oleh user, urut terbaru.
   Future<List<PortofolioModel>> getSavedPortfolios() async {
     await _ensureReady();
     try {
@@ -159,19 +183,16 @@ class PortofolioLocalService {
     }
   }
 
-  /// Semua portfolio yang di-cache (liked + saved gabungan, tanpa duplikat).
-  /// Berguna untuk keperluan preload atau stats.
+  /// Semua portofolio yang di-cache (liked + saved, tanpa duplikat).
   Future<List<PortofolioModel>> getCachedPortfolios() async {
     await _ensureReady();
     try {
-      // Gunakan Map agar tidak ada duplikat (porto bisa ada di dua box)
       final map = <String, PortofolioModel>{};
 
       for (final p in _likedBox!.values) {
         map[p.noId] = p;
       }
       for (final p in _savedBox!.values) {
-        // Jika sudah ada dari liked, ambil yang punya lebih banyak media cached
         if (!map.containsKey(p.noId) ||
             p.cachedMedia.length > map[p.noId]!.cachedMedia.length) {
           map[p.noId] = p;
@@ -181,7 +202,7 @@ class PortofolioLocalService {
       final list = map.values.toList()
         ..sort((a, b) => b.tglCreated.compareTo(a.tglCreated));
 
-      debugPrint('[CustomerPortoLocal] 📦 getCachedPortfolios: ${list.length} total');
+      debugPrint('[CustomerPortoLocal] 📦 getCached: ${list.length} total');
       return list;
     } catch (e) {
       debugPrint('❌ [CustomerPortoLocal] getCachedPortfolios: $e');
@@ -189,13 +210,11 @@ class PortofolioLocalService {
     }
   }
 
-  /// Cari portfolio by ID — cek liked dulu, lalu saved.
   Future<PortofolioModel?> getPortfolioById(String noId) async {
     await _ensureReady();
     return _likedBox!.get(noId) ?? _savedBox!.get(noId);
   }
 
-  /// Cek status like/save secara async.
   Future<bool> isLiked(String noId) async {
     await _ensureReady();
     return _likedBox!.containsKey(noId);
@@ -206,58 +225,17 @@ class PortofolioLocalService {
     return _savedBox!.containsKey(noId);
   }
 
-  /// Cek status like/save secara sync (gunakan setelah initialize selesai).
+  /// Sync (gunakan setelah initialize selesai)
   bool isLikedSync(String noId) => _likedBox?.containsKey(noId) ?? false;
   bool isSavedSync(String noId) => _savedBox?.containsKey(noId) ?? false;
 
-  // ═══════════════════════════════════════════════════
-  // DOWNLOAD MEDIA
-  // ═══════════════════════════════════════════════════
-
-  /// Download semua gambar dari semua porto yang di-cache (liked + saved).
-  /// Panggil ini saat app start atau setelah sync dari API.
-  /// Gambar yang sudah ada di lokal di-skip otomatis.
-  Future<void> downloadAllMedia() async {
+  /// Status like + save sekaligus dalam satu call
+  Future<({bool liked, bool saved})> getStatus(String noId) async {
     await _ensureReady();
-    final all = await getCachedPortfolios();
-
-    debugPrint('[CustomerPortoLocal] 📥 downloadAllMedia: ${all.length} portfolios');
-
-    int totalDownloaded = 0;
-    int totalSkipped = 0;
-
-    for (final porto in all) {
-      final isLikedItem = _likedBox!.containsKey(porto.noId);
-      final isSavedItem = _savedBox!.containsKey(porto.noId);
-
-      final result = await _doDownloadMedia(porto);
-      totalDownloaded += result.downloaded;
-      totalSkipped += result.skipped;
-
-      // Update box yang relevan
-      if (isLikedItem) await _likedBox!.put(porto.noId, result.updated);
-      if (isSavedItem) await _savedBox!.put(porto.noId, result.updated);
-    }
-
-    debugPrint('[CustomerPortoLocal] ✅ downloadAllMedia done:');
-    debugPrint('   Downloaded: $totalDownloaded | Skipped: $totalSkipped');
-  }
-
-  /// Download ulang media untuk satu portfolio spesifik.
-  Future<void> downloadMediaForPortfolio(String noId) async {
-    await _ensureReady();
-
-    final porto = await getPortfolioById(noId);
-    if (porto == null) {
-      debugPrint('[CustomerPortoLocal] ⚠️ downloadMedia: porto $noId not found');
-      return;
-    }
-
-    debugPrint('[CustomerPortoLocal] 📥 downloadMedia: $noId');
-    final result = await _doDownloadMedia(porto);
-
-    if (_likedBox!.containsKey(noId)) await _likedBox!.put(noId, result.updated);
-    if (_savedBox!.containsKey(noId)) await _savedBox!.put(noId, result.updated);
+    return (
+      liked: _likedBox!.containsKey(noId),
+      saved: _savedBox!.containsKey(noId),
+    );
   }
 
   // ═══════════════════════════════════════════════════
@@ -266,7 +244,6 @@ class PortofolioLocalService {
 
   /// Sync liked list dari API.
   /// Porto yang tidak ada di API → dihapus dari lokal.
-  /// Porto baru → ditambah + download media.
   Future<void> syncLiked(List<PortofolioModel> apiList) async {
     await _ensureReady();
     debugPrint('[CustomerPortoLocal] 🔄 syncLiked (${apiList.length})');
@@ -278,7 +255,6 @@ class PortofolioLocalService {
     for (final id in localIds.difference(apiIds)) {
       await removeLiked(id);
     }
-
     // Tambah / update
     for (final porto in apiList) {
       await saveLiked(porto);
@@ -298,7 +274,6 @@ class PortofolioLocalService {
     for (final id in localIds.difference(apiIds)) {
       await removeSaved(id);
     }
-
     for (final porto in apiList) {
       await saveSaved(porto);
     }
@@ -307,11 +282,55 @@ class PortofolioLocalService {
   }
 
   // ═══════════════════════════════════════════════════
-  // CLEAR (logout)
+  // DOWNLOAD MEDIA
   // ═══════════════════════════════════════════════════
 
+  Future<void> downloadAllMedia() async {
+    await _ensureReady();
+    final all = await getCachedPortfolios();
+
+    debugPrint('[CustomerPortoLocal] 📥 downloadAllMedia: ${all.length} porto');
+
+    int totalDownloaded = 0;
+    int totalSkipped = 0;
+
+    for (final porto in all) {
+      final isLikedItem = _likedBox!.containsKey(porto.noId);
+      final isSavedItem = _savedBox!.containsKey(porto.noId);
+
+      final result = await _doDownloadMedia(porto);
+      totalDownloaded += result.downloaded;
+      totalSkipped += result.skipped;
+
+      if (isLikedItem) await _likedBox!.put(porto.noId, result.updated);
+      if (isSavedItem) await _savedBox!.put(porto.noId, result.updated);
+    }
+
+    debugPrint('[CustomerPortoLocal] ✅ Done: $totalDownloaded dl / $totalSkipped skip');
+  }
+
+  Future<void> downloadMediaForPortfolio(String noId) async {
+    await _ensureReady();
+
+    final porto = await getPortfolioById(noId);
+    if (porto == null) return;
+
+    final result = await _doDownloadMedia(porto);
+
+    if (_likedBox!.containsKey(noId)) await _likedBox!.put(noId, result.updated);
+    if (_savedBox!.containsKey(noId)) await _savedBox!.put(noId, result.updated);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // CLEAR
+  // ═══════════════════════════════════════════════════
+
+  /// Clear semua data liked + saved + media cache.
+  /// Dipanggil saat logout atau hapus akun.
   Future<void> clearAll() async {
     await _ensureReady();
+
+    debugPrint('[CustomerPortoLocal] 🗑️ Clearing all...');
 
     // Cleanup media — hindari double-delete untuk porto yang ada di dua box
     final cleaned = <String>{};
@@ -321,14 +340,14 @@ class PortofolioLocalService {
 
     await _likedBox!.clear();
     await _savedBox!.clear();
-    debugPrint('✅ [CustomerPortoLocal] clearAll done');
+
+    debugPrint('[CustomerPortoLocal] ✅ clearAll done');
   }
 
   // ═══════════════════════════════════════════════════
   // MEDIA HELPERS (private)
   // ═══════════════════════════════════════════════════
 
-  /// Fire-and-forget: download media tanpa block caller.
   void _downloadMediaBackground(
     PortofolioModel portfolio,
     Box<PortofolioModel> box,
@@ -340,14 +359,10 @@ class PortofolioLocalService {
     });
   }
 
-  /// Download semua media untuk sebuah portfolio.
-  /// Return [_DownloadResult] berisi porto terupdate + stats.
   Future<_DownloadResult> _doDownloadMedia(PortofolioModel portfolio) async {
     if (portfolio.mediaUrls.isEmpty) {
       return _DownloadResult(updated: portfolio, downloaded: 0, skipped: 0);
     }
-
-    debugPrint('[CustomerPortoLocal] 📥 ${portfolio.noId} — ${portfolio.mediaUrls.length} media');
 
     final updated = <MediaUrlModel>[];
     int downloaded = 0;
@@ -356,7 +371,6 @@ class PortofolioLocalService {
     for (int i = 0; i < portfolio.mediaUrls.length; i++) {
       final media = portfolio.mediaUrls[i];
       try {
-        // Skip jika sudah ada di lokal
         if (media.isCached && media.localPath != null) {
           updated.add(media);
           skipped++;
@@ -371,38 +385,35 @@ class PortofolioLocalService {
         if (cached.isCached) downloaded++;
       } catch (e) {
         debugPrint('[CustomerPortoLocal]   ⚠️ media[$i] error: $e');
-        updated.add(media); // Tetap pakai original jika gagal
+        updated.add(media);
       }
 
-      // Delay kecil agar tidak overload network
       if (i < portfolio.mediaUrls.length - 1) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
     }
 
-    final updatedPorto = portfolio.copyWith(
-      mediaUrls: updated,
-      lastUpdated: DateTime.now(),
-    );
-
-    debugPrint('[CustomerPortoLocal]   ✅ downloaded: $downloaded | skipped: $skipped');
     return _DownloadResult(
-      updated: updatedPorto,
+      updated: portfolio.copyWith(
+        mediaUrls: updated,
+        lastUpdated: DateTime.now(),
+      ),
       downloaded: downloaded,
       skipped: skipped,
     );
   }
 
-  /// Preserve local path dari cache lama agar tidak re-download.
-  PortofolioModel _mergeMedia(PortofolioModel newPorto, PortofolioModel existing) {
+  PortofolioModel _mergeMedia(
+      PortofolioModel newPorto, PortofolioModel existing) {
     if (existing.mediaUrls.isEmpty) return newPorto;
 
     final merged = newPorto.mediaUrls.map((newMedia) {
       try {
         final ex = existing.mediaUrls.firstWhere(
-          (e) => e.idMedia == newMedia.idMedia || e.noIdMedia == newMedia.noIdMedia,
+          (e) =>
+              e.idMedia == newMedia.idMedia ||
+              e.noIdMedia == newMedia.noIdMedia,
         );
-        // Pakai cache lama jika sudah di-download
         return (ex.isCached && ex.localPath != null) ? ex : newMedia;
       } catch (_) {
         return newMedia;
@@ -412,12 +423,11 @@ class PortofolioLocalService {
     return newPorto.copyWith(mediaUrls: merged);
   }
 
-  /// Hapus file media lokal untuk sebuah portfolio.
   Future<void> _cleanupMedia(PortofolioModel portfolio) async {
     for (final media in portfolio.mediaUrls) {
       if (media.isCached && media.localPath != null) {
         try {
-          await CacheManager.instance.getCachedPath(
+          await CacheManager.instance.evict(
             media.idMedia ?? media.noIdMedia ?? '',
           );
         } catch (_) {}
@@ -457,17 +467,13 @@ class PortofolioLocalService {
 
   Future<void> printStats() async {
     final s = await getStats();
-    debugPrint('═══════════════════════════════════════');
-    debugPrint('📊 CUSTOMER PORTO CACHE STATS');
-    debugPrint('   Liked: ${s['liked_count']} | ${s['liked_cached_media']}/${s['liked_media']} media cached');
-    debugPrint('   Saved: ${s['saved_count']} | ${s['saved_cached_media']}/${s['saved_media']} media cached');
-    debugPrint('═══════════════════════════════════════');
+    debugPrint('📊 PORTO CACHE:');
+    debugPrint('   Liked: ${s['liked_count']} porto | ${s['liked_cached_media']}/${s['liked_media']} media');
+    debugPrint('   Saved: ${s['saved_count']} porto | ${s['saved_cached_media']}/${s['saved_media']} media');
   }
 }
 
-// ═══════════════════════════════════════════════════
-// INTERNAL — Download result model
-// ═══════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
 
 class _DownloadResult {
   final PortofolioModel updated;

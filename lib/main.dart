@@ -16,16 +16,16 @@ import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
-import 'package:mpjnew/src/data/hive_service.dart/ulasan_local_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
-import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
@@ -40,7 +40,6 @@ import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
 import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
 import 'src/features/auth/services/user_provider.dart';
@@ -412,7 +411,8 @@ class MyApp extends StatelessWidget {
 
             navigationProvider.navigateToPage(
               context,
-              DetailOrderPage(pesananModel: pesanan),
+              DetailOrderPageV2(pesananModel: pesanan),
+              // DetailOrderPage(pesananModel: pesanan),
               targetTabIndex: 2, // Order tab
               hrsLogin: true,
             );
@@ -515,11 +515,11 @@ class MyApp extends StatelessWidget {
       Future.delayed(const Duration(milliseconds: 500), () {
         final currentContext = navigatorKey.currentContext;
         if (currentContext != null && currentContext.mounted) {
-          CustomDialog.showWarningDialog(
-            context: currentContext,
-            title: 'Sesi Berakhir',
-            message: 'Sesi Anda telah berakhir. Silahkan login kembali.',
-          );
+          // CustomDialog.showWarningDialog(
+          //   context: currentContext,
+          //   title: 'Sesi Berakhir',
+          //   message: 'Sesi Anda telah berakhir. Silahkan login kembali.',
+          // );
         }
       });
     } catch (e, stackTrace) {
@@ -586,6 +586,10 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         // 2️⃣ Set role
         await context.read<NavigationProvider>().saveRole(Constants.customer);
         apiClient.setRole(Constants.customer);
+
+        LocalStorageService.instance.setActiveCustomer(
+          userProvider.customer!.noId,
+        );
 
         // 3️⃣ ✅ Initialize Chat & History Order Providers (FCM-based)
         debugPrint("🔧 [Splash] Initializing FCM-based providers...");

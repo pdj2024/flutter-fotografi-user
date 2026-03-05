@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/empty_order.dart';
@@ -34,10 +35,9 @@ class MainOrderPage extends StatefulWidget {
 }
 
 class _MainOrderPageState extends State<MainOrderPage> {
-  // Filter: null = semua aktif
   final RefreshController _refreshController =
       RefreshController(initialRefresh: false);
-  String? _selectedFilter; // null = 'semua', atau nilai status
+  String? _selectedFilter;
 
   bool _isInitialized = false;
   String? _lastUserId;
@@ -65,16 +65,12 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
-  // ── Filter logic ────────────────────────────────────────────
-  // Filtering dilakukan di sini, bukan di build
   List<PesananModel> get _filteredOrders {
     final provider = context.read<PesananProvider>();
-    // Active = belum bayar + semua progress (bukan selesai)
     final active = [
       ...provider.pesananUnpaid,
       ...provider.pesananProgress,
     ];
-    // Sort by tglRealisasi desc (paling baru di atas)
     active.sort((a, b) => b.tglRealisasi.compareTo(a.tglRealisasi));
 
     if (_selectedFilter == null) return active;
@@ -90,24 +86,54 @@ class _MainOrderPageState extends State<MainOrderPage> {
       return;
     }
     try {
-      await Future.wait([_checkAndInit()]);
+      await Future.wait([
+        // _checkAndInit(),
+        context.read<PesananProvider>().loadOrder(context),
+      ]);
       _refreshController.refreshCompleted();
     } catch (e) {
-      debugPrint('[HomePage] ❌ Refresh error: $e');
+      debugPrint('[MainOrderPage] ❌ Refresh error: $e');
       _refreshController.refreshFailed();
+    }
+  }
+
+  // ── Buka payment page ──────────────────────────────────────────────────
+  //
+  // Menggunakan Navigator.push biasa (bukan navigateToPage) agar back button
+  // kembali ke MainOrderPage tanpa mereset tab atau stack navigasi.
+  //
+  // Alur:
+  //   linkSnap ada  → WebviewPage (Snap Midtrans)
+  //                     ↳ error/user minta fallback → WaitingPaymentPage (core)
+  //   linkSnap null → WaitingPaymentPage (core)
+  void _openPayment(PesananModel o) {
+    if (o.linkSnap != null) {
+      context.read<NavigationProvider>().navigateToPage(
+            context,
+            WebviewPage(
+              url: o.linkSnap!,
+              paymentData: o,
+            ),
+            targetTabIndex: 2,
+          );
+    } else {
+      context.read<NavigationProvider>().navigateToPage(
+            context,
+            WaitingPaymentPage(paymentData: o),
+            targetTabIndex: 2,
+          );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Watch untuk reactive rebuild
     context.watch<PesananProvider>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
-        title: Text(
+        title: const Text(
           'Pesanan',
           style: TextStyle(
             fontSize: 24,
@@ -158,9 +184,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
               ),
             ),
           ),
-          SizedBox(
-            width: 20,
-          )
+          const SizedBox(width: 20),
         ],
       ),
       body: SafeArea(
@@ -172,88 +196,14 @@ class _MainOrderPageState extends State<MainOrderPage> {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              // ── Summary cards ─────────────────────────────────
               SliverToBoxAdapter(child: _buildSummaryRow()),
-
-              // ── Filter chips ──────────────────────────────────
               SliverToBoxAdapter(child: _buildFilterChips()),
-
-              // ── Order list ────────────────────────────────────
               SliverToBoxAdapter(child: _buildOrderList()),
-
-              // ── Link ke pesanan selesai ──────────────────────
               SliverToBoxAdapter(child: _buildFinishedLink()),
-
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
-      child: Row(
-        children: [
-          const Text(
-            'Pesanan',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0F0F0F),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const Spacer(),
-          // Shortcut ke pesanan selesai
-          GestureDetector(
-            onTap: () => context.read<NavigationProvider>().navigateToPage(
-                  context,
-                  FinishedOrderPage(),
-                  targetTabIndex: 2,
-                  targetPage: 'FinishedOrderPage',
-                  hrsLogin: true,
-                ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Text(
-                    'Selesai',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF0F0F0F),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: Colors.grey.shade500,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -368,22 +318,16 @@ class _MainOrderPageState extends State<MainOrderPage> {
                       ]
                     : [],
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? Colors.white : Colors.grey.shade700,
-                      letterSpacing: 0.1,
-                    ),
-                  ),
-                ],
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                  letterSpacing: 0.1,
+                ),
               ),
             ),
           );
@@ -417,8 +361,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
     final orders = _filteredOrders;
 
-    if (orders.isEmpty)
+    if (orders.isEmpty) {
       return EmptyOrder(onTap: () => setState(() => _selectedFilter = null));
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
@@ -431,7 +376,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
                     onTap: () =>
                         context.read<NavigationProvider>().navigateToPage(
                               context,
-                              DetailOrderPage(pesananModel: o),
+                              DetailOrderPageV2(pesananModel: o),
+                              // DetailOrderPage(pesananModel: o),
                               targetTabIndex: 2,
                               targetPage: 'DetailOrderPage',
                               hrsLogin: true,
@@ -443,27 +389,13 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetTabIndex: 1,
                               targetPage: 'RoomChatPage',
                             ),
-                    onPay: () {
-                      if (o.linkSnap == null) {
-                        context.read<NavigationProvider>().navigateToPage(
-                              context,
-                              targetTabIndex: 2,
-                              WaitingPaymentPage(paymentData: o),
-                            );
-                      } else {
-                        context.read<NavigationProvider>().navigateToPage(
-                              context,
-                              targetTabIndex: 2,
-                              WebviewPage(url: o.linkSnap!),
-                            );
-                      }
-                    },
+                    // ── Payment: Navigator.push biasa agar back = kembali ke sini
+                    onPay: () => _openPayment(o),
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(
                         pesanan: o,
                         onSuccess: () async {
-                          // Reload list setelah submit ulasan
                           await context
                               .read<PesananProvider>()
                               .loadOrder(context);

@@ -365,7 +365,7 @@ class _SearchPageState extends State<SearchPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.black87,
+              color: Constants.primaryColor,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(

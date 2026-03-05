@@ -28,6 +28,10 @@ import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
+/// ═══════════════════════════════════════════════════════════════
+/// DETAIL ORDER PAGE CUSTOMER
+/// ═══════════════════════════════════════════════════════════════
+
 class DetailOrderPage extends StatefulWidget {
   final PesananModel pesananModel;
   const DetailOrderPage({super.key, required this.pesananModel});
