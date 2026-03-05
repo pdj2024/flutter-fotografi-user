@@ -11,6 +11,7 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -21,6 +22,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_penawaran_card.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_pesanan_card.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
@@ -587,11 +589,12 @@ class _RoomChatPageState extends State<RoomChatPage>
     return SmartRefresher(
       enablePullUp: true,
       controller: _refreshController,
+      header: buildRefreshHeader(reverse: true),
       onRefresh: _refreshChat,
       child: ListView(
         controller: _scrollController,
         reverse: true,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
         children: grouped.entries.expand((entry) {
           final dateLabel = entry.key;
           final groupMsgs = entry.value;
@@ -630,7 +633,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                       context.read<NavigationProvider>().navigateToPage(
                             context,
                             targetTabIndex: 2,
-                            DetailOrderPage(pesananModel: pesanan),
+                            DetailOrderPageV2(pesananModel: pesanan),
+                            // DetailOrderPage(pesananModel: pesanan),
                           );
                     }
                   },
@@ -812,7 +816,8 @@ class _RoomChatPageState extends State<RoomChatPage>
         context.read<NavigationProvider>().navigateToPage(
               context,
               targetTabIndex: 2,
-              DetailOrderPage(pesananModel: pesanan.first),
+              DetailOrderPageV2(pesananModel: pesanan.first),
+              // DetailOrderPage(pesananModel: pesanan.first),
             );
       }
     } else {

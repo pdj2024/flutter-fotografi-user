@@ -11,7 +11,6 @@ import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -25,7 +24,13 @@ import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart'
 import 'package:mpjnew/src/features/customer/widget/dialog/revisi_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/selesaikan_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
+
+/// ═══════════════════════════════════════════════════════════════
+/// DETAIL ORDER PAGE CUSTOMER
+/// ═══════════════════════════════════════════════════════════════
 
 class DetailOrderPage extends StatefulWidget {
   final PesananModel pesananModel;
@@ -36,6 +41,8 @@ class DetailOrderPage extends StatefulWidget {
 }
 
 class _DetailOrderPageState extends State<DetailOrderPage> {
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   UlasanModel? ulasan;
   PaketModel? paket;
   PesananModel? pesanan;
@@ -176,7 +183,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
     debugPrint('[DetailOrderPage] 🔄 Fetching updated data...');
     _fetchUpdatedData();
   }
-  
+
   // 🆕 Separate method untuk fetch updated data
   Future<void> _fetchUpdatedData() async {
     if (!mounted) return;
@@ -217,6 +224,23 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(context, 'Gagal memuat data terbaru');
       }
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      await Future.wait([
+        fetchData(),
+        _fetchUpdatedData(),
+      ]);
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[HomePage] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
     }
   }
 
@@ -334,14 +358,14 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              await fetchData();
-              await _fetchUpdatedData();
-            },
+          return SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
+            physics: const AlwaysScrollableScrollPhysics(),
+            header: buildRefreshHeader(),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1161,6 +1185,7 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                     padding: EdgeInsets.zero,
                   ),
                   onPressed: () {
+                    context.read<NavigationProvider>().popAllToRoot();
                     context.read<NavigationProvider>().navigateToPage(
                           context,
                           RoomChatPage(

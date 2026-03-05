@@ -1,57 +1,52 @@
+// lib/src/core/services/auth_service.dart
+
 import 'dart:async';
 import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
-/// ============================================
-/// 🔐 AuthService - BEST PRACTICE VERSION
-/// ============================================
-/// ✅ NO manual token storage
-/// ✅ NO manual expiry validation  
-/// ✅ Trust Google SDK for token lifecycle
-/// ✅ User stays logged in across app restarts
-/// ============================================
+import 'package:http/http.dart' as http;
+import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/services/token_storage_service.dart';
 
 class AuthService {
-  // Singleton
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
+  Map<String, dynamic>? _lastLoginData;
+  Function()? onSessionExpired;
 
-  // ✅ Google Sign-In SDK (NO forceCodeForRefreshToken needed)
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
+  static const String _baseUrl = '${Constants.baseUrl}/api';
 
-  // Local storage (ONLY for login state, NOT for tokens)
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+
+  // Hive — hanya untuk flag login state
   static const String _boxName = 'auth_box';
-  Box? _authBox;
-
-  // Keys
   static const String _keyIsLoggedIn = 'is_logged_in';
   static const String _keyUserEmail = 'user_email';
+  Box? _authBox;
 
-  // In-memory user state
   GoogleSignInAccount? _currentUser;
 
-  // Token refresh lock (prevent concurrent refresh)
+  /// ✅ Getter untuk data login terakhir (No_Id, Status, dll)
+  Map<String, dynamic>? get lastLoginData => _lastLoginData;
+
+  /// ✅ Clear setelah dipakai
+  void clearLastLoginData() => _lastLoginData = null;
+
+  // Refresh lock
   bool _isRefreshing = false;
   final List<Completer<String?>> _refreshQueue = [];
 
-  // =========================================================
-  // 🔧 INITIALIZATION
-  // =========================================================
-  
+  // ═══════════════════════════════════════════════════════
+  // 🔧 INIT
+  // ═══════════════════════════════════════════════════════
+
   Future<void> initialize() async {
     try {
       print("🔧 [AuthService] Initializing...");
-      
-      if (Hive.isBoxOpen(_boxName)) {
-        await Hive.box(_boxName).close();
-      }
-      
+      if (Hive.isBoxOpen(_boxName)) await Hive.box(_boxName).close();
       _authBox = await Hive.openBox(_boxName);
-      
       print("✅ [AuthService] Initialized");
     } catch (e) {
       print("❌ [AuthService] Init failed: $e");
@@ -59,40 +54,33 @@ class AuthService {
     }
   }
 
-  // =========================================================
+  // ═══════════════════════════════════════════════════════
   // 🔄 RESTORE SESSION
-  // =========================================================
-  
-  /// Restore user session from Google SDK
-  /// ✅ NO token validation needed - SDK handles it
+  // ═══════════════════════════════════════════════════════
+
   Future<bool> restoreSession() async {
     try {
-      print("═══════════════════════════════════════");
       print("🔄 [AuthService] Restoring session...");
 
-      // Check if user was logged in before
-      final wasLoggedIn = _authBox?.get(_keyIsLoggedIn, defaultValue: false) ?? false;
-      
+      final wasLoggedIn =
+          _authBox?.get(_keyIsLoggedIn, defaultValue: false) ?? false;
       if (!wasLoggedIn) {
         print("⚠️  No previous login found");
         return false;
       }
 
-      // ✅ MAGIC: signInSilently() checks Google's refresh token
-      // If refresh token valid → auto refresh ID token → return user
-      // If refresh token expired → return null
-      _currentUser = await _googleSignIn.signInSilently();
-
-      if (_currentUser == null) {
-        print("❌ Silent sign-in failed (refresh token expired)");
+      // Cek access token di storage
+      final accessToken = await tokenStorage.getAccessToken();
+      if (accessToken == null || accessToken.isEmpty) {
+        print("❌ No access token in storage");
         await _clearLoginState();
         return false;
       }
 
-      print("✅ Session restored successfully");
-      print("   Email: ${_currentUser!.email}");
-      print("═══════════════════════════════════════");
-      
+      // Restore Google user silently (untuk UI/display name dll)
+      _currentUser = await _googleSignIn.signInSilently();
+
+      print("✅ Session restored");
       return true;
     } catch (e) {
       print("❌ Restore session error: $e");
@@ -101,257 +89,318 @@ class AuthService {
     }
   }
 
-  // =========================================================
+  // ═══════════════════════════════════════════════════════
   // 🔑 SIGN IN
-  // =========================================================
-  
-  /// Interactive sign-in with Google account picker
+  // ═══════════════════════════════════════════════════════
+
+  /// Login Google → ambil ID token Google → kirim ke backend → simpan access+refresh token
   Future<String?> signIn() async {
     try {
-      print("═══════════════════════════════════════");
       print("🔑 [AuthService] Starting sign-in...");
 
-      // Show Google account picker
       _currentUser = await _googleSignIn.signIn();
-
       if (_currentUser == null) {
-        print("⚠️  Sign-in cancelled by user");
+        print("⚠️  Sign-in cancelled");
         return null;
       }
 
-      print("✅ Sign-in successful");
-      print("   Email: ${_currentUser!.email}");
+      final googleAuth = await _currentUser!.authentication;
+      final googleIdToken = googleAuth.idToken;
+      if (googleIdToken == null) {
+        print("❌ Google ID token null");
+        return null;
+      }
 
-      // ✅ Save ONLY login state (NOT token!)
+      final deviceToken = await _getDeviceToken();
+
+      final result = await _checkLoginBackend(
+        googleIdToken: googleIdToken,
+        deviceToken: deviceToken ?? '',
+      );
+
+      if (result == null) return null;
+
+      final accessToken = result['token'] as String;
+      final refreshToken = result['refreshToken'] as String;
+      final backendDeviceToken = result['deviceToken'] as String?;
+
+      await tokenStorage.saveTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+
+      if (backendDeviceToken != null && backendDeviceToken.isNotEmpty) {
+        await tokenStorage.saveDeviceToken(backendDeviceToken);
+      } else if (deviceToken != null) {
+        await tokenStorage.saveDeviceToken(deviceToken);
+      }
+
+      // ✅ Simpan seluruh data response untuk diakses UserProvider
+      _lastLoginData = result;
+
       await _saveLoginState();
 
-      // Get initial token
-      final token = await getIdToken();
-      
-      print("═══════════════════════════════════════");
-      return token;
+      print("✅ Sign-in complete");
+      return accessToken;
     } catch (e) {
       print("❌ Sign-in error: $e");
       return null;
     }
   }
 
-  // =========================================================
-  // 🎫 GET ID TOKEN - ALWAYS FRESH
-  // =========================================================
-  
-  /// Get fresh ID token for backend API calls
-  /// ✅ SDK auto-refreshes if expired
-  /// ✅ NO manual validation needed
+  // ═══════════════════════════════════════════════════════
+  // 🎫 GET ACCESS TOKEN (untuk Authorization Bearer)
+  // ═══════════════════════════════════════════════════════
+
+  /// Return access_token dari storage.
+  /// Jika null/expired → coba refresh otomatis.
   Future<String?> getIdToken({bool forceRefresh = false}) async {
+    // Jika sedang refresh, tunggu
+    if (_isRefreshing) {
+      return await _waitForRefresh();
+    }
+
+    if (!forceRefresh) {
+      final stored = await tokenStorage.getAccessToken();
+      if (stored != null && stored.isNotEmpty) {
+        return stored;
+      }
+    }
+
+    // Access token kosong atau forceRefresh → refresh
+    return await _doRefreshAccessToken();
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 🔄 REFRESH ACCESS TOKEN
+  // ═══════════════════════════════════════════════════════
+
+  Future<String?> _doRefreshAccessToken() async {
+    if (_isRefreshing) return await _waitForRefresh();
+
+    _isRefreshing = true;
+
     try {
-      // Prevent concurrent refresh
-      if (_isRefreshing) {
-        print("⏳ [AuthService] Token refresh in progress, waiting...");
-        return await _waitForRefresh();
+      print("🔄 [AuthService] Refreshing access token...");
+
+      final refreshToken = await tokenStorage.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        print("❌ No refresh token, force logout...");
+        _notifyRefreshQueue(null);
+        await _forceLogout();
+        return null;
       }
 
-      // Ensure we have a user
-      if (_currentUser == null) {
-        print("🔄 [AuthService] No user, attempting silent sign-in...");
-        _currentUser = await _googleSignIn.signInSilently();
-        
-        if (_currentUser == null) {
-          print("❌ No authenticated user");
+      print("📊 [Refresh] refreshToken: $refreshToken");
+
+      final uri = Uri.parse('$_baseUrl/auth/refresh');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jenis-User': Constants.customer,
+        },
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      print("📊 [Refresh] Status: ${response.statusCode}");
+      print("📊 [Refresh] Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final newAccessToken = data['token'] as String?;
+        final newRefreshToken = data['refreshToken'] as String?;
+
+        if (newAccessToken == null) {
+          print("❌ token null dari response refresh");
+          _notifyRefreshQueue(null);
+          await _forceLogout();
           return null;
         }
-      }
 
-      _isRefreshing = true;
+        await tokenStorage.saveAccessToken(newAccessToken);
+        if (newRefreshToken != null) {
+          await tokenStorage.saveRefreshToken(newRefreshToken);
+        }
 
-      // ✅ MAGIC: This ALWAYS returns fresh token
-      // SDK checks expiry → if expired, auto-refresh → return new token
-      final auth = await _currentUser!.authentication;
-      final token = auth.idToken;
-
-      _notifyRefreshQueue(token);
-
-      if (token != null) {
-        print("✅ [AuthService] ID token obtained (${token.length} chars)");
+        print("✅ Access token refreshed");
+        _notifyRefreshQueue(newAccessToken);
+        return newAccessToken;
       } else {
-        print("⚠️  [AuthService] ID token is null");
+        print("❌ Refresh failed: ${response.statusCode}, force logout...");
+        _notifyRefreshQueue(null);
+        await _forceLogout();
+        return null;
       }
-
-      return token;
-      
     } catch (e) {
-      print("❌ [AuthService] Get token error: $e");
+      print("❌ Refresh error: $e");
       _notifyRefreshQueue(null);
+      await _forceLogout();
       return null;
     } finally {
       _isRefreshing = false;
     }
   }
 
-  // =========================================================
-  // 📊 STATE QUERIES
-  // =========================================================
-  
-  /// Check if user is logged in
-  /// ✅ Based on Google SDK state, NOT token expiry
-  bool get isLoggedIn => _currentUser != null;
+  /// Force logout — hapus semua token + disconnect Google
+  Future<void> _forceLogout() async {
+    try {
+      print("🚪 [AuthService] Force logout...");
+      await tokenStorage.clearAll();
+      await _googleSignIn.disconnect();
+      await _clearLoginState();
+      _currentUser = null;
+      print("✅ [AuthService] Force logout complete");
+      onSessionExpired?.call();
+    } catch (e) {
+      print("❌ [AuthService] Force logout error: $e");
+      onSessionExpired?.call();
+    }
+  }
 
-  /// Get current user
-  GoogleSignInAccount? get currentUser => _currentUser;
+  // ═══════════════════════════════════════════════════════
+  // 🌐 BACKEND CALL — CHECK LOGIN
+  // ═══════════════════════════════════════════════════════
 
-  /// Get user email
-  String? get email => _currentUser?.email;
+  Future<Map<String, dynamic>?> _checkLoginBackend({
+    required String googleIdToken,
+    required String deviceToken,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/auth/cek-login-google');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $googleIdToken',
+          'X-Jenis-User': Constants.customer,
+          'Device-Token': deviceToken,
+        },
+      );
 
-  /// Get display name
-  String? get displayName => _currentUser?.displayName;
+      print("📊 [checkLoginBackend] Status: ${response.statusCode}");
+      print("📦 Body: ${response.body}");
 
-  /// Get photo URL
-  String? get photoUrl => _currentUser?.photoUrl;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-  /// Get user ID
-  String? get userId => _currentUser?.id;
+        // Validasi field yang dibutuhkan
+        if (data['token'] == null || data['refreshToken'] == null) {
+          print("❌ Response tidak mengandung token / refreshToken");
+          return null;
+        }
 
-  // =========================================================
+        return data;
+      }
+
+      return null;
+    } catch (e) {
+      print("❌ _checkLoginBackend error: $e");
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 📱 DEVICE TOKEN (FCM)
+  // ═══════════════════════════════════════════════════════
+
+  Future<String?> _getDeviceToken() async {
+    try {
+      final fcm = FirebaseMessaging.instance;
+      final token = await fcm.getToken();
+      print("📱 [AuthService] FCM token: ${token}");
+      return token;
+    } catch (e) {
+      print("⚠️  FCM token error: $e");
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
   // 🚪 SIGN OUT
-  // =========================================================
-  
-  /// Sign out current user
+  // ═══════════════════════════════════════════════════════
+
   Future<void> signOut() async {
     try {
       print("🚪 [AuthService] Signing out...");
 
+      // Hapus token dari storage (sesuai requirement)
+      await tokenStorage.clearAuthTokens();
+
+      // Sign out Google juga (biar picker muncul lagi saat login berikutnya)
       await _googleSignIn.signOut();
       await _clearLoginState();
       _currentUser = null;
 
-      print("✅ Sign-out successful");
+      print("✅ Sign-out complete");
     } catch (e) {
       print("❌ Sign-out error: $e");
-      // Force clear even if Google sign-out fails
+      await tokenStorage.clearAuthTokens();
       await _clearLoginState();
       _currentUser = null;
     }
   }
 
-  /// Disconnect account (revoke access)
-  /// Use when user wants to switch account
   Future<void> disconnect() async {
     try {
-      print("🔌 [AuthService] Disconnecting account...");
-
+      await tokenStorage.clearAll();
       await _googleSignIn.disconnect();
       await _clearLoginState();
       _currentUser = null;
-
-      print("✅ Account disconnected");
     } catch (e) {
-      print("❌ Disconnect error: $e");
-      // Fallback to signOut
       await signOut();
     }
   }
 
-  /// Logout and switch to different account
-  Future<void> logoutAndRevoke() async {
-    await disconnect();
-  }
+  Future<void> logoutAndRevoke() async => await disconnect();
+  Future<void> logout() async => await signOut();
 
-  // =========================================================
+  // ═══════════════════════════════════════════════════════
+  // 📊 STATE
+  // ═══════════════════════════════════════════════════════
+
+  bool get isLoggedIn => _currentUser != null;
+  GoogleSignInAccount? get currentUser => _currentUser;
+  String? get email => _currentUser?.email;
+  String? get displayName => _currentUser?.displayName;
+  String? get photoUrl => _currentUser?.photoUrl;
+  String? get userId => _currentUser?.id;
+
+  // ═══════════════════════════════════════════════════════
   // 💾 STORAGE HELPERS
-  // =========================================================
-  
-  /// Save login state to Hive
-  /// ✅ ONLY stores flag, NOT token
+  // ═══════════════════════════════════════════════════════
+
   Future<void> _saveLoginState() async {
     if (_authBox == null || _currentUser == null) return;
-
     await _authBox!.put(_keyIsLoggedIn, true);
     await _authBox!.put(_keyUserEmail, _currentUser!.email);
     await _authBox!.flush();
-
-    print("💾 [AuthService] Login state saved");
   }
 
-  /// Clear login state from Hive
   Future<void> _clearLoginState() async {
     if (_authBox == null) return;
-
     await _authBox!.clear();
     await _authBox!.flush();
-
-    print("🗑️  [AuthService] Login state cleared");
   }
 
-  // =========================================================
-  // 🔄 REFRESH QUEUE MANAGEMENT
-  // =========================================================
-  
-  /// Wait for ongoing token refresh
+  // ═══════════════════════════════════════════════════════
+  // 🔄 REFRESH QUEUE
+  // ═══════════════════════════════════════════════════════
+
   Future<String?> _waitForRefresh() async {
     final completer = Completer<String?>();
     _refreshQueue.add(completer);
     return completer.future;
   }
 
-  /// Notify all waiting requests
   void _notifyRefreshQueue(String? token) {
-    for (final completer in _refreshQueue) {
-      if (!completer.isCompleted) {
-        completer.complete(token);
-      }
+    for (final c in _refreshQueue) {
+      if (!c.isCompleted) c.complete(token);
     }
     _refreshQueue.clear();
   }
 
-  // =========================================================
-  // 🧪 DEBUG UTILITIES
-  // =========================================================
-  
-  /// Print current auth state
-  void printDebugState() {
-    print("═══ AuthService State ═══");
-    print("User: ${_currentUser?.email ?? 'null'}");
-    print("Is logged in: $isLoggedIn");
-    print("Refreshing: $_isRefreshing");
-    print("Queue length: ${_refreshQueue.length}");
-    
-    if (_authBox != null) {
-      print("Storage:");
-      print("  Was logged in: ${_authBox!.get(_keyIsLoggedIn)}");
-      print("  Saved email: ${_authBox!.get(_keyUserEmail)}");
-    }
-    
-    print("═══════════════════════════");
-  }
-
-  /// Debug JWT token (for development only)
-  void debugJwt(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length < 2) return;
-
-      final payloadBase64 = base64Url.normalize(parts[1]);
-      final payloadString = utf8.decode(base64Url.decode(payloadBase64));
-      final payload = jsonDecode(payloadString);
-
-      print("📦 JWT:");
-      print("   Email: ${payload['email']}");
-      print("   Name: ${payload['name']}");
-      if (payload['exp'] != null) {
-        final exp = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
-        print("   Expires: $exp");
-        print("   Valid for: ${exp.difference(DateTime.now()).inMinutes} minutes");
-      }
-    } catch (e) {
-      print("❌ JWT decode error: $e");
-    }
-  }
-
-  // =========================================================
-  // 🔧 LEGACY COMPATIBILITY (for migration)
-  // =========================================================
-  
-  /// Alias for signIn() - for backward compatibility
+  // ── Legacy compat ──
   Future<String?> login({bool silent = false}) async {
     if (silent) {
       final restored = await restoreSession();
@@ -360,12 +409,6 @@ class AuthService {
     return await signIn();
   }
 
-  /// Alias for signOut() - for backward compatibility
-  Future<void> logout() async {
-    await signOut();
-  }
-
-  /// Get current user async - for backward compatibility
   Future<GoogleSignInAccount?> getCurrentUserAsync() async {
     if (_currentUser != null) return _currentUser;
     _currentUser = await _googleSignIn.signInSilently();

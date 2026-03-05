@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
-import 'package:mpjnew/src/data/hive_service.dart/pesanan_migration_helper.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
@@ -17,14 +16,13 @@ import 'package:provider/provider.dart';
 /// - Cache "selesai" orders (no updates expected)
 /// - Always refresh "progress" orders (active)
 /// - Reduces API calls by 50-70%
-/// - 6s → 3s response time
 /// ═══════════════════════════════════════════════════════════
 
 class PesananProvider with ChangeNotifier {
   final PesananService pesananService;
   final HistoryOrderService historyService;
 
-  // ✅ Local storage service
+  // ✅ Pakai CustomerPesananLocalService (bukan PesananLocalService vendor lama)
   late final PesananLocalService localService;
 
   PesananProvider({
@@ -39,15 +37,11 @@ class PesananProvider with ChangeNotifier {
   // STATE VARIABLES
   // ═══════════════════════════════════════════════════════════
 
-  /// ALL DATA
   List<PesananModel> _allPesanan = [];
-
-  /// FILTERED DATA
   List<PesananModel> _pesananUnpaid = [];
   List<PesananModel> _pesananProgress = [];
   List<PesananModel> _pesananSelesai = [];
 
-  // ✅ Cache for histories per order
   final Map<String, List<HistoryOrderModel>> _orderHistories = {};
 
   Set<String> progresStatus = {
@@ -59,11 +53,7 @@ class PesananProvider with ChangeNotifier {
 
   bool _isLoadingOrder = true;
   String? _errorOrder;
-
-  // ✅ Track if "selesai" orders have been loaded once
   bool _selesaiOrdersLoaded = false;
-
-  // ✅ Track loading state for single order fetch
   bool _isFetchingSingleOrder = false;
 
   final StreamController<PesananModel> _paymentUpdateController =
@@ -72,7 +62,6 @@ class PesananProvider with ChangeNotifier {
   Stream<PesananModel> get paymentUpdateStream =>
       _paymentUpdateController.stream;
 
-  // Helper static: cek apakah statusBayar = berhasil
   static bool isPaymentSettled(String? statusBayar) {
     if (statusBayar == null) return false;
     return ['settlement', 'berhasil', 'success']
@@ -91,12 +80,10 @@ class PesananProvider with ChangeNotifier {
   bool get isFetchingSingleOrder => _isFetchingSingleOrder;
   String? get errorOrder => _errorOrder;
 
-  /// Get histories for specific order
   List<HistoryOrderModel> getHistoriesForOrder(String noBukti) {
     return _orderHistories[noBukti] ?? [];
   }
 
-  /// Get pesanan by order ID
   PesananModel? getPesananByNoOrder(String noOrder) {
     try {
       return _allPesanan.firstWhere((p) => p.noBukti == noOrder);
@@ -105,7 +92,6 @@ class PesananProvider with ChangeNotifier {
     }
   }
 
-  /// Check if order is cached
   Future<bool> isOrderCached(String noBukti) async {
     try {
       return await localService.isCached(noBukti);
@@ -132,23 +118,18 @@ class PesananProvider with ChangeNotifier {
   // FETCH SINGLE ORDER
   // ═══════════════════════════════════════════════════════════
 
-  /// ✅ Fetch single order from API and update local storage
-  /// Returns updated PesananModel or null if not found
   Future<PesananModel?> fetchSingleOrder(String noBukti) async {
     if (noBukti.isEmpty) {
       debugPrint("[PesananProvider] ❌ Invalid noBukti");
       return null;
     }
 
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PesananProvider] 🔄 FETCHING SINGLE ORDER");
-    debugPrint("[PesananProvider] Order: $noBukti");
+    debugPrint("[PesananProvider] 🔄 FETCHING SINGLE ORDER: $noBukti");
 
     _isFetchingSingleOrder = true;
     notifyListeners();
 
     try {
-      // Fetch from API
       final orders = await pesananService.getAll(
         noBukti: noBukti,
         status: 'aktif',
@@ -160,15 +141,7 @@ class PesananProvider with ChangeNotifier {
       }
 
       final updatedOrder = orders.first;
-      debugPrint("[PesananProvider] ✅ Order fetched from API");
-      debugPrint(
-          "[PesananProvider]    Status: ${updatedOrder.statusProgresPesanan}");
-      debugPrint(
-          "[PesananProvider]    Status Bayar: ${updatedOrder.statusBayar}");
-      debugPrint(
-          "[PesananProvider]    Grand Total: ${updatedOrder.grandTotal}");
 
-      // Fetch histories
       List<HistoryOrderModel> histories = [];
       try {
         histories = await historyService.getAll(
@@ -177,43 +150,28 @@ class PesananProvider with ChangeNotifier {
           orderBy: 'Tgl_Progress',
           orderDir: 'DESC',
         );
-        debugPrint("[PesananProvider] ✅ Fetched ${histories.length} histories");
       } catch (e) {
         debugPrint("[PesananProvider] ⚠️ Error fetching histories: $e");
       }
 
-      // Update local storage
       await localService.saveOrder(updatedOrder, histories: histories);
-      debugPrint("[PesananProvider] ✅ Saved to local storage");
 
-      // Update in-memory
       final index = _allPesanan.indexWhere((p) => p.noBukti == noBukti);
-
       if (index != -1) {
         _allPesanan[index] = updatedOrder;
-        debugPrint("[PesananProvider] ✅ Updated in-memory at index $index");
       } else {
         _allPesanan.add(updatedOrder);
-        debugPrint("[PesananProvider] ➕ Added new order to memory");
       }
 
-      // Update histories
       if (histories.isNotEmpty) {
         _orderHistories[noBukti] = histories;
-        debugPrint("[PesananProvider] ✅ Updated histories in memory");
       }
 
-      // Re-filter lists
       _filterPesanan();
-
       debugPrint("[PesananProvider] ✅ Fetch single order complete");
-      debugPrint("═══════════════════════════════════════════════════");
-
       return updatedOrder;
     } catch (e, st) {
-      debugPrint("[PesananProvider] ❌ Fetch error: $e");
-      debugPrint("[PesananProvider] Stack trace: $st");
-      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint("[PesananProvider] ❌ Fetch error: $e\n$st");
       return null;
     } finally {
       _isFetchingSingleOrder = false;
@@ -225,12 +183,6 @@ class PesananProvider with ChangeNotifier {
   // SMART LOAD - Optimized for Speed
   // ═══════════════════════════════════════════════════════════
 
-  /// ✅ OPTIMIZED: Smart load with selective refresh
-  ///
-  /// Strategy:
-  /// 1. Load "selesai" from cache ONCE (never changes)
-  /// 2. Always refresh "progress" orders (can change)
-  /// 3. Reduces API time from 20s → 6s
   Future<void> loadOrderWithCache(
     BuildContext context, {
     String status = 'aktif',
@@ -244,145 +196,88 @@ class PesananProvider with ChangeNotifier {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final userId = userProvider.customer!.noId;
 
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('[PesananProvider] 📥 SMART LOAD (OPTIMIZED)');
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('[PesananProvider] Vendor: $userId');
-      debugPrint('[PesananProvider] Force refresh: $forceRefresh');
+      debugPrint('[PesananProvider] 📥 SMART LOAD | force: $forceRefresh');
 
       List<PesananModel> unpaidOrders = [];
       List<PesananModel> progressOrders = [];
       List<PesananModel> selesaiOrders = [];
       Map<String, List<HistoryOrderModel>> allHistories = {};
 
-      // ───────────────────────────────────────────────────────
-      // STEP 1: Handle "selesai" orders (cache-only after first load)
-      // ───────────────────────────────────────────────────────
+      // ── STEP 1: Selesai orders ────────────────────────────
       if (!forceRefresh && _selesaiOrdersLoaded) {
-        // ✅ Use cached "selesai" orders (no refresh needed)
+        // Sudah pernah load → pakai cache, tidak perlu ke API lagi
         selesaiOrders = await localService.getOrdersByStatus('selesai');
+        debugPrint('[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
 
-        debugPrint(
-            '[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
-        debugPrint(
-            '[PesananProvider]    Reason: Already loaded once, no updates expected');
-
-        // Load histories for cached selesai orders
         for (final order in selesaiOrders) {
           final histories = await localService.getHistories(order.noBukti);
-          if (histories.isNotEmpty) {
-            allHistories[order.noBukti] = histories;
-          }
+          if (histories.isNotEmpty) allHistories[order.noBukti] = histories;
         }
       } else {
-        // ✅ First load OR force refresh: Fetch "selesai" from API
-        debugPrint('[PesananProvider] 🌐 Fetching selesai orders from API...');
-        debugPrint(
-            '[PesananProvider]    Reason: ${forceRefresh ? "Force refresh" : "First load"}');
-
-        final selesaiResult = await _fetchOrdersWithHistories(
+        // First load atau force refresh → fetch dari API
+        debugPrint('[PesananProvider] 🌐 Fetching selesai from API...');
+        final result = await _fetchOrdersWithHistories(
           userId: userId,
           statusFilter: 'selesai',
         );
-
-        selesaiOrders = selesaiResult['orders'] as List<PesananModel>;
+        selesaiOrders = result['orders'] as List<PesananModel>;
         allHistories.addAll(
-          selesaiResult['histories'] as Map<String, List<HistoryOrderModel>>,
-        );
+            result['histories'] as Map<String, List<HistoryOrderModel>>);
 
-        debugPrint(
-            '[PesananProvider] ✅ Selesai fetched: ${selesaiOrders.length}');
-
-        // Save to cache
         if (selesaiOrders.isNotEmpty) {
-          await localService.saveOrders(
-            selesaiOrders,
-            historiesMap: allHistories,
-          );
-          debugPrint('[PesananProvider] 💾 Selesai orders cached');
+          await localService.saveOrders(selesaiOrders,
+              historiesMap: allHistories);
         }
-
         _selesaiOrdersLoaded = true;
+        debugPrint('[PesananProvider] ✅ Selesai fetched: ${selesaiOrders.length}');
       }
 
-      // ───────────────────────────────────────────────────────
-      // STEP 2: Always fetch "progress" orders (active orders)
-      // ───────────────────────────────────────────────────────
-      debugPrint('[PesananProvider] 🌐 Fetching progress orders from API...');
-      debugPrint(
-          '[PesananProvider]    Reason: Active orders can change anytime');
-
+      // ── STEP 2: Progress orders (selalu dari API) ─────────
+      debugPrint('[PesananProvider] 🌐 Fetching progress from API...');
       final progressResult = await _fetchOrdersWithHistories(
         userId: userId,
         statusFilter: progresStatus.toList(),
       );
-
       progressOrders = progressResult['orders'] as List<PesananModel>;
       allHistories.addAll(
-        progressResult['histories'] as Map<String, List<HistoryOrderModel>>,
-      );
+          progressResult['histories'] as Map<String, List<HistoryOrderModel>>);
 
-      debugPrint(
-          '[PesananProvider] ✅ Progress fetched: ${progressOrders.length}');
-
-      // Save to cache
       if (progressOrders.isNotEmpty) {
-        await localService.saveOrders(
-          progressOrders,
-          historiesMap: allHistories,
-        );
-        debugPrint('[PesananProvider] 💾 Progress orders cached');
+        await localService.saveOrders(progressOrders,
+            historiesMap: allHistories);
       }
+      debugPrint('[PesananProvider] ✅ Progress fetched: ${progressOrders.length}');
 
-      // ───────────────────────────────────────────────────────
-      // STEP 3: Always fetch "unpaid" orders (active orders)
-      // ───────────────────────────────────────────────────────
-      debugPrint('[PesananProvider] 🌐 Fetching unpaid orders from API...');
-      debugPrint(
-          '[PesananProvider]    Reason: Active orders can change anytime');
-
+      // ── STEP 3: Unpaid orders (selalu dari API) ───────────
+      debugPrint('[PesananProvider] 🌐 Fetching unpaid from API...');
       final unpaidResult = await _fetchOrdersWithHistories(
         userId: userId,
         statusFilter: "menunggu bayar",
       );
-
       unpaidOrders = unpaidResult['orders'] as List<PesananModel>;
       allHistories.addAll(
-        progressResult['histories'] as Map<String, List<HistoryOrderModel>>,
-      );
+          unpaidResult['histories'] as Map<String, List<HistoryOrderModel>>);
 
+      if (unpaidOrders.isNotEmpty) {
+        await localService.saveOrders(unpaidOrders, historiesMap: allHistories);
+      }
       debugPrint('[PesananProvider] ✅ Unpaid fetched: ${unpaidOrders.length}');
 
-      // Save to cache
-      if (unpaidOrders.isNotEmpty) {
-        await localService.saveOrders(
-          unpaidOrders,
-          historiesMap: allHistories,
-        );
-        debugPrint('[PesananProvider] 💾 unpaid orders cached');
-      }
-
-      // ───────────────────────────────────────────────────────
-      // STEP 4: Combine & Update State
-      // ───────────────────────────────────────────────────────
+      // ── STEP 4: Combine & update state ────────────────────
       _allPesanan = [...unpaidOrders, ...progressOrders, ...selesaiOrders];
-      _orderHistories.clear();
-      _orderHistories.addAll(allHistories);
+      _orderHistories
+        ..clear()
+        ..addAll(allHistories);
 
-      // Filter
       _filterPesanan();
 
-      debugPrint('[PesananProvider] ✅ Load complete:');
-      debugPrint('[PesananProvider]    Total: ${_allPesanan.length}');
-      debugPrint(
-          '[PesananProvider]    Unpaid: ${_pesananUnpaid.length} (from API)');
-      debugPrint(
-          '[PesananProvider]    Progress: ${_pesananProgress.length} (from API)');
-      debugPrint(
-          '[PesananProvider]    Selesai: ${_pesananSelesai.length} (${_selesaiOrdersLoaded && !forceRefresh ? "from cache" : "from API"})');
-      debugPrint('[PesananProvider]    Histories: ${_orderHistories.length}');
-      debugPrint('═══════════════════════════════════════════════════');
-    } catch (e, stackTrace) {
+      debugPrint('[PesananProvider] ✅ Load complete: '
+          '${_allPesanan.length} total | '
+          '${_pesananUnpaid.length} unpaid | '
+          '${_pesananProgress.length} progress | '
+          '${_pesananSelesai.length} selesai');
+    } catch (e, st) {
+      debugPrint('[PesananProvider] ❌ loadOrderWithCache: $e\n$st');
       _errorOrder = "Error memuat Pesanan";
     } finally {
       _isLoadingOrder = false;
@@ -390,22 +285,19 @@ class PesananProvider with ChangeNotifier {
     }
   }
 
-  /// Helper: Fetch orders with histories by status filter
   Future<Map<String, dynamic>> _fetchOrdersWithHistories({
     required String userId,
-    dynamic statusFilter, // String or List<String>
+    dynamic statusFilter, // String atau List<String>
   }) async {
     List<PesananModel> orders = [];
     Map<String, List<HistoryOrderModel>> histories = {};
 
     try {
-      // Fetch orders from API
       final allOrders = await pesananService.getAll(
         status: 'aktif',
         idCustomer: userId,
       );
 
-      // Filter by status
       if (statusFilter is String) {
         orders = allOrders
             .where((o) => o.statusProgresPesanan == statusFilter)
@@ -418,172 +310,106 @@ class PesananProvider with ChangeNotifier {
         orders = allOrders;
       }
 
-      debugPrint('[PesananProvider]    Fetched ${orders.length} orders');
-
-      // Fetch histories for each order
-      if (orders.isNotEmpty) {
-        debugPrint('[PesananProvider]    Fetching histories...');
-
-        for (int i = 0; i < orders.length; i++) {
-          final order = orders[i];
-          debugPrint(
-              '[PesananProvider]    is Using Snap Payment => ${order.linkSnap}');
-
-          try {
-            final orderHistories = await historyService.getAll(
-              noOrder: order.noBukti,
-              status: 'aktif',
-              orderBy: 'Tgl_Progress',
-              orderDir: 'DESC',
-            );
-
-            if (orderHistories.isNotEmpty) {
-              histories[order.noBukti] = orderHistories;
-            }
-
-            debugPrint(
-                '[PesananProvider]       [${i + 1}/${orders.length}] ${order.noBukti}: ${orderHistories.length} histories');
-          } catch (e) {
-            debugPrint(
-                '[PesananProvider]       ⚠️ Error fetching histories for ${order.noBukti}: $e');
+      for (int i = 0; i < orders.length; i++) {
+        final order = orders[i];
+        try {
+          final orderHistories = await historyService.getAll(
+            noOrder: order.noBukti,
+            status: 'aktif',
+            orderBy: 'Tgl_Progress',
+            orderDir: 'DESC',
+          );
+          if (orderHistories.isNotEmpty) {
+            histories[order.noBukti] = orderHistories;
           }
+        } catch (e) {
+          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
         }
-
-        debugPrint(
-            '[PesananProvider]    ✅ Histories loaded for ${histories.length} orders');
       }
     } catch (e) {
-      debugPrint('[PesananProvider]    ❌ Fetch error: $e');
+      debugPrint('[PesananProvider] ❌ _fetchOrdersWithHistories: $e');
       rethrow;
     }
 
-    return {
-      'orders': orders,
-      'histories': histories,
-    };
+    return {'orders': orders, 'histories': histories};
   }
 
-  /// Legacy load method (kept for backward compatibility)
-  Future<void> loadOrder(
-    BuildContext context, {
-    String status = 'aktif',
-  }) async {
-    // Redirect to optimized version
-    await loadOrderWithCache(
-      context,
-      status: status,
-      forceRefresh: true, // Force full refresh
-    );
-  }
+  /// Legacy: redirect ke optimized version
+  Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
+      loadOrderWithCache(context, status: status, forceRefresh: true);
 
   // ═══════════════════════════════════════════════════════════
   // FCM INTEGRATION - Real-time Updates
   // ═══════════════════════════════════════════════════════════
 
-  /// ✅ Handle history progress from FCM
   Future<void> handleProgressFromFCM(HistoryOrderModel progress) async {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PesananProvider] 📨 PROGRESS FROM FCM");
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PesananProvider] Order: ${progress.noOrder}");
-    debugPrint("[PesananProvider] Status: ${progress.statusProgressPesanan}");
-    debugPrint("[PesananProvider] Description: ${progress.deskripsi}");
-    debugPrint("[PesananProvider] Sender: ${progress.senderId}");
+    debugPrint("[PesananProvider] 📨 PROGRESS FCM: ${progress.noOrder}");
 
     try {
       final noBukti = progress.noOrder;
 
-      // ✅ STEP 1: Update history in cache
+      // Update history di cache
       await localService.addHistory(noBukti, progress);
-      debugPrint("[PesananProvider] ✅ History added to cache");
 
-      // ✅ STEP 2: Update in-memory histories
+      // Update in-memory histories
       if (_orderHistories.containsKey(noBukti)) {
         final exists =
             _orderHistories[noBukti]!.any((h) => h.noId == progress.noId);
-
         if (!exists) {
           _orderHistories[noBukti]!.add(progress);
           _orderHistories[noBukti]!
               .sort((a, b) => b.tglProgress.compareTo(a.tglProgress));
-          debugPrint("[PesananProvider] ✅ History added to memory");
-        } else {
-          debugPrint("[PesananProvider] ℹ️ History already exists");
         }
       } else {
         _orderHistories[noBukti] = [progress];
-        debugPrint("[PesananProvider] ✅ New history list created");
       }
 
-      // ✅ STEP 3: Update order status AND description
+      // Update order status + description
       if (progress.statusProgressPesanan.isNotEmpty) {
         await _updateOrderStatusInternal(
           noBukti,
           progress.statusProgressPesanan,
-          newDescription: progress.deskripsi.isNotEmpty
-              ? progress.deskripsi
-              : null, // ✅ PASS deskripsi
+          newDescription:
+              progress.deskripsi.isNotEmpty ? progress.deskripsi : null,
           fromFCM: true,
         );
-        debugPrint("[PesananProvider] ✅ Order status & description updated");
       }
 
-      debugPrint("[PesananProvider] ✅ FCM progress processed successfully");
       notifyListeners();
     } catch (e, st) {
-      debugPrint("[PesananProvider] ❌ FCM progress error: $e");
+      debugPrint("[PesananProvider] ❌ FCM progress error: $e\n$st");
     }
-
-    debugPrint("═══════════════════════════════════════════════════");
   }
 
   Future<void> handlePaymentFromFCM(PesananModel updated) async {
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('[PesananProvider] 💳 PAYMENT FROM FCM');
-    debugPrint('[PesananProvider]    noBukti  : ${updated.noBukti}');
-    debugPrint('[PesananProvider]    statusBayar: ${updated.statusBayar}');
-    debugPrint(
-        '[PesananProvider]    statusProgres: ${updated.statusProgresPesanan}');
+    debugPrint('[PesananProvider] 💳 PAYMENT FCM: ${updated.noBukti}');
 
     try {
-      // STEP 1: Update di memory
       final idx = _allPesanan.indexWhere((p) => p.noBukti == updated.noBukti);
       if (idx != -1) {
         _allPesanan[idx] = updated;
-        debugPrint('[PesananProvider] ✅ Updated in memory (idx: $idx)');
       } else {
         _allPesanan.insert(0, updated);
-        debugPrint('[PesananProvider] ✅ Added to memory (new order)');
       }
 
-      // STEP 2: Update cache
       try {
         await localService.saveOrder(updated);
-        debugPrint('[PesananProvider] ✅ Cache updated');
       } catch (e) {
         debugPrint('[PesananProvider] ⚠️ Cache update failed: $e');
       }
 
-      // STEP 3: Re-filter list
       _filterPesanan();
-
-      // STEP 4: Broadcast ke stream → UI react otomatis
       _paymentUpdateController.add(updated);
-      debugPrint('[PesananProvider] 📡 Broadcast to paymentUpdateStream');
-
       notifyListeners();
     } catch (e, st) {
-      debugPrint('[PesananProvider] ❌ handlePaymentFromFCM error: $e\n$st');
+      debugPrint('[PesananProvider] ❌ handlePaymentFromFCM: $e\n$st');
     }
-
-    debugPrint('═══════════════════════════════════════════════════');
   }
 
   // ═══════════════════════════════════════════════════════════
   // UPDATE OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  /// Update order status (public API)
   void updateOrderStatus(
     String noOrder,
     String newStatus, {
@@ -597,205 +423,141 @@ class PesananProvider with ChangeNotifier {
     );
   }
 
-  /// Internal method for status update
   Future<void> _updateOrderStatusInternal(
     String noOrder,
     String newStatus, {
     String? newDescription,
     required bool fromFCM,
   }) async {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PesananProvider] 📨 UPDATE ORDER STATUS & DESCRIPTION");
-    debugPrint("[PesananProvider] Order: $noOrder");
-    debugPrint("[PesananProvider] New Status: $newStatus");
-    debugPrint(
-        "[PesananProvider] New Description: ${newDescription ?? '(no change)'}");
-    debugPrint("[PesananProvider] From FCM: $fromFCM");
-
-    if (noOrder.isEmpty || newStatus.isEmpty) {
-      debugPrint("[PesananProvider] ❌ Invalid input");
-      return;
-    }
+    if (noOrder.isEmpty || newStatus.isEmpty) return;
 
     final index = _allPesanan.indexWhere((p) => p.noBukti == noOrder);
 
     if (index == -1) {
-      debugPrint("[PesananProvider] ⚠️ Order not found: $noOrder");
-      debugPrint("[PesananProvider] 🔄 Triggering refresh...");
-
-      refreshOrder(noOrder).then((_) {
-        debugPrint("[PesananProvider] ✅ Refresh complete");
-      });
-
+      debugPrint("[PesananProvider] ⚠️ Order not found: $noOrder → refreshing");
+      refreshOrder(noOrder);
       return;
     }
 
     final pesanan = _allPesanan[index];
-    final oldStatus = pesanan.statusProgresPesanan;
-    final oldDescription = pesanan.deskripsiProgresPesanan;
 
-    final normalizedOldStatus = oldStatus?.trim().toLowerCase() ?? '';
-    final normalizedNewStatus = newStatus.trim().toLowerCase();
-
-    // ✅ Check if anything actually changed
-    final statusChanged = normalizedOldStatus != normalizedNewStatus;
+    final statusChanged = pesanan.statusProgresPesanan?.trim().toLowerCase() !=
+        newStatus.trim().toLowerCase();
     final descriptionChanged = newDescription != null &&
         newDescription.isNotEmpty &&
-        newDescription != oldDescription;
+        newDescription != pesanan.deskripsiProgresPesanan;
 
     if (!statusChanged && !descriptionChanged) {
-      debugPrint("[PesananProvider] ℹ️ No changes detected");
-      debugPrint("   Status: $newStatus (same)");
-      debugPrint("   Description: ${newDescription ?? '(no change)'}");
+      debugPrint("[PesananProvider] ℹ️ No changes for $noOrder");
       return;
     }
 
-    debugPrint("[PesananProvider] 🔄 Changes detected:");
-    if (statusChanged) {
-      debugPrint("   Status: $oldStatus → $newStatus");
-    }
-    if (descriptionChanged) {
-      debugPrint(
-          "   Description: ${oldDescription ?? '(empty)'} → $newDescription");
-    }
-
-    // ✅ Update order dengan kedua field
     _allPesanan[index] = pesanan.copyWith(
       statusProgresPesanan: newStatus,
-      deskripsiProgresPesanan: newDescription ??
-          pesanan.deskripsiProgresPesanan, // ✅ Update deskripsi
+      deskripsiProgresPesanan:
+          newDescription ?? pesanan.deskripsiProgresPesanan,
     );
 
-    debugPrint("[PesananProvider] ✅ In-memory order updated");
-
-    // ✅ Update cache - gunakan updateOrder (bukan updateOrderStatus)
     try {
       await localService.updateOrder(_allPesanan[index]);
-      debugPrint("[PesananProvider] ✅ Cache updated successfully");
     } catch (e) {
       debugPrint("[PesananProvider] ⚠️ Cache update failed: $e");
-      // Don't rethrow - cache update failure shouldn't break the flow
     }
 
-    // ✅ Re-filter lists
     _filterPesanan();
-
-    debugPrint("[PesananProvider] ✅ Lists updated:");
-    debugPrint("   Unpaid: ${_pesananUnpaid.length}");
-    debugPrint("   Progress: ${_pesananProgress.length}");
-    debugPrint("   Selesai: ${_pesananUnpaid.length}");
-
     notifyListeners();
-    debugPrint("═══════════════════════════════════════════════════");
+
+    debugPrint("[PesananProvider] ✅ Updated $noOrder → $newStatus");
   }
 
   // ═══════════════════════════════════════════════════════════
   // REFRESH OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  /// Refresh single order with history
+  /// Refresh single order langsung dari API (tanpa PesananMigrationHelper)
   Future<void> refreshOrder(String noOrder) async {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[PesananProvider] 🔄 REFRESHING SINGLE ORDER");
-    debugPrint("[PesananProvider] Order: $noOrder");
+    if (noOrder.isEmpty) return;
 
-    if (noOrder.isEmpty) {
-      debugPrint("[PesananProvider] ❌ Invalid noOrder");
-      return;
-    }
+    debugPrint("[PesananProvider] 🔄 Refreshing single order: $noOrder");
 
     try {
-      final data = await PesananMigrationHelper.refreshSingleOrder(
-        localService: localService,
+      final orders = await pesananService.getAll(
         noBukti: noOrder,
-        apiService: pesananService,
-        historyService: historyService,
+        status: 'aktif',
       );
 
-      if (data == null) {
-        debugPrint("[PesananProvider] ⚠️ No data returned");
+      if (orders.isEmpty) {
+        debugPrint("[PesananProvider] ⚠️ Order not found in API: $noOrder");
         return;
       }
 
-      final updatedPesanan = data['order'] as PesananModel;
-      final histories = data['histories'] as List<HistoryOrderModel>;
+      final updatedPesanan = orders.first;
 
-      debugPrint("[PesananProvider] ✅ Order refreshed:");
-      debugPrint("   Status: ${updatedPesanan.statusProgresPesanan}");
-      debugPrint("   Histories: ${histories.length}");
-
-      final index = _allPesanan.indexWhere((p) => p.noBukti == noOrder);
-
-      if (index != -1) {
-        _allPesanan[index] = updatedPesanan;
-        debugPrint("[PesananProvider] 🔄 Order updated at index $index");
-      } else {
-        _allPesanan.add(updatedPesanan);
-        debugPrint("[PesananProvider] ➕ New order added");
+      List<HistoryOrderModel> histories = [];
+      try {
+        histories = await historyService.getAll(
+          noOrder: noOrder,
+          status: 'aktif',
+          orderBy: 'Tgl_Progress',
+          orderDir: 'DESC',
+        );
+      } catch (e) {
+        debugPrint("[PesananProvider] ⚠️ Histories fetch failed: $e");
       }
 
-      _orderHistories[noOrder] = histories;
+      // Update cache
+      await localService.saveOrder(updatedPesanan, histories: histories);
+
+      // Update in-memory
+      final index = _allPesanan.indexWhere((p) => p.noBukti == noOrder);
+      if (index != -1) {
+        _allPesanan[index] = updatedPesanan;
+      } else {
+        _allPesanan.add(updatedPesanan);
+      }
+
+      if (histories.isNotEmpty) {
+        _orderHistories[noOrder] = histories;
+      }
 
       _filterPesanan();
       notifyListeners();
 
-      debugPrint("[PesananProvider] ✅ Refresh complete");
+      debugPrint("[PesananProvider] ✅ Refresh complete: $noOrder");
     } catch (e, st) {
-      debugPrint("[PesananProvider] ❌ Refresh error: $e");
+      debugPrint("[PesananProvider] ❌ Refresh error: $e\n$st");
     }
-
-    debugPrint("═══════════════════════════════════════════════════");
   }
 
-  /// Refresh all orders (pull-to-refresh)
-  Future<void> refresh(BuildContext context) async {
-    await loadOrderWithCache(
-      context,
-      forceRefresh: true, // Force full refresh (both progress & selesai)
-    );
-  }
+  Future<void> refresh(BuildContext context) =>
+      loadOrderWithCache(context, forceRefresh: true);
 
   // ═══════════════════════════════════════════════════════════
   // FILTER & HELPER METHODS
   // ═══════════════════════════════════════════════════════════
 
   void _filterPesanan() {
-    _pesananUnpaid = _allPesanan.where((pesanan) {
-      return pesanan.statusProgresPesanan == "menunggu bayar";
-    }).toList();
+    _pesananUnpaid = _allPesanan
+        .where((p) => p.statusProgresPesanan == "menunggu bayar")
+        .toList();
 
-    _pesananProgress = _allPesanan.where((pesanan) {
-      return [
-        "persiapan",
-        "proses",
-        "review",
-        "revisi",
-      ].contains(pesanan.statusProgresPesanan);
-    }).toList();
+    _pesananProgress = _allPesanan
+        .where((p) =>
+            ["persiapan", "proses", "review", "revisi"]
+                .contains(p.statusProgresPesanan))
+        .toList();
 
-    _pesananSelesai = _allPesanan.where((pesanan) {
-      return pesanan.statusProgresPesanan == "selesai";
-    }).toList();
-  }
-
-  String _getListName(String status) {
-    if (status == "menunggu bayar") return "Unpaid";
-    if (progresStatus.contains(status)) return "Progress";
-    if (status == "selesai") return "Selesai";
-    return "Unknown";
+    _pesananSelesai = _allPesanan
+        .where((p) => p.statusProgresPesanan == "selesai")
+        .toList();
   }
 
   // ═══════════════════════════════════════════════════════════
   // STATISTICS
   // ═══════════════════════════════════════════════════════════
 
-  Future<Map<String, dynamic>> getCacheStats() async {
-    return await localService.getStats();
-  }
-
-  Future<void> printCacheStats() async {
-    await localService.printStats();
-  }
+  Future<Map<String, dynamic>> getCacheStats() => localService.getStats();
+  Future<void> printCacheStats() => localService.printStats();
 
   // ═══════════════════════════════════════════════════════════
   // CLEANUP
@@ -804,7 +566,7 @@ class PesananProvider with ChangeNotifier {
   @override
   void dispose() {
     _orderHistories.clear();
-    _paymentUpdateController.close(); // ← tambahkan baris ini
+    _paymentUpdateController.close();
     super.dispose();
   }
 }

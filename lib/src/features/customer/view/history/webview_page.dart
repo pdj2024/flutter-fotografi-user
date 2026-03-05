@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash_screen.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
@@ -13,8 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// WebviewPage digunakan untuk dua keperluan:
-///   1. Halaman Midtrans Snap ([paymentData] != null) — FCM listener aktif
-///   2. URL umum ([paymentData] == null) — FCM listener tidak dipasang
+///   1. Halaman Midtrans Snap ([paymentData] != null) — FCM + polling aktif
+///   2. URL umum ([paymentData] == null) — tanpa payment logic
 class WebviewPage extends StatefulWidget {
   final String url;
 
@@ -22,10 +23,15 @@ class WebviewPage extends StatefulWidget {
   /// Kosongkan untuk penggunaan webview biasa.
   final PesananModel? paymentData;
 
+  /// Dipanggil saat snap gagal load dan user memilih fallback ke core payment.
+  /// Hanya relevan saat [paymentData] != null.
+  final VoidCallback? onFallbackToCore;
+
   const WebviewPage({
     super.key,
     required this.url,
     this.paymentData,
+    this.onFallbackToCore,
   });
 
   @override
@@ -43,21 +49,54 @@ class _WebviewPageState extends State<WebviewPage>
   String? _errorMessage;
   ErrorType? _errorType;
 
-  // Payment state
+  // ── Payment state ─────────────────────────────────────────────────────
+  final PesananService _pesananService = PesananService();
+
   bool _isNavigating = false;
   StreamSubscription<PesananModel>? _fcmSubscription;
+  Timer? _pollingTimer;
+
+  late PesananModel _currentData;
+
+  static const int _pollingIntervalSeconds = 10;
 
   bool get _isPaymentMode => widget.paymentData != null;
+
+  // ── Midtrans Snap URL patterns ────────────────────────────────────────
+  static const List<String> _successUrlPatterns = [
+    'finish',
+    'transaction_status=capture',
+    'transaction_status=settlement',
+    'order_status=capture',
+    'order_status=settlement',
+  ];
+
+  static const List<String> _failedUrlPatterns = [
+    'unfinish',
+    'cancel',
+    'error',
+    'transaction_status=deny',
+    'transaction_status=cancel',
+    'transaction_status=expire',
+    'order_status=deny',
+    'order_status=cancel',
+    'order_status=expire',
+  ];
+
+  // =========================================
+  // INIT & DISPOSE
+  // =========================================
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
     _initWebView();
-    // Pasang FCM listener hanya untuk mode pembayaran
+
     if (_isPaymentMode) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _listenFCM());
+      _currentData = widget.paymentData!;
+      _startPolling();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _listenFCM());
     }
   }
 
@@ -65,13 +104,14 @@ class _WebviewPageState extends State<WebviewPage>
   void dispose() {
     _animController.dispose();
     _fcmSubscription?.cancel();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
   // =========================================
   // FCM LISTENER
-  // Aktif hanya saat membuka Midtrans Snap
   // =========================================
+
   void _listenFCM() {
     _fcmSubscription = context
         .read<PesananProvider>()
@@ -80,6 +120,8 @@ class _WebviewPageState extends State<WebviewPage>
         .listen((updated) async {
       debugPrint('[WebviewPage] 🔔 FCM payment update: ${updated.statusBayar}');
       if (!mounted || _isNavigating) return;
+
+      setState(() => _currentData = updated);
 
       if (PesananProvider.isPaymentSettled(updated.statusBayar)) {
         await _handlePaymentSuccess(updated);
@@ -90,13 +132,52 @@ class _WebviewPageState extends State<WebviewPage>
   }
 
   // =========================================
+  // POLLING (fallback jika FCM tidak sampai)
+  // =========================================
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(
+      const Duration(seconds: _pollingIntervalSeconds),
+      (_) {
+        if (!_isNavigating) _pollStatus();
+      },
+    );
+  }
+
+  Future<void> _pollStatus() async {
+    try {
+      final list = await _pesananService
+          .getAll(noBukti: widget.paymentData!.noBukti)
+          .timeout(const Duration(seconds: 10), onTimeout: () => []);
+
+      if (!mounted || list.isEmpty) return;
+
+      final fresh = list.first;
+
+      if (fresh.statusBayar != _currentData.statusBayar) {
+        debugPrint(
+            '[WebviewPage] 📊 Poll: ${_currentData.statusBayar} → ${fresh.statusBayar}');
+        setState(() => _currentData = fresh);
+
+        if (PesananProvider.isPaymentSettled(fresh.statusBayar)) {
+          await _handlePaymentSuccess(fresh);
+        }
+      }
+    } catch (e) {
+      debugPrint('[WebviewPage] ⚠️ Poll error: $e');
+    }
+  }
+
+  // =========================================
   // HANDLE PAYMENT SUCCESS
   // =========================================
+
   Future<void> _handlePaymentSuccess(PesananModel updated) async {
     if (_isNavigating) return;
     setState(() => _isNavigating = true);
 
     _fcmSubscription?.cancel();
+    _pollingTimer?.cancel();
 
     if (!mounted) return;
 
@@ -111,8 +192,14 @@ class _WebviewPageState extends State<WebviewPage>
 
       if (!mounted) return;
 
-      // Ganti seluruh stack dengan success page
-      Navigator.of(context).pushReplacement(
+      // Pop webview dulu, lalu push splash screen ke atas MainOrderPage.
+      // Dengan begitu stack menjadi: MainOrderPage → SplashScreen
+      // (bukan: MainOrderPage → WebviewPage → SplashScreen)
+      Navigator.of(context).pop();
+
+      if (!mounted) return;
+
+      Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PaymentSuccessSplashScreen(
             orderNumber: updated.noTrackingPesanan ?? '',
@@ -129,15 +216,15 @@ class _WebviewPageState extends State<WebviewPage>
   // =========================================
   // WEBVIEW INIT
   // =========================================
+
   void _initAnimations() {
     _animController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
         CurvedAnimation(parent: _animController, curve: Curves.easeIn));
-    _slideAnim =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-            CurvedAnimation(
-                parent: _animController, curve: Curves.easeOutCubic));
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+        .animate(CurvedAnimation(
+            parent: _animController, curve: Curves.easeOutCubic));
   }
 
   void _initWebView() {
@@ -155,13 +242,15 @@ class _WebviewPageState extends State<WebviewPage>
         '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       )
       ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (_) {
+        onPageStarted: (url) {
           if (mounted) setState(() => _isLoading = true);
+          if (_isPaymentMode) _checkSnapCallbackUrl(url);
         },
-        onPageFinished: (_) {
+        onPageFinished: (url) {
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) setState(() => _isLoading = false);
           });
+          if (_isPaymentMode) _checkSnapCallbackUrl(url);
         },
         onHttpError: (err) {
           if (mounted) {
@@ -203,8 +292,7 @@ class _WebviewPageState extends State<WebviewPage>
             _openExternal(_toWhatsAppUrl(req.url));
             return NavigationDecision.prevent;
           }
-          if (req.url == 'about:blank' ||
-              req.url.startsWith('javascript:')) {
+          if (req.url == 'about:blank' || req.url.startsWith('javascript:')) {
             return NavigationDecision.prevent;
           }
           return NavigationDecision.navigate;
@@ -212,6 +300,25 @@ class _WebviewPageState extends State<WebviewPage>
       ));
 
     _loadUrl(url);
+  }
+
+  /// Cek apakah URL adalah callback dari Midtrans Snap,
+  /// lalu trigger immediate poll tanpa menunggu interval berikutnya.
+  void _checkSnapCallbackUrl(String url) {
+    if (!_isPaymentMode || _isNavigating) return;
+
+    final lowerUrl = url.toLowerCase();
+    debugPrint('[WebviewPage] 🔍 URL check: $url');
+
+    final isSuccess = _successUrlPatterns.any((p) => lowerUrl.contains(p));
+    final isFailed = _failedUrlPatterns.any((p) => lowerUrl.contains(p));
+
+    if (isSuccess) {
+      debugPrint('[WebviewPage] ✅ Snap success URL — trigger immediate poll');
+      _pollStatus();
+    } else if (isFailed) {
+      debugPrint('[WebviewPage] ❌ Snap failed/cancel URL detected');
+    }
   }
 
   Future<void> _loadUrl(String url) async {
@@ -241,93 +348,74 @@ class _WebviewPageState extends State<WebviewPage>
     _loadUrl(url);
   }
 
+  /// Fallback ke core payment — pop webview lalu panggil callback
+  void _fallbackToCore() {
+    _pollingTimer?.cancel();
+    _fcmSubscription?.cancel();
+    Navigator.of(context).pop();
+    widget.onFallbackToCore?.call();
+  }
+
   // =========================================
   // BUILD
   // =========================================
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        if (_isNavigating) return; // sedang proses sukses, jangan pop
-        if (await _controller.canGoBack()) {
-          _controller.goBack();
-        } else {
-          if (context.mounted) Navigator.of(context).pop();
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFFF9F9F9),
-          elevation: 0,
-          leading: _isNavigating ? null : const CustomBackButton(),
-          title: _isPaymentMode
-              ? const Text('Pembayaran',
-                  style: TextStyle(
-                      color: Colors.black, fontWeight: FontWeight.bold))
-              : null,
-          actions: [
-            // ── Indikator sukses (saat FCM diterima) ──────────────────────
-            if (_isNavigating)
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                            Colors.green.shade600),
-                      ),
+        elevation: 0,
+        leading: _isNavigating ? null : const CustomBackButton(),
+        title: _isPaymentMode
+            ? const Text(
+                'Pembayaran',
+                style:
+                    TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              )
+            : null,
+        actions: [
+          if (_isNavigating)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.green.shade600),
                     ),
-                    const SizedBox(width: 8),
-                    Text('Memproses...',
-                        style: TextStyle(
-                            color: Colors.green.shade700,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            // ── Tombol buka langsung (hanya mode non-payment) ─────────────
-            if (!_isPaymentMode && !_isNavigating) ...[
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF9F9F9),
-                  foregroundColor: Constants.primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                        color: Colors.deepPurple.shade400, width: 1),
                   ),
-                ),
-                onPressed: () => _openExternal(widget.url),
-                child: const Text('Buka Langsung'),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Memproses...',
+                    style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
-              const SizedBox(width: 20),
-            ],
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(child: WebViewWidget(controller: _controller)),
+            if (_isLoading) _buildLoading(),
+            if (_errorMessage != null && !_isLoading) _buildError(),
+            if (_isNavigating && _isPaymentMode) _buildSuccessOverlay(),
           ],
-        ),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(child: WebViewWidget(controller: _controller)),
-              if (_isLoading) _buildLoading(),
-              if (_errorMessage != null && !_isLoading) _buildError(),
-              // ── Payment success overlay ───────────────────────────────
-              if (_isNavigating && _isPaymentMode) _buildSuccessOverlay(),
-            ],
-          ),
         ),
       ),
     );
   }
 
-  // ── Overlay saat pembayaran berhasil terdeteksi via FCM ────────────────
+  // ── Success overlay ─────────────────────────────────────────────────────
   Widget _buildSuccessOverlay() {
     return Container(
       color: Colors.white.withOpacity(0.9),
@@ -356,8 +444,7 @@ class _WebviewPageState extends State<WebviewPage>
               height: 32,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                valueColor:
-                    AlwaysStoppedAnimation(Colors.green.shade400),
+                valueColor: AlwaysStoppedAnimation(Colors.green.shade400),
               ),
             ),
           ],
@@ -366,6 +453,7 @@ class _WebviewPageState extends State<WebviewPage>
     );
   }
 
+  // ── Loading ─────────────────────────────────────────────────────────────
   Widget _buildLoading() {
     return Container(
       color: Colors.white,
@@ -378,24 +466,27 @@ class _WebviewPageState extends State<WebviewPage>
               height: 50,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                valueColor:
-                    AlwaysStoppedAnimation(Colors.deepPurple.shade400),
+                valueColor: AlwaysStoppedAnimation(Colors.deepPurple.shade400),
               ),
             ),
             const SizedBox(height: 24),
-            Text('Memuat halaman...',
-                style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500)),
+            Text(
+              'Memuat halaman...',
+              style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(widget.url,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                widget.url,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -403,6 +494,7 @@ class _WebviewPageState extends State<WebviewPage>
     );
   }
 
+  // ── Error ───────────────────────────────────────────────────────────────
   Widget _buildError() {
     return FadeTransition(
       opacity: _fadeAnim,
@@ -418,21 +510,28 @@ class _WebviewPageState extends State<WebviewPage>
                 children: [
                   _errorIcon(),
                   const SizedBox(height: 32),
-                  Text(_errorTitle(),
-                      style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D3748)),
-                      textAlign: TextAlign.center),
+                  Text(
+                    _errorTitle(),
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2D3748)),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 12),
-                  Text(_errorDesc(),
-                      style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.grey.shade600,
-                          height: 1.5),
-                      textAlign: TextAlign.center),
+                  Text(
+                    _errorDesc(),
+                    style: TextStyle(
+                        fontSize: 15, color: Colors.grey.shade600, height: 1.5),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 40),
                   _retryButton(),
+                  // Tombol fallback ke core — hanya muncul di payment mode
+                  if (_isPaymentMode && widget.onFallbackToCore != null) ...[
+                    const SizedBox(height: 16),
+                    _fallbackButton(),
+                  ],
                 ],
               ),
             ),
@@ -531,13 +630,49 @@ class _WebviewPageState extends State<WebviewPage>
               children: [
                 Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
                 SizedBox(width: 8),
-                Text('Coba Lagi',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'Coba Lagi',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600),
+                ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tombol fallback ke metode pembayaran core (tanpa Snap)
+  Widget _fallbackButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: TextButton(
+          onPressed: _fallbackToCore,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.grey.shade600,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.payment_outlined,
+                  size: 18, color: Colors.grey.shade600),
+              const SizedBox(width: 8),
+              Text(
+                'Gunakan Metode Pembayaran Lain',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -547,13 +682,27 @@ class _WebviewPageState extends State<WebviewPage>
   // =========================================
   // HELPERS
   // =========================================
+
   bool _isExternalUrl(String url) {
     try {
       final scheme = Uri.parse(url).scheme.toLowerCase();
       return [
-        'whatsapp','wa','tel','mailto','sms','intent',
-        'market','fb','facebook','instagram','twitter',
-        'tg','viber','line','maps','geo',
+        'whatsapp',
+        'wa',
+        'tel',
+        'mailto',
+        'sms',
+        'intent',
+        'market',
+        'fb',
+        'facebook',
+        'instagram',
+        'twitter',
+        'tg',
+        'viber',
+        'line',
+        'maps',
+        'geo',
       ].contains(scheme);
     } catch (_) {
       return false;
@@ -587,25 +736,31 @@ class _WebviewPageState extends State<WebviewPage>
 
   String _mapErrorMessage(WebResourceError error) {
     final d = error.description.toLowerCase();
-    if (d.contains('internet') || d.contains('network'))
+    if (d.contains('internet') || d.contains('network')) {
       return 'Tidak ada koneksi internet';
+    }
     if (d.contains('timeout')) return 'Koneksi timeout';
-    if (d.contains('host') || d.contains('resolve'))
+    if (d.contains('host') || d.contains('resolve')) {
       return 'Server tidak dapat dihubungi';
-    if (d.contains('ssl') || d.contains('certificate'))
+    }
+    if (d.contains('ssl') || d.contains('certificate')) {
       return 'Masalah sertifikat keamanan';
+    }
     return 'Terjadi kesalahan: ${error.description}';
   }
 
   ErrorType _mapErrorType(WebResourceError error) {
     final d = error.description.toLowerCase();
-    if (d.contains('internet') || d.contains('network'))
+    if (d.contains('internet') || d.contains('network')) {
       return ErrorType.noInternet;
+    }
     if (d.contains('timeout')) return ErrorType.timeout;
-    if (d.contains('host') || d.contains('resolve'))
+    if (d.contains('host') || d.contains('resolve')) {
       return ErrorType.serverError;
-    if (d.contains('ssl') || d.contains('certificate'))
+    }
+    if (d.contains('ssl') || d.contains('certificate')) {
       return ErrorType.sslError;
+    }
     return ErrorType.unknown;
   }
 }

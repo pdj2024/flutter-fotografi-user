@@ -27,7 +27,7 @@ class PackageDetailModal extends StatelessWidget {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 40),
       child: Container(
         constraints: const BoxConstraints(maxHeight: 600),
         decoration: BoxDecoration(

@@ -7,7 +7,9 @@ import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart
 import 'package:mpjnew/src/features/customer/widget/kategori_section.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_section.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 class CustomerHomePage extends StatefulWidget {
   CustomerHomePage({super.key});
@@ -18,13 +20,14 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage>
     with WidgetsBindingObserver {
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   final ScrollController _scrollController = ScrollController();
 
   bool isScrolled = false;
   bool firstBuild = true;
 
   int _lastPreloadIndex = 0;
-  static const int _preloadThreshold = 5;
 
   @override
   void initState() {
@@ -73,13 +76,18 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     }
   }
 
-  Future<void> _doRefresh() async {
-    await _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-    );
-    await loadData();
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      await loadData();
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[HomePage] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
+    }
   }
 
   Future<void> _loadCustomerId() async {
@@ -170,98 +178,102 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _doRefresh,
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              // ══════════════════════════════════════════════
-              // HEADER — Modern Search Bar
-              // ══════════════════════════════════════════════
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: SliverHeaderDelegate(
-                  child: _ModernSearchBar(
-                    onTap: () {
-                      context.read<NavigationProvider>().navigateToPage(
-                            context,
-                            SearchPage(
-                              id_category: "",
-                              nama_category: '',
-                              search: "",
-                              autoOpenFilter: true,
-                            ),
-                            targetTabIndex: 0,
-                            hrsLogin: false,
-                          );
-                    },
-                  ),
-                ),
-              ),
-
-              // ══════════════════════════════════════════════
-              // KATEGORI DINAMIS
-              // ══════════════════════════════════════════════
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: KategoriSection(),
-                ),
-              ),
-
-              // ══════════════════════════════════════════════
-              // DAFTAR PORTOFOLIO
-              // ══════════════════════════════════════════════
-              PortofolioSection(),
-
-              // Loading indicator preload
-              SliverToBoxAdapter(
-                child: Consumer<PortofolioProvider>(
-                  builder: (context, provider, child) {
-                    final stats = provider.getPreloadStats();
-                    final isPreloading = stats['isPreloading'] as bool;
-                    final queueLength = stats['queueLength'] as int;
-
-                    if (!isPreloading || queueLength == 0) {
-                      return const SizedBox.shrink();
-                    }
-
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(
-                                Constants.primaryColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Memuat gambar... ($queueLength)',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
+        child: Column(
+          children: [
+            // ══════════════════════════════════════════════
+            // HEADER — Fixed, tidak ikut scroll/refresh
+            // ══════════════════════════════════════════════
+            _ModernSearchBar(
+              onTap: () {
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      SearchPage(
+                        id_category: "",
+                        nama_category: '',
+                        search: "",
+                        autoOpenFilter: true,
                       ),
+                      targetTabIndex: 0,
+                      hrsLogin: false,
                     );
-                  },
+              },
+            ),
+
+            // ══════════════════════════════════════════════
+            // KONTEN — SmartRefresher hanya di sini
+            // ══════════════════════════════════════════════
+            Expanded(
+              child: SmartRefresher(
+                controller: _refreshController,
+                onRefresh: _onRefresh,
+                physics: const AlwaysScrollableScrollPhysics(),
+                header: buildRefreshHeader(),
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    // KATEGORI DINAMIS
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: KategoriSection(),
+                      ),
+                    ),
+
+                    // DAFTAR PORTOFOLIO
+                    PortofolioSection(),
+
+                    // Loading indicator preload
+                    SliverToBoxAdapter(
+                      child: Consumer<PortofolioProvider>(
+                        builder: (context, provider, child) {
+                          final stats = provider.getPreloadStats();
+                          final isPreloading = stats['isPreloading'] as bool;
+                          final queueLength = stats['queueLength'] as int;
+
+                          if (!isPreloading || queueLength == 0) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.all(10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      Constants.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Memuat gambar... ($queueLength)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  ],
                 ),
               ),
-              SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _doRefresh,
+        onPressed: _onRefresh,
         tooltip: 'Refresh',
         backgroundColor: Constants.primaryColor,
         child: const Icon(Icons.refresh, color: Colors.white),
@@ -271,9 +283,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// _ModernSearchBar — StatefulWidget dengan pulse animation
-// Tidak menggunakan SingleTickerProviderStateMixin di luar tree Flutter
-// sehingga aman dipakai di dalam SliverHeaderDelegate
+// _ModernSearchBar
 // ═══════════════════════════════════════════════════════════════════════
 
 class _ModernSearchBar extends StatefulWidget {
@@ -314,7 +324,7 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
     final primary = Constants.primaryColor;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedBuilder(
@@ -334,12 +344,11 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
               ),
               child: Row(
                 children: [
-                  // ── Icon search kiri ─────────────────────
                   Container(
                     width: 52,
                     height: 52,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.horizontal(
+                    decoration: const BoxDecoration(
+                      borderRadius: BorderRadius.horizontal(
                         left: Radius.circular(15),
                       ),
                     ),
@@ -349,10 +358,7 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
                       size: 22,
                     ),
                   ),
-
                   const SizedBox(width: 4),
-
-                  // ── Teks placeholder dua baris ───────────
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -378,8 +384,6 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
                       ],
                     ),
                   ),
-
-                  // ── Tombol filter kanan ──────────────────
                   Container(
                     margin: const EdgeInsets.only(right: 10),
                     height: 36,
@@ -405,7 +409,8 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SliverHeaderDelegate — tidak berubah
+// SliverHeaderDelegate — tidak dipakai lagi, tapi dipertahankan
+// untuk kompatibilitas jika dipakai di tempat lain
 // ═══════════════════════════════════════════════════════════════════════
 
 class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {

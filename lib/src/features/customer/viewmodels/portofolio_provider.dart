@@ -6,14 +6,21 @@ import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart';
 import 'package:mpjnew/src/data/models/kategori_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioProvider with ChangeNotifier {
   final PortofolioService portofolioService;
+
+  // ✅ Pakai CustomerPortofolioLocalService (bukan PortofolioLocalService lama)
+  // CustomerPortofolioLocalService sudah handle guard hasActiveCustomer
+  // sehingga aman dipanggil saat guest mode (saveLiked/saveSaved di-skip)
   final PortofolioLocalService localService;
+
   final MediaPreloadService _preloadService = MediaPreloadService();
   bool _disposed = false;
 
@@ -45,8 +52,6 @@ class PortofolioProvider with ChangeNotifier {
   KategoriModel? _selectedKategori;
   List<PaketModel> _selectedPaket = [];
 
-  // Guard prevent double tap — tidak pakai debounce agar data realtime
-  // ketika user berpindah halaman.
   final Set<String> _likeInProgress = {};
   final Set<String> _saveInProgress = {};
 
@@ -70,19 +75,11 @@ class PortofolioProvider with ChangeNotifier {
   List<PaketModel> get selectedPaket => _selectedPaket;
   MediaPreloadService get preloadService => _preloadService;
 
-  /// true jika API like sedang berjalan (prevent double tap)
   bool isLikeInProgress(String noId) => _likeInProgress.contains(noId);
-
-  /// true jika API save sedang berjalan (prevent double tap)
   bool isSaveInProgress(String noId) => _saveInProgress.contains(noId);
-
   bool isPortfolioCached(String noId) =>
       _cachedPortfolios.any((p) => p.noId == noId);
-
-  /// Cek apakah porto di-like, berdasarkan list lokal
   bool isLiked(String noId) => _portofolioLikelist.any((p) => p.noId == noId);
-
-  /// Cek apakah porto di-save, berdasarkan list lokal
   bool isSaved(String noId) => _portofolioSaveList.any((p) => p.noId == noId);
 
   void setKategori(KategoriModel? value) {
@@ -90,16 +87,9 @@ class PortofolioProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════
-  // REFRESH ALIASES (untuk bottom navigation tab refresh)
-  // ═══════════════════════════════════════════════════
-
-  /// Alias untuk loadLikedPortofolio — dipanggil saat tab profile di-tap
-  /// dari bottom navigation agar nama method konsisten dengan pattern refresh.
   Future<void> refreshLikePortofolio(BuildContext context) =>
       loadLikedPortofolio(context: context, syncFromApi: true);
 
-  /// Alias untuk loadSavedPortofolio — dipanggil saat tab profile di-tap.
   Future<void> refreshSavePortofolio(BuildContext context) =>
       loadSavedPortofolio(context: context, syncFromApi: true);
 
@@ -122,7 +112,6 @@ class PortofolioProvider with ChangeNotifier {
     try {
       await localService.initialize();
       _isInitialized = true;
-      debugPrint('✅ [PortofolioProvider] Initialized');
     } catch (e) {
       debugPrint('❌ [PortofolioProvider] Init error: $e');
     }
@@ -134,9 +123,6 @@ class PortofolioProvider with ChangeNotifier {
 
   void setSelectedPortofolio(PortofolioModel? porto) {
     _selectedPortofolio = porto;
-    if (porto != null) {
-      _preloadService.preloadPortfolio(porto, highPriority: true);
-    }
     notifyListeners();
   }
 
@@ -184,7 +170,8 @@ class PortofolioProvider with ChangeNotifier {
       final userId =
           userProvider.role == 'customer' ? userProvider.userId : null;
 
-      // Load liked/saved dari Hive terlebih dahulu
+      // ✅ Sync dari local hanya jika customer sudah login
+      // Guest mode: _portofolioLikelist & _portofolioSaveList tetap kosong
       await _syncLikedAndSavedFromLocal();
 
       if (!forceRefresh && _isInitialized) {
@@ -226,68 +213,57 @@ class PortofolioProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════
-  // LIKE — Langsung API (tanpa debounce), optimistic UI + rollback
+  // LIKE — optimistic UI + rollback
   // ═══════════════════════════════════════════════════
 
-  /// Toggle like pada portfolio.
-  ///
-  /// Flow:
-  /// 1. Guard — abaikan jika API masih berjalan (prevent double tap).
-  /// 2. Optimistic UI — update list lokal langsung agar UI responsif.
-  /// 3. API call — langsung, tanpa debounce, data realtime.
-  /// 4. Local Hive — simpan/hapus + download media background.
-  /// 5. Rollback — kembalikan ke state sebelumnya jika API gagal.
   Future<void> toggleLike({
     required BuildContext context,
     required PortofolioModel porto,
   }) async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null) {
+      return context
+          .read<NavigationProvider>()
+          .navigateToPage(context, UserLogin(), targetTabIndex: 0);
+    }
     final noId = porto.noId;
-
-    // ── 1. Guard ──────────────────────────────────────
     if (_likeInProgress.contains(noId)) return;
 
     final wasLiked = isLiked(noId);
     final nowLiked = !wasLiked;
 
-    // ── 2. Optimistic UI ──────────────────────────────
     _likeInProgress.add(noId);
     _updateLikeList(porto, nowLiked);
     safeNotify();
 
     try {
-      final userId = context.read<UserProvider>().userId;
-      if (userId == null) throw Exception('User belum login');
-      final navigationProvider = context.read<NavigationProvider>();
-
       debugPrint(
           '[PortofolioProvider] ${nowLiked ? '❤️' : '💔'} toggleLike: $noId');
 
-      // ── 3. API call ───────────────────────────────
       if (nowLiked) {
         await portofolioService.likePorto(userId, noId);
-        // ── 4a. Simpan ke Hive + download media background ──
+
+        // ✅ saveLiked aman: sudah ada guard hasActiveCustomer di service
         await localService.saveLiked(porto);
 
-        // Navigasi ke halaman single post
-        context.read<PortofolioProvider>().setSelectedPortofolio(porto);
-        navigationProvider.navigateToPage(
-          hrsLogin: true,
-          context,
-          const SinglePostPage(),
-          targetTabIndex: 0,
-          targetPage: 'SinglePostPage',
-        );
+        setSelectedPortofolio(porto);
+        if (context.mounted) {
+          context.read<NavigationProvider>().navigateToPage(
+                context,
+                const SinglePostPage(),
+                hrsLogin: true,
+                targetTabIndex: 0,
+                targetPage: 'SinglePostPage',
+              );
+        }
       } else {
         await portofolioService.unlikePorto(userId, noId);
-        // ── 4b. Hapus dari Hive ──────────────────────
         await localService.removeLiked(noId);
       }
 
-      // Sync ulang dari Hive agar list akurat
       await _syncLikedAndSavedFromLocal();
     } catch (e) {
       debugPrint('[PortofolioProvider] ❌ toggleLike error: $e');
-      // ── 5. Rollback ───────────────────────────────
       _updateLikeList(porto, wasLiked);
     } finally {
       _likeInProgress.remove(noId);
@@ -307,60 +283,57 @@ class PortofolioProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════
-  // SAVE — Langsung API (tanpa debounce), optimistic UI + rollback
+  // SAVE — optimistic UI + rollback
   // ═══════════════════════════════════════════════════
 
   Future<void> toggleSave({
     required BuildContext context,
     required PortofolioModel porto,
   }) async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null) {
+      return context
+          .read<NavigationProvider>()
+          .navigateToPage(context, UserLogin(), targetTabIndex: 0);
+    }
     final noId = porto.noId;
-
-    // ── 1. Guard ──────────────────────────────────────
     if (_saveInProgress.contains(noId)) return;
 
     final wasSaved = isSaved(noId);
     final nowSaved = !wasSaved;
 
-    // ── 2. Optimistic UI ──────────────────────────────
     _saveInProgress.add(noId);
     _updateSaveList(porto, nowSaved);
     safeNotify();
 
     try {
-      final userId = context.read<UserProvider>().userId;
-
-      if (userId == null) throw Exception('User belum login');
-      final navigationProvider = context.read<NavigationProvider>();
-
       debugPrint(
           '[PortofolioProvider] ${nowSaved ? '🔖' : '🗑️'} toggleSave: $noId');
 
-      // ── 3. API call ───────────────────────────────
       if (nowSaved) {
         await portofolioService.savePorto(userId, noId);
-        // ── 4a. Simpan ke Hive + download media background ──
+
+        // ✅ saveSaved aman: sudah ada guard hasActiveCustomer di service
         await localService.saveSaved(porto);
 
-        // Navigasi ke halaman single post
-        context.read<PortofolioProvider>().setSelectedPortofolio(porto);
-        navigationProvider.navigateToPage(
-          hrsLogin: true,
-          context,
-          const SinglePostPage(),
-          targetTabIndex: 0,
-          targetPage: 'SinglePostPage',
-        );
+        setSelectedPortofolio(porto);
+        if (context.mounted) {
+          context.read<NavigationProvider>().navigateToPage(
+                context,
+                const SinglePostPage(),
+                hrsLogin: true,
+                targetTabIndex: 0,
+                targetPage: 'SinglePostPage',
+              );
+        }
       } else {
         await portofolioService.unsavePorto(userId, noId);
-        // ── 4b. Hapus dari Hive ──────────────────────
         await localService.removeSaved(noId);
       }
 
       await _syncLikedAndSavedFromLocal();
     } catch (e) {
       debugPrint('[PortofolioProvider] ❌ toggleSave error: $e');
-      // ── 5. Rollback ───────────────────────────────
       _updateSaveList(porto, wasSaved);
     } finally {
       _saveInProgress.remove(noId);
@@ -380,7 +353,7 @@ class PortofolioProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════
-  // LOAD LIKED LIST (untuk halaman Liked)
+  // LOAD LIKED / SAVED LIST
   // ═══════════════════════════════════════════════════
 
   Future<void> loadLikedPortofolio({
@@ -391,23 +364,23 @@ class PortofolioProvider with ChangeNotifier {
     safeNotify();
 
     try {
-      // Load dari local dulu (cepat, offline-first)
       _portofolioLikelist = await localService.getLikedPortfolios();
       safeNotify();
 
-      // Sync dari API untuk pastikan konsistensi
       if (syncFromApi && context != null) {
         try {
           final userId = context.read<UserProvider>().userId;
           if (userId != null) {
             final apiLiked =
                 await portofolioService.getLikesPorto(noId: userId);
+
+            // ✅ syncLiked memanggil saveLiked di dalamnya.
+            // Aman karena saveLiked sekarang silent-skip jika belum login.
             await localService.syncLiked(apiLiked);
             _portofolioLikelist = await localService.getLikedPortfolios();
           }
         } catch (e) {
           debugPrint('[PortofolioProvider] ⚠️ syncLiked API failed: $e');
-          // Tetap pakai data lokal
         }
       }
     } catch (e) {
@@ -417,10 +390,6 @@ class PortofolioProvider with ChangeNotifier {
       safeNotify();
     }
   }
-
-  // ═══════════════════════════════════════════════════
-  // LOAD SAVED LIST (untuk halaman Saved)
-  // ═══════════════════════════════════════════════════
 
   Future<void> loadSavedPortofolio({
     BuildContext? context,
@@ -439,6 +408,9 @@ class PortofolioProvider with ChangeNotifier {
           if (userId != null) {
             final apiSaved =
                 await portofolioService.getSavesPorto(noId: userId);
+
+            // ✅ syncSaved memanggil saveSaved di dalamnya.
+            // Aman karena saveSaved sekarang silent-skip jika belum login.
             await localService.syncSaved(apiSaved);
             _portofolioSaveList = await localService.getSavedPortfolios();
           }
@@ -464,8 +436,6 @@ class PortofolioProvider with ChangeNotifier {
       final saved = await localService.getSavedPortfolios();
       _portofolioLikelist = liked;
       _portofolioSaveList = saved;
-      debugPrint(
-          '[PortofolioProvider] 🔄 syncLocal: liked=${liked.length} saved=${saved.length}');
     } catch (e) {
       debugPrint('[PortofolioProvider] ❌ syncLocal error: $e');
     }

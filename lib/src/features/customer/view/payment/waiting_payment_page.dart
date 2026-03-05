@@ -123,8 +123,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     if (_paymentStartTime == null) return;
     final elapsed = DateTime.now().difference(_paymentStartTime!);
     final timeout = Duration(minutes: _timeoutMinutes);
-    _remainingTime =
-        elapsed >= timeout ? Duration.zero : timeout - elapsed;
+    _remainingTime = elapsed >= timeout ? Duration.zero : timeout - elapsed;
   }
 
   void _startCountdown() {
@@ -343,8 +342,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.timer,
-                        color: Colors.white, size: 24),
+                    child:
+                        const Icon(Icons.timer, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -377,8 +376,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
             if (_isNavigating)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                 color: Colors.green.shade50,
                 child: Row(
                   children: [
@@ -387,8 +386,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                            Colors.green.shade600),
+                        valueColor:
+                            AlwaysStoppedAnimation(Colors.green.shade600),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -411,7 +410,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                 physics: const BouncingScrollPhysics(),
                 header: _buildRefreshHeader(),
                 child: ListView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(10),
                   children: [
                     _buildPaymentCodeSection(),
                     const SizedBox(height: 16),
@@ -454,10 +453,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     }
     if (metode.contains('ALFAMART') || metode.contains('INDOMARET')) {
       return CounterPaymentCard(
-          storeName: metode,
-          paymentCode: p1,
-          merchantCode: p2,
-          amount: total);
+          storeName: metode, paymentCode: p1, merchantCode: p2, amount: total);
     }
     return const SizedBox.shrink();
   }
@@ -538,8 +534,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
           ),
           const SizedBox(height: 16),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: Constants.primaryColorVendor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
@@ -629,8 +624,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           child,
         ],
@@ -653,8 +648,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(label,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.black54)),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.black54)),
                   if (copyable)
                     InkWell(
                       onTap: () =>
@@ -683,13 +678,11 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         Text(label,
             style: TextStyle(
                 fontSize: fontSize,
-                fontWeight:
-                    isBold ? FontWeight.bold : FontWeight.normal)),
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
         Text(value,
             style: TextStyle(
                 fontSize: fontSize,
-                fontWeight:
-                    isBold ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
                 color: valueColor ?? Colors.black87)),
       ],
     );

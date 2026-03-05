@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 
@@ -184,45 +185,51 @@ class PortofolioService {
 
   Future<void> likePorto(String idUser, String idPorto) async {
     final response = await apiClient.post(
-      '/like/create?id_user=$idUser&id_portofolio=$idPorto',
-      headers: {'Content-Type': 'application/json'},
+      '/like/create',
+      queryParameters: {'id_user': idUser, 'id_portofolio': idPorto},
     );
 
+    debugPrint('likePorto status: ${response.statusCode}');
+    debugPrint('likePorto body: ${response.body}');
+
     if (response.statusCode != 200) {
-      throw Exception('Gagal menambahkan $entity');
+      throw Exception('Gagal like portofolio');
     }
   }
 
   Future<void> unlikePorto(String idUser, String idPorto) async {
     final response = await apiClient.delete(
-      '/like/delete?id_user=$idUser&id_portofolio=$idPorto',
-      headers: {'Content-Type': 'application/json'},
+      '/like/delete',
+      queryParameters: {'id_user': idUser, 'id_portofolio': idPorto},
+      // ✅ Hapus headers manual
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menambahkan $entity');
+      throw Exception('Gagal unlike portofolio');
     }
   }
 
   Future<void> savePorto(String idUser, String idPorto) async {
     final response = await apiClient.post(
-      '/save/create?id_user=$idUser&id_portofolio=$idPorto',
-      headers: {'Content-Type': 'application/json'},
+      '/save/create',
+      queryParameters: {'id_user': idUser, 'id_portofolio': idPorto},
+      // ✅ Hapus headers manual
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menambahkan $entity');
+      throw Exception('Gagal save portofolio');
     }
   }
 
   Future<void> unsavePorto(String idUser, String idPorto) async {
     final response = await apiClient.delete(
-      '/save/delete?id_user=$idUser&id_portofolio=$idPorto',
-      headers: {'Content-Type': 'application/json'},
+      '/save/delete',
+      queryParameters: {'id_user': idUser, 'id_portofolio': idPorto},
+      // ✅ Hapus headers manual
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menambahkan $entity');
+      throw Exception('Gagal unsave portofolio');
     }
   }
 

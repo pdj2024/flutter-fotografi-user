@@ -112,7 +112,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+        margin: const EdgeInsets.only(left: 10, right: 10, bottom: 20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: Colors.white,
@@ -198,7 +198,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
               builder: (context, state, _) {
                 final provider = context.read<PortofolioProvider>();
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                   child: Row(
                     children: [
                       Expanded(
@@ -342,7 +342,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
             // ── Caption ───────────────────────────────────
             if (caption != null) ...[
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: Divider(color: Colors.grey.shade300),
               ),
               const SizedBox(height: 6),

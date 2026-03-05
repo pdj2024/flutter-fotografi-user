@@ -7,8 +7,11 @@ import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/account/edit_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/portofolio_account_section.dart';
 import 'package:mpjnew/src/features/customer/view/account/setting_page.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
+import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 class CustomerAccountPage extends StatefulWidget {
   const CustomerAccountPage({super.key});
@@ -18,6 +21,8 @@ class CustomerAccountPage extends StatefulWidget {
 }
 
 class _CustomerAccountPageState extends State<CustomerAccountPage> {
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
   // ✅ Check if profile is complete
   bool _isProfileComplete(CustomerModel? customer) {
     if (customer == null) return false;
@@ -58,6 +63,36 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
     if (customer.namaKota.isNotEmpty) filled++;
 
     return ((filled / total) * 100).round();
+  }
+
+  // ─── SmartRefresher callback ────────────────────────────────────
+  Future<void> _onRefresh() async {
+    if (!mounted) {
+      _refreshController.refreshCompleted();
+      return;
+    }
+    try {
+      final portofolioProvider = context.read<PortofolioProvider>();
+      final userProvider = context.read<UserProvider>();
+
+      await Future.wait([
+        userProvider.checkLoginGoogle(
+          role: Constants.customer,
+        ),
+        portofolioProvider.loadLikedPortofolio(
+          context: context,
+          syncFromApi: true,
+        ),
+        portofolioProvider.loadSavedPortofolio(
+          context: context,
+          syncFromApi: true,
+        ),
+      ]);
+      _refreshController.refreshCompleted();
+    } catch (e) {
+      debugPrint('[VendorBio] ❌ Refresh error: $e');
+      _refreshController.refreshFailed();
+    }
   }
 
   @override
@@ -105,202 +140,214 @@ class _CustomerAccountPageState extends State<CustomerAccountPage> {
           ],
         ),
         backgroundColor: const Color(0xFFF9F9F9),
-        body: NestedScrollView(
-          physics: AlwaysScrollableScrollPhysics(),
-          headerSliverBuilder: (context, _) => [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    (userProvider.isLoading)
-                        ? ShimmerPlaceholder(
-                            radius: 20,
-                            height: 200,
-                          )
-                        : Container(
-                            margin: const EdgeInsets.only(top: 20, bottom: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    userProvider.photoUrl == null
-                                        ? Container(
-                                            width: 68,
-                                            height: 68,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  Constants.primaryColorVendor,
-                                                  Constants.primaryColorVendor
-                                                      .withOpacity(0.7),
-                                                ],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
+        body: SmartRefresher(
+          controller: _refreshController,
+          onRefresh: _onRefresh,
+          physics: const AlwaysScrollableScrollPhysics(),
+          header: buildRefreshHeader(),
+          child: NestedScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            headerSliverBuilder: (context, _) => [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      (userProvider.isLoading)
+                          ? ShimmerPlaceholder(
+                              radius: 20,
+                              height: 200,
+                            )
+                          : Container(
+                              margin:
+                                  const EdgeInsets.only(top: 20, bottom: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      userProvider.photoUrl == null
+                                          ? Container(
+                                              width: 68,
+                                              height: 68,
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    Constants
+                                                        .primaryColorVendor,
+                                                    Constants.primaryColorVendor
+                                                        .withOpacity(0.7),
+                                                  ],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                shape: BoxShape.circle,
                                               ),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                (userProvider.customer
-                                                                ?.namaDisplay ==
-                                                            ""
-                                                        ? userProvider
-                                                            .customer!.email[0]
-                                                            .toUpperCase()
-                                                        : userProvider.customer
-                                                            ?.namaDisplay[0]
-                                                            .toUpperCase()) ??
-                                                    "C".toUpperCase(),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 32,
-                                                  fontWeight: FontWeight.bold,
+                                              child: Center(
+                                                child: Text(
+                                                  (userProvider.customer
+                                                                  ?.namaDisplay ==
+                                                              ""
+                                                          ? userProvider
+                                                              .customer!
+                                                              .email[0]
+                                                              .toUpperCase()
+                                                          : userProvider
+                                                              .customer
+                                                              ?.namaDisplay[0]
+                                                              .toUpperCase()) ??
+                                                      "C".toUpperCase(),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 32,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ),
+                                            )
+                                          : AvatarCircle(
+                                              size: 82,
+                                              imgUrl: userProvider.photoUrl,
                                             ),
-                                          )
-                                        : AvatarCircle(
-                                            size: 82,
-                                            imgUrl: userProvider.photoUrl,
-                                          ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    userProvider.customer
-                                                                ?.namaDisplay !=
-                                                            ""
-                                                        ? userProvider.customer!
-                                                            .namaDisplay
-                                                        : userProvider.customer
-                                                                    ?.email !=
-                                                                null
-                                                            ? userProvider
-                                                                .customer!.email
-                                                                .split('@')
-                                                                .first
-                                                            : 'Customer',
-                                                    style: const TextStyle(
-                                                      fontSize: 20,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    userProvider.customer
-                                                            ?.namaKota ??
-                                                        "",
-                                                    style: const TextStyle(
-                                                        fontSize: 14),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // ═══════════════════════════════════════
-                                // ✅ PROFILE COMPLETION WARNING
-                                // ═══════════════════════════════════════
-                                if (!userProvider.isLoading &&
-                                    !isProfileComplete)
-                                  _buildProfileCompletionBanner(customer)
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            onPressed: () {
-                                              context
-                                                  .read<NavigationProvider>()
-                                                  .navigateToPage(
-                                                    context,
-                                                    EditAccountPage(),
-                                                    targetTabIndex: 3,
-                                                  );
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.grey.shade300,
-                                              foregroundColor: Colors.black,
-                                              elevation: 0,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 22,
-                                                      vertical: 10),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                const Icon(Icons.edit),
-                                                const SizedBox(width: 8),
-                                                const Text(
-                                                  'Edit Profil',
-                                                  style:
-                                                      TextStyle(fontSize: 14),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      userProvider.customer
+                                                                  ?.namaDisplay !=
+                                                              ""
+                                                          ? userProvider
+                                                              .customer!
+                                                              .namaDisplay
+                                                          : userProvider
+                                                                      .customer
+                                                                      ?.email !=
+                                                                  null
+                                                              ? userProvider
+                                                                  .customer!
+                                                                  .email
+                                                                  .split('@')
+                                                                  .first
+                                                              : 'Customer',
+                                                      style: const TextStyle(
+                                                        fontSize: 20,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      userProvider.customer
+                                                              ?.namaKota ??
+                                                          "",
+                                                      style: const TextStyle(
+                                                          fontSize: 14),
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
-                                          ),
+                                            const SizedBox(height: 4),
+                                          ],
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                              ],
+                                  // ═══════════════════════════════════════
+                                  // ✅ PROFILE COMPLETION WARNING
+                                  // ═══════════════════════════════════════
+                                  if (!userProvider.isLoading &&
+                                      !isProfileComplete)
+                                    _buildProfileCompletionBanner(customer)
+                                  else
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: ElevatedButton(
+                                              onPressed: () {
+                                                context
+                                                    .read<NavigationProvider>()
+                                                    .navigateToPage(
+                                                      context,
+                                                      EditAccountPage(),
+                                                      targetTabIndex: 3,
+                                                    );
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    Colors.grey.shade300,
+                                                foregroundColor: Colors.black,
+                                                elevation: 0,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 22,
+                                                        vertical: 10),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.edit),
+                                                  const SizedBox(width: 8),
+                                                  const Text(
+                                                    'Edit Profil',
+                                                    style:
+                                                        TextStyle(fontSize: 14),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
+                      TabBar(
+                        overlayColor:
+                            WidgetStatePropertyAll(Colors.transparent),
+                        indicatorColor: Constants.primaryColorVendor,
+                        labelColor: Constants.primaryColorVendor,
+                        tabs: [
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: Tab(text: "Likes"),
                           ),
-                    TabBar(
-                      overlayColor: WidgetStatePropertyAll(Colors.transparent),
-                      indicatorColor: Constants.primaryColorVendor,
-                      labelColor: Constants.primaryColorVendor,
-                      tabs: [
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Tab(text: "Likes"),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Tab(text: "Saves"),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 10),
-                  ],
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: Tab(text: "Saves"),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
 
-          /// PENTING: jangan bungkus TabBarView dengan Padding (BREAK refresh)
-          body: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: TabBarView(
+            /// PENTING: jangan bungkus TabBarView dengan Padding (BREAK refresh)
+            body: TabBarView(
               children: [
                 PortofolioAccountSection(data: "like"),
                 PortofolioAccountSection(data: "save"),
