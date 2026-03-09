@@ -103,6 +103,7 @@ class ChatNotificationHandler {
     try {
       final detail = NotificationHelper.parseDetail(message.data['detail']);
       final sendStatus = detail['send_status'] as String? ?? '';
+      final senderId = detail['sender_id'] as String? ?? '';
 
       // ✅ CRITICAL: Only show notification for 'sent' status
       // This ensures we don't show notifications for status updates (received/read)
@@ -111,8 +112,12 @@ class ChatNotificationHandler {
         return;
       }
 
+      if (senderId == currentUserId) {
+        debugPrint('[ChatHandler] 🔕 Skip notification (same sender)');
+        return;
+      }
+
       final roomId = detail['room_id'] as String? ?? '';
-      final senderId = detail['sender_id'] as String? ?? '';
       final messageText = detail['message'] as String? ?? '';
       final messageId = detail['message_id'] as String? ?? '';
       final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';

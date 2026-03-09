@@ -220,6 +220,8 @@ class HiveChatRepository {
     final room = _roomsBox!.get(roomId);
     if (room == null) return;
 
+    if (incrementUnread) debugPrint('[HiveChatRepo] increment unread');
+
     List<String> updatedReceivedList =
         List<String>.from(room.listIdMessageReceived);
     int updatedReceivedCount = room.countStatusReceived;
@@ -323,77 +325,44 @@ class HiveChatRepository {
   Future<void> recalculateUnreadForRoom(
       String roomId, String currentUserId) async {
     try {
-      debugPrint('[HiveChatRepo] 🔄 Recalculating unread for: $roomId');
-
       final messages = await getMessages(roomId);
 
-      final receivedMessages = messages.where((msg) {
-        final isFromOther = msg.senderId != currentUserId;
-        final isReceived = msg.sendStatus == 'received';
-        return isFromOther && isReceived;
+      // ✅ FIXED: Unread = dari partner (bukan diri sendiri)
+      //           + belum dibaca (status != 'read')
+      //   TIDAK perlu cek sendStatus == 'received' karena itu
+      //   delivery status, bukan read status.
+      final unreadMessages = messages.where((msg) {
+        final isFromPartner = msg.senderId != currentUserId;
+        final isNotRead = msg.sendStatus != 'read';
+        return isFromPartner && isNotRead;
       }).toList();
 
-      final receivedMessageIds =
-          receivedMessages.map((msg) => msg.messageId).toList();
+      final unreadIds = unreadMessages.map((m) => m.messageId).toList();
 
       final room = _roomsBox?.get(roomId);
       if (room != null) {
-        final updated = room.copyWith(
-          countStatusReceived: receivedMessages.length,
-          listIdMessageReceived: receivedMessageIds,
+        await _roomsBox!.put(
+          roomId,
+          room.copyWith(
+            countStatusReceived: unreadIds.length,
+            listIdMessageReceived: unreadIds,
+          ),
         );
-
-        await _roomsBox!.put(roomId, updated);
-
-        debugPrint('[HiveChatRepo] ✅ Recalculated unread for $roomId');
         debugPrint(
-            '[HiveChatRepo] 📊 Received count: ${receivedMessages.length}');
-        debugPrint('[HiveChatRepo] 📋 Message IDs: $receivedMessageIds');
-      } else {
-        debugPrint('[HiveChatRepo] ⚠️ Room not found: $roomId');
+            '[HiveChatRepo] ✅ Unread for $roomId = ${unreadIds.length}');
       }
-    } catch (e, st) {
-      debugPrint('[HiveChatRepo] ❌ Recalculate error for $roomId: $e\n$st');
+    } catch (e) {
+      debugPrint('[HiveChatRepo] ❌ recalculateUnread error: $e');
     }
   }
 
   Future<void> recalculateAllUnreadCounts(String currentUserId) async {
-    try {
-      final rooms = getRooms();
-
-      if (rooms.isEmpty) {
-        debugPrint('[HiveChatRepo] ⚠️ No rooms to recalculate');
-        return;
-      }
-
-      debugPrint(
-          '[HiveChatRepo] 🔄 Recalculating unread for ${rooms.length} rooms...');
-
-      int totalRecalculated = 0;
-      int totalUnreadCount = 0;
-
-      for (final room in rooms) {
-        try {
-          await recalculateUnreadForRoom(room.roomId, currentUserId);
-          totalRecalculated++;
-
-          final updatedRoom = _roomsBox?.get(room.roomId);
-          if (updatedRoom != null) {
-            totalUnreadCount += updatedRoom.countStatusReceived;
-          }
-        } catch (e) {
-          debugPrint(
-              '[HiveChatRepo] ⚠️ Failed to recalculate ${room.roomId}: $e');
-        }
-      }
-
-      debugPrint('[HiveChatRepo] ✅ Recalculation complete');
-      debugPrint(
-          '[HiveChatRepo] 📊 Recalculated: $totalRecalculated/${rooms.length} rooms');
-      debugPrint('[HiveChatRepo] 📊 Total unread: $totalUnreadCount');
-    } catch (e, st) {
-      debugPrint('[HiveChatRepo] ❌ Recalculate all error: $e\n$st');
+    final rooms = getRooms();
+    for (final room in rooms) {
+      await recalculateUnreadForRoom(room.roomId, currentUserId);
     }
+    debugPrint(
+        '[HiveChatRepo] ✅ All unread recalculated. Total: ${getTotalUnreadCount()}');
   }
 
   Future<void> deleteRoom(String roomId) async {

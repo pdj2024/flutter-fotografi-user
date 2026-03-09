@@ -33,7 +33,7 @@ class _KonfirmasiPemotretanDialogState
           await context.read<HistoryOrderProvider>().createProgressLinear(
                 noOrder: widget.pesanan.noBukti,
                 currentStatus: 'persiapan',
-                newStatus: 'pengerjaan',
+                newStatus: 'proses',
                 senderId: widget.pesanan.idCustomer,
               );
 
@@ -42,7 +42,7 @@ class _KonfirmasiPemotretanDialogState
       if (ok) {
         context
             .read<PesananProvider>()
-            .updateOrderStatus(widget.pesanan.noBukti, 'pengerjaan');
+            .updateOrderStatus(widget.pesanan.noBukti, 'proses');
 
         CustomSnackbar.showSuccessSnackbar(
           context,

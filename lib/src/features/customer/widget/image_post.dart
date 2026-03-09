@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/media_preload_service.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
@@ -445,7 +446,7 @@ class _ImagePostState extends State<ImagePost> {
             width: isActive ? 20 : 6,
             decoration: BoxDecoration(
               color: isActive
-                  ? Colors.black87
+                  ? Constants.primaryColor
                   : (isPreloaded ? Colors.grey.shade300 : Colors.grey.shade400),
               borderRadius: BorderRadius.circular(3),
             ),

@@ -265,7 +265,7 @@ class HistoryOrderProvider extends ChangeNotifier {
 
   Future<bool> createProses(String noOrder, String senderId) =>
       createProgressWithStatus(
-          noOrder: noOrder, senderId: senderId, status: 'pengerjaan');
+          noOrder: noOrder, senderId: senderId, status: 'proses');
 
   Future<bool> createReview(String noOrder, String senderId) =>
       createProgressWithStatus(
@@ -276,10 +276,10 @@ class HistoryOrderProvider extends ChangeNotifier {
       createProgressWithStatus(
           noOrder: noOrder,
           senderId: senderId,
-          status: 'pengerjaan',
+          status: 'proses',
           customDeskripsi: catatan != null
               ? 'Customer meminta revisi: $catatan'
-              : OrderStatusFlow.defaultDeskripsi('review', 'pengerjaan'));
+              : OrderStatusFlow.defaultDeskripsi('review', 'proses'));
 
   Future<bool> createSelesai(String noOrder, String senderId) =>
       createProgressWithStatus(
