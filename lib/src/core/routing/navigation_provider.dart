@@ -105,7 +105,8 @@ class NavigationProvider with ChangeNotifier {
   // 🔐 AUTH METHODS
   // =========================================================
 
-  Future<void> checkLogin(BuildContext context, String role, bool silent) async {
+  Future<void> checkLogin(
+      BuildContext context, String role, bool silent) async {
     debugPrint("[checkLogin] 🔐 start for role: $role | silent: $silent");
 
     try {
@@ -239,25 +240,28 @@ class NavigationProvider with ChangeNotifier {
     String searchPageArg = '',
     PageTransitionType transitionType = PageTransitionType.slideRight,
   }) async {
-    debugPrint("[navigateToPage] 🎯 $targetPage | fullscreen: $fullscreen");
+    // ✅ Halaman public — skip auth check sepenuhnya
+    const publicPages = {'SearchPage'};
+    final isPublic = publicPages.contains(targetPage) || !hrsLogin;
 
-    final isAuth = await isAuthenticated();
-
-    if (!isAuth && hrsLogin) {
-      debugPrint("[navigateToPage] 🔒 Redirect to login");
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(
-            builder: (_) => const UserLogin(),
-            settings: RouteSettings(arguments: {
-              'targetPage': targetPage,
-              'tabIndex': targetTabIndex,
-              'searchPageArg': searchPageArg,
-            }),
-          ),
-        );
+    if (!isPublic) {
+      final isAuth = await isAuthenticated();
+      if (!isAuth) {
+        debugPrint("[navigateToPage] 🔒 Redirect to login");
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              builder: (_) => const UserLogin(),
+              settings: RouteSettings(arguments: {
+                'targetPage': targetPage,
+                'tabIndex': targetTabIndex,
+                'searchPageArg': searchPageArg,
+              }),
+            ),
+          );
+        }
+        return;
       }
-      return;
     }
 
     if (!context.mounted) return;
@@ -467,7 +471,8 @@ class NavigationProvider with ChangeNotifier {
           ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
           : "Hari ini";
     }
-    if (messageDate == today.subtract(const Duration(days: 1))) return "Kemarin";
+    if (messageDate == today.subtract(const Duration(days: 1)))
+      return "Kemarin";
     return DateFormat("d MMM yyyy", "id_ID").format(date);
   }
 
@@ -481,7 +486,9 @@ class NavigationProvider with ChangeNotifier {
     final mediaList = p.mediaUrls ?? [];
     final firstMedia = mediaList.isNotEmpty ? mediaList.first : null;
     final isVideo = (firstMedia?.contentType ?? '').startsWith('video');
-    return isVideo ? (firstMedia?.thumbUrl ?? firstMedia?.url) : firstMedia?.url;
+    return isVideo
+        ? (firstMedia?.thumbUrl ?? firstMedia?.url)
+        : firstMedia?.url;
   }
 }
 

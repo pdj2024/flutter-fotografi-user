@@ -40,6 +40,7 @@ class PortofolioService {
 
       final response = await apiClient.get(
         '/$controller/getAll',
+        requireAuth: false,
         queryParameters: {
           if (noId != null && noId.toString().isNotEmpty) 'no_id': noId,
           if (status != null && status.toString().isNotEmpty) 'status': status,

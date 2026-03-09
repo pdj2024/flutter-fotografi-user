@@ -96,9 +96,11 @@ class _SearchPageState extends State<SearchPage>
   Future<void> loadData({bool loadMore = false}) async {
     if (loadMore) {
       if (_isLoadingMore || !_hasMoreData) return;
+      if (!mounted) return; // ← add
       setState(() => _isLoadingMore = true);
     } else {
       _fadeController.reset();
+      if (!mounted) return; // ← add
       setState(() {
         isLoadingPorto = true;
         errorPorto = null;
@@ -119,6 +121,8 @@ class _SearchPageState extends State<SearchPage>
         kota: filters['id_lokasi'],
       );
 
+      if (!mounted) return; // ← add — widget mungkin dispose saat await
+
       if (loadMore) {
         setState(() {
           portofolioList.addAll(pList);
@@ -132,8 +136,10 @@ class _SearchPageState extends State<SearchPage>
 
       _precacheImages();
     } catch (e) {
+      if (!mounted) return; // ← add
       setState(() => errorPorto = 'Gagal memuat portofolio');
     } finally {
+      if (!mounted) return; // ← add
       setState(() {
         isLoadingPorto = false;
         _isLoadingMore = false;

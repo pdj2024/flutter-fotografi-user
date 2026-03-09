@@ -171,6 +171,15 @@ class AuthService {
     return await _doRefreshAccessToken();
   }
 
+  Future<bool> hasValidToken() async {
+    final token = await tokenStorage.getAccessToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  /// Ambil token dari storage tanpa refresh
+  Future<String?> getStoredToken() async {
+    return await tokenStorage.getAccessToken();
+  }
   // ═══════════════════════════════════════════════════════
   // 🔄 REFRESH ACCESS TOKEN
   // ═══════════════════════════════════════════════════════
