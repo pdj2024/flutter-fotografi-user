@@ -178,18 +178,17 @@ class ChatProvider extends ChangeNotifier {
 
   void _backgroundLoadRooms() {
     loadRooms(forceRefresh: true, silent: true)
-        .then((r) => debugPrint('[ChatProvider] ✅ Background: ${r.length} rooms'))
-        .catchError((e) => debugPrint('[ChatProvider] ⚠️ Background rooms: $e'));
+        .then(
+            (r) => debugPrint('[ChatProvider] ✅ Background: ${r.length} rooms'))
+        .catchError(
+            (e) => debugPrint('[ChatProvider] ⚠️ Background rooms: $e'));
   }
 
   void _backgroundRecalculateUnread(String userId) {
-    _repository
-        .recalculateAllUnreadCounts(userId)
-        .then((_) {
-          debugPrint('[ChatProvider] ✅ Unread recalculated');
-          notifyListeners();
-        })
-        .catchError((e) => debugPrint('[ChatProvider] ⚠️ Unread recalc: $e'));
+    _repository.recalculateAllUnreadCounts(userId).then((_) {
+      debugPrint('[ChatProvider] ✅ Unread recalculated');
+      notifyListeners();
+    }).catchError((e) => debugPrint('[ChatProvider] ⚠️ Unread recalc: $e'));
   }
 
   // =========================================
@@ -256,7 +255,8 @@ class ChatProvider extends ChangeNotifier {
       return;
     }
 
-    debugPrint('[ChatProvider] 📨 FCM: ${message.messageId} from ${message.senderId}');
+    debugPrint(
+        '[ChatProvider] 📨 FCM: ${message.messageId} from ${message.senderId}');
 
     final isFromMe = message.senderId == _currentUserId;
     final isActiveRoom = _activeRoomId == message.roomId;
@@ -296,29 +296,36 @@ class ChatProvider extends ChangeNotifier {
     if (alreadyExists) {
       await _updateExistingServerMessage(
           message, serverEntity, paket, penawaran, pesanan);
-      return;
-    }
-
-    final localEchoFound = await _findAndReplaceLocalEcho(
-      message: message,
-      serverEntity: serverEntity,
-    );
-
-    if (localEchoFound) {
-      _removeFromPendingTracking(message.roomId, message.messageId);
-      _removeFromPendingTracking(message.roomId, message.localId ?? '');
     } else {
-      await _repository.addMessage(serverEntity);
-      _addToInMemory(message.roomId, serverEntity);
-      debugPrint('[ChatProvider] ✅ Added (from another device)');
+      final localEchoFound = await _findAndReplaceLocalEcho(
+        message: message,
+        serverEntity: serverEntity,
+      );
+
+      if (localEchoFound) {
+        _removeFromPendingTracking(message.roomId, message.messageId);
+        _removeFromPendingTracking(message.roomId, message.localId ?? '');
+      } else {
+        await _repository.addMessage(serverEntity);
+        _addToInMemory(message.roomId, serverEntity);
+      }
     }
 
+    // ✅ Update room last message TANPA menyentuh unread
     await _repository.updateRoomWithMessage(
       roomId: message.roomId,
       lastMessage: _buildLastMessage(message),
       lastMessageAt: message.sentAt,
-      incrementUnread: false,
+      incrementUnread: false, // ✅ pesan sendiri, jangan tambah unread
+      addToReceivedList: false, // ✅ jangan masuk received list
     );
+
+    // ✅ CRITICAL FIX: Recalculate untuk bersihkan stale unread
+    //    (sebelumnya method ini tidak memanggil recalculate sama sekali)
+    if (_currentUserId != null) {
+      await _repository.recalculateUnreadForRoom(
+          message.roomId, _currentUserId!);
+    }
 
     _notifyMessagesUpdate(message.roomId);
     notifyListeners();
@@ -346,7 +353,10 @@ class ChatProvider extends ChangeNotifier {
         message.idPaket != null &&
         message.idPaket!.isNotEmpty;
 
-    if (!statusChanged && !invoiceChanged && !penawaranChanged && !paketChanged) {
+    if (!statusChanged &&
+        !invoiceChanged &&
+        !penawaranChanged &&
+        !paketChanged) {
       debugPrint('[ChatProvider] ⏭️ No changes, skipping');
       return;
     }
@@ -356,7 +366,8 @@ class ChatProvider extends ChangeNotifier {
     PesananModel? pesanan = existing.pesanan;
 
     if (paketChanged) paket = await _loadPaketModel(message.idPaket);
-    if (penawaranChanged) penawaran = await _loadPenawaranModel(message.noPenawaran);
+    if (penawaranChanged)
+      penawaran = await _loadPenawaranModel(message.noPenawaran);
     if (invoiceChanged) pesanan = await _loadPesananModel(message.noInvoice);
 
     String finalStatus = message.sendStatus;
@@ -489,7 +500,8 @@ class ChatProvider extends ChangeNotifier {
 
     // STRATEGY 4: Pending tracking
     if (message.localId != null &&
-        (_pendingLocalMessages[message.roomId]?.contains(message.localId) ?? false)) {
+        (_pendingLocalMessages[message.roomId]?.contains(message.localId) ??
+            false)) {
       try {
         final localMsg = allMessages.firstWhere(
           (m) => m.messageId == message.localId || m.localId == message.localId,
@@ -511,7 +523,8 @@ class ChatProvider extends ChangeNotifier {
     await _repository.addMessage(newMessage);
     _addToInMemory(newMessage.roomId, newMessage);
     _notifyMessagesUpdate(newMessage.roomId);
-    debugPrint('[ChatProvider] 🔄 Replaced: $oldMessageId → ${newMessage.messageId}');
+    debugPrint(
+        '[ChatProvider] 🔄 Replaced: $oldMessageId → ${newMessage.messageId}');
   }
 
   Future<void> _handleMessageFromOthers(
@@ -528,37 +541,29 @@ class ChatProvider extends ChangeNotifier {
         await _repository.messageExists(message.roomId, message.messageId);
 
     String finalStatus;
-    bool shouldIncrementUnread;
-    bool shouldAddToReceivedList = false;
 
     if (exists) {
       final existing =
           await _repository.getMessage(message.roomId, message.messageId);
       if (existing == null) return;
 
-      final needsUpdate = (existing.paket == null && paket != null) ||
+      if (isActiveRoom) {
+        finalStatus = 'read';
+        await _repository.clearRoomUnread(message.roomId);
+        await _repository.markAllMessagesAsRead(
+          roomId: message.roomId,
+          currentUserId: _currentUserId!,
+        );
+      } else {
+        finalStatus = message.sendStatus == 'read' ? 'read' : 'received';
+      }
+
+      final needsUpdate = existing.sendStatus != finalStatus ||
+          (existing.paket == null && paket != null) ||
           (existing.penawaran == null && penawaran != null) ||
-          (existing.pesanan == null && pesanan != null) ||
-          existing.sendStatus != message.sendStatus;
+          (existing.pesanan == null && pesanan != null);
 
       if (needsUpdate) {
-        if (isActiveRoom) {
-          finalStatus = 'read';
-          shouldIncrementUnread = false;
-          await _repository.clearRoomUnread(message.roomId);
-          await _repository.markAllMessagesAsRead(
-            roomId: message.roomId,
-            currentUserId: _currentUserId!,
-          );
-        } else if (message.sendStatus == 'sent') {
-          finalStatus = 'received';
-          shouldIncrementUnread = false;
-          shouldAddToReceivedList = existing.sendStatus != 'received';
-        } else {
-          finalStatus = message.sendStatus;
-          shouldIncrementUnread = false;
-        }
-
         await _repository.smartUpdateMessage(
           roomId: message.roomId,
           messageId: message.messageId,
@@ -576,26 +581,11 @@ class ChatProvider extends ChangeNotifier {
             pesanan: pesanan,
           ),
         );
-      } else {
-        if (isActiveRoom && existing.sendStatus != 'read') {
-          finalStatus = 'read';
-          shouldIncrementUnread = false;
-          await _repository.updateMessageStatus(
-            roomId: message.roomId,
-            messageId: message.messageId,
-            newStatus: 'read',
-          );
-          _updateInMemoryMessage(
-              message.roomId, existing.copyWith(sendStatus: 'read'));
-        } else {
-          finalStatus = existing.sendStatus;
-          shouldIncrementUnread = false;
-        }
       }
     } else {
+      // Pesan baru dari partner
       if (isActiveRoom) {
         finalStatus = 'read';
-        shouldIncrementUnread = false;
         final entity = ChatMessageEntity.fromChatModel(
           message.copyWith(sendStatus: 'read'),
           paket: paket,
@@ -607,8 +597,6 @@ class ChatProvider extends ChangeNotifier {
         _addToInMemory(message.roomId, entity);
       } else {
         finalStatus = 'received';
-        shouldIncrementUnread = true;
-        shouldAddToReceivedList = true;
         final entity = ChatMessageEntity.fromChatModel(
           message.copyWith(sendStatus: 'received'),
           paket: paket,
@@ -617,28 +605,33 @@ class ChatProvider extends ChangeNotifier {
         );
         await _repository.addMessage(entity);
         _addToInMemory(message.roomId, entity);
+        onNewMessageFromOther?.call(message);
       }
-
-      if (!isActiveRoom) onNewMessageFromOther?.call(message);
     }
 
+    // ✅ Update last message room TANPA manual unread
     await _repository.updateRoomWithMessage(
       roomId: message.roomId,
       lastMessage: _buildLastMessage(message),
       lastMessageAt: message.sentAt,
-      incrementUnread: shouldIncrementUnread,
-      addToReceivedList: shouldAddToReceivedList,
-      messageId: message.messageId,
+      incrementUnread: false, // ✅ recalculate yang akan hitung
+      addToReceivedList: false, // ✅ recalculate yang akan set list
     );
 
+    // Sync status ke API jika perlu
     if (message.sendStatus != finalStatus) {
       _apiService
-          .updateMessageStatus(messageId: message.messageId, status: finalStatus)
-          .then((_) => debugPrint('[ChatProvider] ✅ Status synced: $finalStatus'))
+          .updateMessageStatus(
+              messageId: message.messageId, status: finalStatus)
           .catchError((e) => debugPrint('[ChatProvider] ⚠️ Sync failed: $e'));
     }
 
-    await _repository.recalculateUnreadForRoom(message.roomId, _currentUserId!);
+    // ✅ Single source of truth untuk unread
+    if (_currentUserId != null) {
+      await _repository.recalculateUnreadForRoom(
+          message.roomId, _currentUserId!);
+    }
+
     _notifyMessagesUpdate(message.roomId);
     notifyListeners();
   }
@@ -693,9 +686,11 @@ class ChatProvider extends ChangeNotifier {
     if (_currentUserId == null) return null;
 
     final allRooms = _repository.getRooms();
-    final cached = allRooms.where((r) =>
-        r.idLawan == partnerId ||
-        r.getPartnerId(_currentUserId!) == partnerId).toList();
+    final cached = allRooms
+        .where((r) =>
+            r.idLawan == partnerId ||
+            r.getPartnerId(_currentUserId!) == partnerId)
+        .toList();
 
     if (cached.isNotEmpty) {
       final m = cached.first.toRoomChatModel();
@@ -782,12 +777,14 @@ class ChatProvider extends ChangeNotifier {
     final penawaranMap = await _batchFetchPenawaran(penawaranIds);
     final pesananMap = await _batchFetchPesanan(pesananIds);
 
-    final enriched = messages.map((m) => ChatMessageEntity.fromChatModel(
-          m,
-          paket: paketMap[m.idPaket],
-          penawaran: penawaranMap[m.noPenawaran],
-          pesanan: pesananMap[m.noInvoice],
-        )).toList()
+    final enriched = messages
+        .map((m) => ChatMessageEntity.fromChatModel(
+              m,
+              paket: paketMap[m.idPaket],
+              penawaran: penawaranMap[m.noPenawaran],
+              pesanan: pesananMap[m.noInvoice],
+            ))
+        .toList()
       ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
 
     _allMessagesInMemory[roomId] = enriched;
@@ -797,7 +794,8 @@ class ChatProvider extends ChangeNotifier {
         : enriched;
     await _repository.storeLatest100Messages(roomId, latest100);
 
-    debugPrint('[ChatProvider] 💾 Memory: ${enriched.length} | Hive: ${latest100.length}');
+    debugPrint(
+        '[ChatProvider] 💾 Memory: ${enriched.length} | Hive: ${latest100.length}');
   }
 
   Future<Map<String, PaketModel>> _batchFetchPaket(List<String> ids) async {
@@ -810,7 +808,8 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, PenawaranModel>> _batchFetchPenawaran(List<String> ids) async {
+  Future<Map<String, PenawaranModel>> _batchFetchPenawaran(
+      List<String> ids) async {
     if (ids.isEmpty) return {};
     try {
       final list = await PenawaranService().getAll(idList: ids);
@@ -826,7 +825,8 @@ class ChatProvider extends ChangeNotifier {
       final result = <String, PesananModel>{};
       await Future.wait(ids.map((id) async {
         try {
-          final list = await PesananService().getAll(noBukti: id, status: 'aktif');
+          final list =
+              await PesananService().getAll(noBukti: id, status: 'aktif');
           if (list.isNotEmpty) result[id] = list.first;
         } catch (_) {}
       }));
@@ -909,7 +909,8 @@ class ChatProvider extends ChangeNotifier {
     final now = DateTime.now();
 
     String jenisPesan = 'text';
-    if (idPaket?.isNotEmpty == true) jenisPesan = 'paket';
+    if (idPaket?.isNotEmpty == true)
+      jenisPesan = 'paket';
     else if (noPenawaran?.isNotEmpty == true) jenisPesan = 'penawaran';
 
     final localMessage = ChatModel(
@@ -936,8 +937,8 @@ class ChatProvider extends ChangeNotifier {
 
     final paket = await _loadPaketModel(idPaket);
     final penawaran = await _loadPenawaranModel(noPenawaran);
-    final localEntity =
-        ChatMessageEntity.fromChatModel(localMessage, paket: paket, penawaran: penawaran);
+    final localEntity = ChatMessageEntity.fromChatModel(localMessage,
+        paket: paket, penawaran: penawaran);
 
     _addToPendingTracking(roomId, localId);
     await _repository.addMessage(localEntity);
@@ -954,8 +955,8 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result =
-          await _apiService.sendMessage(message: localMessage.copyWith(sendStatus: 'sent'));
+      final result = await _apiService.sendMessage(
+          message: localMessage.copyWith(sendStatus: 'sent'));
 
       if (result != null) {
         await _repository.updateMessageStatus(
@@ -963,7 +964,8 @@ class ChatProvider extends ChangeNotifier {
           messageId: localId,
           newStatus: 'sent',
         );
-        _updateInMemoryMessage(roomId, localEntity.copyWith(sendStatus: 'sent'));
+        _updateInMemoryMessage(
+            roomId, localEntity.copyWith(sendStatus: 'sent'));
         _notifyMessagesUpdate(roomId);
         notifyListeners();
         return true;
@@ -1012,21 +1014,23 @@ class ChatProvider extends ChangeNotifier {
   Future<void> markRoomAsRead(String roomId) async {
     if (_currentUserId == null) return;
 
-    debugPrint('[ChatProvider] 📖 Mark as read: $roomId');
-
     final messages = await _repository.getMessages(roomId);
     final unreadIds = messages
         .where((m) => m.senderId != _currentUserId && m.sendStatus != 'read')
         .map((m) => m.messageId)
         .toList();
 
-    await _repository.clearRoomUnread(roomId);
-    await _repository.clearRoomReceivedList(roomId);
+    if (unreadIds.isEmpty) return; // Tidak ada yang perlu di-update
+
     await _repository.markAllMessagesAsRead(
       roomId: roomId,
       currentUserId: _currentUserId!,
     );
 
+    // ✅ Recalculate setelah mark → badge langsung 0
+    await _repository.recalculateUnreadForRoom(roomId, _currentUserId!);
+
+    // Update in-memory
     if (_allMessagesInMemory.containsKey(roomId)) {
       _allMessagesInMemory[roomId] = _allMessagesInMemory[roomId]!.map((msg) {
         if (msg.senderId != _currentUserId && msg.sendStatus != 'read') {
@@ -1036,6 +1040,7 @@ class ChatProvider extends ChangeNotifier {
       }).toList();
     }
 
+    // Sync ke API (fire and forget)
     for (final id in unreadIds) {
       _apiService
           .updateMessageStatus(messageId: id, status: 'read')
@@ -1080,7 +1085,8 @@ class ChatProvider extends ChangeNotifier {
     try {
       if (pesananId.isEmpty) return false;
 
-      final result = await _apiService.update(message.copyWith(noInvoice: pesananId));
+      final result =
+          await _apiService.update(message.copyWith(noInvoice: pesananId));
       if (result.isEmpty) return false;
 
       final pesanan = await _loadPesananModel(pesananId);
@@ -1097,7 +1103,8 @@ class ChatProvider extends ChangeNotifier {
       await _repository.addMessage(updated);
 
       final idx = _allMessagesInMemory[message.roomId]
-          ?.indexWhere((m) => m.messageId == message.messageId) ?? -1;
+              ?.indexWhere((m) => m.messageId == message.messageId) ??
+          -1;
       if (idx != -1) _allMessagesInMemory[message.roomId]![idx] = updated;
 
       await _repository.updateRoomWithMessage(
@@ -1177,7 +1184,8 @@ class ChatProvider extends ChangeNotifier {
 
   String _buildLastMessage(ChatModel message) {
     if (message.message.isNotEmpty) return message.message;
-    if (message.noInvoice?.isNotEmpty == true) return '🧾 Vendor mengirim pesanan';
+    if (message.noInvoice?.isNotEmpty == true)
+      return '🧾 Vendor mengirim pesanan';
     if (message.noPenawaran?.isNotEmpty == true) return '💰 Penawaran baru';
     return '📦 Paket ditawarkan';
   }

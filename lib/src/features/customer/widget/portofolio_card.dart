@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:hive_flutter/adapters.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -19,6 +22,9 @@ import 'package:url_launcher/url_launcher.dart';
 /// Card hanya:
 ///   1. Membaca state dari provider via Selector (efisien, tidak rebuild semua)
 ///   2. Memanggil provider.toggleLike / toggleSave saat user tap
+///
+/// ✅ UPDATE: Gambar kini mengikuti rasio asli (1:1, 4:3, 16:9, dst.)
+///           + carousel swipe jika portofolio punya lebih dari 1 gambar
 class PortofolioCard extends StatefulWidget {
   const PortofolioCard({
     Key? key,
@@ -26,7 +32,7 @@ class PortofolioCard extends StatefulWidget {
     this.imageUrl,
     required this.name,
     this.rating,
-    this.aspectRatio = 1.0,
+    this.aspectRatio = 1.0, // kept for API compat, no longer used internally
     required this.noId,
     required this.idVendor,
     required this.portofolio,
@@ -37,7 +43,7 @@ class PortofolioCard extends StatefulWidget {
   final String? imageUrl;
   final String name;
   final int? rating;
-  final double aspectRatio;
+  final double aspectRatio; // deprecated — height is now auto-detected
   final String noId;
   final String idVendor;
 
@@ -46,6 +52,13 @@ class PortofolioCard extends StatefulWidget {
 }
 
 class _PortofolioCardState extends State<PortofolioCard> {
+  // ── Carousel ─────────────────────────────────────────────
+  int _currentIndex = 0;
+
+  // ── Dynamic image height ──────────────────────────────────
+  double? _imageHeight;
+  bool _isImageLoaded = false;
+
   // ── Caption ──────────────────────────────────────────────
   bool _isCaptionExpanded = false;
   bool _captionHasOverflow = true;
@@ -59,6 +72,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
       _measureCaption();
     });
   }
+
+  // ── Caption helpers ───────────────────────────────────────
 
   void _measureCaption() {
     final caption = _plainCaption;
@@ -86,6 +101,83 @@ class _PortofolioCardState extends State<PortofolioCard> {
     return c.replaceAll(RegExp(r'<[^>]*>'), '').trim();
   }
 
+  // ── Image dimension detection (same logic as ImagePost) ───
+
+  Future<void> _loadImageDimensions(ImageProvider imageProvider) async {
+    if (!mounted || _isImageLoaded) return;
+
+    final stream = imageProvider.resolve(const ImageConfiguration());
+    final completer = Completer<void>();
+    late ImageStreamListener listener;
+
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        if (!mounted) return;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final ar = info.image.width / info.image.height;
+        if (mounted) {
+          setState(() {
+            _imageHeight = screenWidth / ar;
+            _isImageLoaded = true;
+          });
+        }
+        stream.removeListener(listener);
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (_, __) {
+        if (!mounted) return;
+        if (mounted) {
+          setState(() {
+            _imageHeight = 300;
+            _isImageLoaded = true;
+          });
+        }
+        stream.removeListener(listener);
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+
+    stream.addListener(listener);
+
+    // Timeout fallback
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!completer.isCompleted && mounted) {
+        setState(() {
+          _imageHeight = 300;
+          _isImageLoaded = true;
+        });
+        stream.removeListener(listener);
+        completer.complete();
+      }
+    });
+  }
+
+  // ── Carousel helpers ──────────────────────────────────────
+
+  List<MediaUrlModel> get _validMedia => widget.portofolio.mediaUrls
+      .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
+      .toList();
+
+  void _onSwipe(DragEndDetails details) {
+    final media = _validMedia;
+    if (media.length <= 1) return;
+
+    if (details.primaryVelocity! < -300 && _currentIndex < media.length - 1) {
+      setState(() {
+        _currentIndex++;
+        // Reset height so next image can recalculate its own ratio
+        _isImageLoaded = false;
+        _imageHeight = null;
+      });
+    } else if (details.primaryVelocity! > 300 && _currentIndex > 0) {
+      setState(() {
+        _currentIndex--;
+        _isImageLoaded = false;
+        _imageHeight = null;
+      });
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════════════════════
@@ -94,10 +186,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
   Widget build(BuildContext context) {
     final nav = context.read<NavigationProvider>();
     final porto = widget.portofolio;
-    final bool isImageValid =
-        widget.imageUrl != null && widget.imageUrl!.trim().isNotEmpty;
+    final media = _validMedia;
     final bool isAvatarValid = widget.photographerIcon.trim().isNotEmpty;
-    final bool hasMultipleMedia = porto.mediaUrls.length > 1;
     final String? caption = _plainCaption;
 
     return GestureDetector(
@@ -127,67 +217,54 @@ class _PortofolioCardState extends State<PortofolioCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Gambar ────────────────────────────────────
+            // ── Gambar carousel ──────────────────────────────
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: AspectRatio(
-                aspectRatio: widget.aspectRatio,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CachedNetworkImage(
-                      imageUrl: isImageValid ? widget.imageUrl! : '',
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => const ShimmerPlaceholder(),
-                      errorWidget: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: Icon(
-                          Icons.image_not_supported_outlined,
-                          color: Colors.grey.shade400,
-                          size: 36,
-                        ),
-                      ),
-                    ),
-                    if (hasMultipleMedia)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.55),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.photo_library_outlined,
-                                color: Colors.white,
-                                size: 13,
+              child: GestureDetector(
+                onHorizontalDragEnd: _onSwipe,
+                child: Container(
+                  width: double.infinity,
+                  color: Colors.grey.shade50,
+                  // Use detected height; fall back to 300 while loading
+                  height: _imageHeight ?? 300,
+                  child: Stack(
+                    children: [
+                      // ── Animated image switch ──────────────
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 280),
+                        switchInCurve: Curves.easeInOut,
+                        switchOutCurve: Curves.easeInOut,
+                        transitionBuilder: (child, anim) =>
+                            FadeTransition(opacity: anim, child: child),
+                        child: media.isEmpty
+                            ? _buildNoImagePlaceholder()
+                            : _buildImageItem(
+                                media[_currentIndex],
+                                key: ValueKey('${porto.noId}_$_currentIndex'),
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${porto.mediaUrls.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
-                  ],
+
+                      // ── Counter badge (top-right) ──────────
+                      if (media.length > 1)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: _buildCounterBadge(media.length),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
 
-            // ── Like / Save row ───────────────────────────
-            // Selector: hanya rebuild bagian ini saat state like/save berubah
+            // ── Dot indicator ────────────────────────────────
+            if (media.length > 1) ...[
+              const SizedBox(height: 8),
+              Center(child: _buildDotIndicator(media.length)),
+            ],
+
+            // ── Like / Save row ───────────────────────────────
             Selector<PortofolioProvider, _LikeSaveState>(
               selector: (_, provider) => _LikeSaveState(
                 isLiked: provider.isLiked(porto.noId),
@@ -263,7 +340,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                               horizontal: 5),
                                           width: 3,
                                           height: 3,
-                                          decoration: BoxDecoration(
+                                          decoration: const BoxDecoration(
                                             color: Colors.grey,
                                             shape: BoxShape.circle,
                                           ),
@@ -299,7 +376,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
                           ),
                         ),
                       ),
-                      // ── Action buttons ───────────────────
+                      // ── Action buttons ─────────────────────
                       Row(
                         children: [
                           _ActionButton(
@@ -339,7 +416,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
               },
             ),
 
-            // ── Caption ───────────────────────────────────
+            // ── Caption ────────────────────────────────────────
             if (caption != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -425,6 +502,129 @@ class _PortofolioCardState extends State<PortofolioCard> {
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // IMAGE ITEM
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildImageItem(MediaUrlModel media, {Key? key}) {
+    return CachedNetworkImage(
+      key: key,
+      imageUrl: media.idMedia!,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      placeholder: (_, __) => _buildShimmerPlaceholder(),
+      errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
+      fadeInDuration: const Duration(milliseconds: 280),
+      fadeOutDuration: const Duration(milliseconds: 150),
+      memCacheWidth: 1080,
+      maxWidthDiskCache: 1080,
+      imageBuilder: (context, imageProvider) {
+        // Detect dimensions on first load of each image
+        if (!_isImageLoaded) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _loadImageDimensions(imageProvider);
+          });
+        }
+        return Image(
+          image: imageProvider,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: _imageHeight,
+          errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // INDICATOR & BADGE
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildDotIndicator(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(count, (index) {
+        final isActive = _currentIndex == index;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          height: 6,
+          width: isActive ? 20 : 6,
+          decoration: BoxDecoration(
+            color: isActive ? Constants.primaryColor : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildCounterBadge(int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.photo_library_outlined,
+            color: Colors.white,
+            size: 13,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${_currentIndex + 1}/$count',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PLACEHOLDER WIDGETS
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildShimmerPlaceholder() => ShimmerPlaceholder(
+        width: double.infinity,
+        height: _imageHeight ?? 300,
+      );
+
+  Widget _buildErrorPlaceholder() => Container(
+        width: double.infinity,
+        height: _imageHeight ?? 300,
+        color: Colors.grey.shade100,
+        child: Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            size: 40,
+            color: Colors.grey.shade400,
+          ),
+        ),
+      );
+
+  Widget _buildNoImagePlaceholder() => Container(
+        width: double.infinity,
+        height: 300,
+        color: Colors.grey.shade200,
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 40,
+            color: Colors.grey.shade400,
+          ),
+        ),
+      );
 
   Widget _defaultAvatar() => Container(
         color: Colors.grey.shade200,
