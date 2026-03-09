@@ -194,7 +194,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                         autoOpenFilter: true,
                       ),
                       targetTabIndex: 0,
-                      hrsLogin: false,
+                      targetPage: 'SearchPage',
                     );
               },
             ),

@@ -34,18 +34,20 @@ class ApiClient {
   Future<http.Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
+    bool requireAuth = true, // ← tambah ini
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
-        final headers = await _headers();
+        final headers = await _headers(requireAuth: requireAuth); // ← pass
         print("📥 [GET] $uri");
         return http.get(uri, headers: headers);
       },
       method: 'GET',
       path: path,
+      requireAuth: requireAuth, // ← pass
     );
   }
 
@@ -54,25 +56,26 @@ class ApiClient {
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
     Object? body,
+    bool requireAuth = true, // ← tambah ini
   }) async {
     final uri =
         Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
 
     return _executeWithRetry(
       () async {
-        final mergedHeaders = await _mergedHeaders(headers);
+        final mergedHeaders =
+            await _mergedHeaders(headers, requireAuth: requireAuth);
         Object? finalBody = body;
-
         if (body is Map) {
           finalBody = jsonEncode(body);
           mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
         }
-
         print("📤 [POST] $uri");
         return http.post(uri, headers: mergedHeaders, body: finalBody);
       },
       method: 'POST',
       path: path,
+      requireAuth: requireAuth,
     );
   }
 
@@ -132,61 +135,53 @@ class ApiClient {
     required String path,
     int attempt = 1,
     int maxAttempts = 3,
+    bool requireAuth = true, // ← tambah ini
   }) async {
     try {
-      // Execute request
       final response = await request();
-
       print("📊 [$method $path] Status: ${response.statusCode}");
 
-      // Success - return immediately
-      if (response.statusCode != 401) {
+      if (response.statusCode != 401) return response;
+
+      // ✅ Jika public endpoint, jangan retry/logout — kembalikan response saja
+      if (!requireAuth) {
+        print("⚠️ [$method $path] 401 on public endpoint, skip retry");
         return response;
       }
 
-      // Check if it's a token error
       if (!_isTokenError(response)) {
         print("⚠️ [$method $path] 401 but not token error");
         return response;
       }
 
-      // Max attempts reached
       if (attempt >= maxAttempts) {
-        print("❌ [$method $path] Max attempts ($maxAttempts) reached");
+        print("❌ [$method $path] Max attempts reached");
         _triggerSessionExpired();
         throw Exception('Session expired after $maxAttempts attempts');
       }
 
-      // Refresh token
       print(
-          "🔄 [$method $path] Token invalid, refreshing (attempt $attempt/$maxAttempts)...");
-
+          "🔄 [$method $path] Refreshing token (attempt $attempt/$maxAttempts)...");
       final refreshed = await _refreshToken();
 
       if (!refreshed) {
-        print("❌ [$method $path] Token refresh failed");
-
         if (attempt >= maxAttempts - 1) {
           _triggerSessionExpired();
           throw Exception('Token refresh failed');
         }
-
         return response;
       }
 
-      // Wait with exponential backoff before retry
       final delayMs = _calculateBackoff(attempt);
-      print("⏳ [$method $path] Waiting ${delayMs}ms before retry...");
       await Future.delayed(Duration(milliseconds: delayMs));
 
-      // Retry request
-      print("🔄 [$method $path] Retrying with new token...");
       return _executeWithRetry(
         request,
         method: method,
         path: path,
         attempt: attempt + 1,
         maxAttempts: maxAttempts,
+        requireAuth: requireAuth,
       );
     } catch (e) {
       print("❌ [$method $path] Error: $e");
@@ -254,19 +249,27 @@ class ApiClient {
   // 🔐 HEADERS
   // =========================================================
 
-  Future<Map<String, String>> _headers() async {
-    final token = await authService.getIdToken();
+  Future<Map<String, String>> _headers({bool requireAuth = true}) async {
+    String? token;
+
+    if (requireAuth) {
+      // ✅ Hanya baca storage, TIDAK trigger refresh
+      token = await authService.getStoredToken();
+    }
 
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       'X-Jenis-User': Constants.customer,
       if (_role != null) 'X-User-Role': _role!,
     };
   }
 
-  Future<Map<String, String>> _mergedHeaders(Map<String, String>? extra) async {
-    final headers = await _headers();
+  Future<Map<String, String>> _mergedHeaders(
+    Map<String, String>? extra, {
+    bool requireAuth = true,
+  }) async {
+    final headers = await _headers(requireAuth: requireAuth);
     return {
       ...headers,
       if (extra != null) ...extra,
