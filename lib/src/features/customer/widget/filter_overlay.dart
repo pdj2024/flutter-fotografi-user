@@ -270,7 +270,7 @@ class _FilterOverlayState extends State<FilterOverlay>
         orderBy: 'username',
         status: 'aktif',
         username: query,
-        namaDisplay: query,
+        // namaDisplay: query,
         no_id: noId,
       );
       final list = res
@@ -723,7 +723,7 @@ class _FilterOverlayState extends State<FilterOverlay>
         _buildTextField(
           controller: photographerController,
           focusNode: photographerFocusNode,
-          hint: 'Cari nama atau username',
+          hint: 'Cari username',
           hasError: false,
           suffixIcon: photographerController.text.isNotEmpty
               ? GestureDetector(

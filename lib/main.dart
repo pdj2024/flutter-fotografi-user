@@ -8,6 +8,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
+import 'package:mpjnew/src/core/services/version_check_service.dart';
 import 'package:mpjnew/src/data/hive_entity/chat_message_entity.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
@@ -572,7 +573,30 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         }
       };
 
-      // 1️⃣ Try to restore session
+      // ── 0️⃣ CEK VERSI APLIKASI ──────────────────────────────────
+      // Dilakukan paling awal sebelum load data apapun.
+      // Jika tidak kompatibel, dialog muncul dan user tidak bisa lanjut
+      // sampai update app dari Play Store.
+      debugPrint("🔄 [Splash] Checking app version...");
+      final versionResult = await VersionCheckService().checkVersion();
+
+      if (!mounted) return;
+
+      if (!versionResult.isCompatible) {
+        debugPrint("⚠️ [Splash] Version incompatible, showing update dialog");
+
+        // Tampilkan dialog — tidak bisa di-dismiss, harus update dulu
+        await VersionCheckService.showUpdateDialogIfNeeded(
+            context, versionResult);
+
+        // Setelah dialog ditutup (user buka Play Store), hentikan proses init.
+        // App akan otomatis restart setelah update selesai.
+        return;
+      }
+
+      debugPrint("✅ [Splash] Version check passed");
+
+      // ── 1️⃣ RESTORE SESSION ─────────────────────────────────────
       debugPrint("🔄 [Splash] Attempting to restore session...");
       final userProvider = context.read<UserProvider>();
       final sessionRestored = await userProvider.restoreSession();
@@ -591,19 +615,18 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           userProvider.customer!.noId,
         );
 
-        // 3️⃣ ✅ Initialize Chat & History Order Providers (FCM-based)
+        // 3️⃣ Initialize Chat & History Order Providers
         debugPrint("🔧 [Splash] Initializing FCM-based providers...");
 
         final chatProvider = context.read<ChatProvider>();
 
-        // Initialize ChatProvider (loads rooms from API)
         await chatProvider.initialize(
           userId: userProvider.customer!.noId,
           userType: Constants.customer,
         );
         debugPrint("✅ [Splash] ChatProvider initialized");
 
-        // ✅ Register FCM token to backend
+        // Register FCM token
         await FCMService.instance.registerToken(userProvider.customer!.noId);
         debugPrint("✅ [Splash] FCM token registered");
 
@@ -620,12 +643,11 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       } else {
         debugPrint("ℹ️ [Splash] No session found, user not logged in");
 
-        // Set default role for new users
         await context.read<NavigationProvider>().saveRole(Constants.customer);
         apiClient.setRole(Constants.customer);
       }
 
-      // 5️⃣ Always go to MainMenu (users can explore without login)
+      // 5️⃣ Navigate to MainMenu
       _startPage = const MainMenu();
 
       debugPrint("═══════════════════════════════════════════════════");

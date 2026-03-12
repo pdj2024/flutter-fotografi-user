@@ -95,13 +95,17 @@ class KategoriDropdownConfig extends DropdownSearchConfig<KategoriModel> {
   @override
   Future<List<KategoriModel>> fetchData(
       BuildContext context, String query) async {
-    // Kategori tidak perlu remote search, langsung return cached data
-    return getCachedData(context);
+    // ✅ read bukan watch — dipanggil dari event handler/debouncer
+    await context
+        .read<KategoriProvider>()
+        .loadKategori(status: 'aktif', namaKategori: query);
+    return context.read<KategoriProvider>().kategoriList;
   }
 
   @override
   List<KategoriModel> getCachedData(BuildContext context) {
-    return context.watch<KategoriProvider>().kategoriList;
+    // ✅ read bukan watch
+    return context.read<KategoriProvider>().kategoriList;
   }
 }
 

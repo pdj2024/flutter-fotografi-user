@@ -9,7 +9,7 @@ import 'package:mpjnew/src/features/customer/widget/portofolio_card.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioSection extends StatefulWidget {
-  PortofolioSection({super.key});
+  const PortofolioSection({super.key});
 
   @override
   State<PortofolioSection> createState() => _PortofolioSectionState();

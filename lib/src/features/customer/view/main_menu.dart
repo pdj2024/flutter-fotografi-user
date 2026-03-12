@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/customer_home_page.dart';
@@ -362,9 +363,13 @@ class _MainMenuState extends State<MainMenu> {
           break;
 
         case 3: // Profile
-          await context.read<UserProvider>().checkLoginGoogle(
-                role: Constants.customer,
-              );
+          final userProvider = context.read<UserProvider>();
+          userProvider.checkLoginGoogle(
+            role: Constants.customer,
+          );
+          LocalStorageService.instance.setActiveCustomer(
+            userProvider.customer!.noId,
+          );
           if (!mounted) return;
           final provider = context.read<PortofolioProvider>();
 

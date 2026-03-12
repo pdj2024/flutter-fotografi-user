@@ -4,6 +4,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/view/account/edit_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/portofolio_account_section.dart';
 import 'package:mpjnew/src/features/customer/view/account/setting_page.dart';
@@ -26,17 +27,23 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
       RefreshController(initialRefresh: false);
 
   late final TabController _tabController;
+  int _currentTab = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // Rebuild saat tab berubah agar SmartRefresher tahu tab aktif
-    _tabController.addListener(() => setState(() {}));
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      if (_currentTab != _tabController.index) {
+        setState(() => _currentTab = _tabController.index);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -53,8 +60,33 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
     List<String> missing = [];
     if (customer.namaDisplay.isEmpty) missing.add('Nama Lengkap');
     if (customer.userName.isEmpty) missing.add('Username');
-    if (customer.kota.isEmpty || customer.namaKota.isEmpty) missing.add('Lokasi');
+    if (customer.kota.isEmpty || customer.namaKota.isEmpty)
+      missing.add('Lokasi');
     return missing;
+  }
+
+  /// Aman dari null — tidak pakai ! operator
+  String _resolveDisplayName(UserProvider userProvider) {
+    final customer = userProvider.customer;
+    if (customer == null) return 'Customer';
+    final nama = customer.namaDisplay;
+    if (nama.isNotEmpty) return nama;
+    final email = customer.email;
+    if (email.isNotEmpty) return email.split('@').first;
+    return 'Customer';
+  }
+
+  /// Inisial huruf pertama untuk avatar — aman dari null & empty string
+  String _resolveAvatarInitial(UserProvider userProvider) {
+    final customer = userProvider.customer;
+    if (customer == null) return 'C';
+    if (customer.namaDisplay.isNotEmpty) {
+      return customer.namaDisplay[0].toUpperCase();
+    }
+    if (customer.email.isNotEmpty) {
+      return customer.email[0].toUpperCase();
+    }
+    return 'C';
   }
 
   Future<void> _onRefresh() async {
@@ -63,15 +95,16 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
       return;
     }
     try {
-      final portofolioProvider = context.read<PortofolioProvider>();
       final userProvider = context.read<UserProvider>();
+      LocalStorageService.instance.setActiveCustomer(
+        userProvider.customer!.noId,
+      );
+      final portofolioProvider = context.read<PortofolioProvider>();
 
       await Future.wait([
         userProvider.checkLoginGoogle(role: Constants.customer),
-        portofolioProvider.loadLikedPortofolio(
-            context: context, syncFromApi: true),
-        portofolioProvider.loadSavedPortofolio(
-            context: context, syncFromApi: true),
+        portofolioProvider.refreshLikePortofolio(context),
+        portofolioProvider.refreshSavePortofolio(context),
       ]);
       _refreshController.refreshCompleted();
     } catch (e) {
@@ -120,217 +153,174 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
         ],
       ),
       backgroundColor: const Color(0xFFF9F9F9),
-      // ── SmartRefresher membungkus NestedScrollView ────────────────
-      // Kunci: NestedScrollView dengan floatHeaderSlivers: true
-      // agar inner scroll (GridView) bisa di-scroll & pull-to-refresh
-      // tetap berfungsi dari area header.
-      body: SmartRefresher(
-        controller: _refreshController,
-        onRefresh: _onRefresh,
-        // physics: AlwaysScrollable agar pull-to-refresh bisa dipicu
-        // meski konten belum penuh satu layar
-        header: buildRefreshHeader(),
-        child: NestedScrollView(
-          // floatHeaderSlivers = true → header ikut float saat scroll naik
-          floatHeaderSlivers: true,
-          headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Profil ─────────────────────────────────
-                    userProvider.isLoading
-                        ? ShimmerPlaceholder(radius: 20, height: 200)
-                        : Container(
-                            margin: const EdgeInsets.only(top: 20, bottom: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    userProvider.photoUrl == null
-                                        ? Container(
-                                            width: 68,
-                                            height: 68,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  Constants.primaryColorVendor,
-                                                  Constants.primaryColorVendor
-                                                      .withOpacity(0.7),
-                                                ],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
-                                              ),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                (userProvider.customer
-                                                                ?.namaDisplay ==
-                                                            ""
-                                                        ? userProvider.customer!
-                                                            .email[0]
-                                                            .toUpperCase()
-                                                        : userProvider.customer
-                                                            ?.namaDisplay[0]
-                                                            .toUpperCase()) ??
-                                                    "C",
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 32,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          )
-                                        : AvatarCircle(
-                                            size: 82,
-                                            imgUrl: userProvider.photoUrl,
-                                          ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            userProvider.customer?.namaDisplay !=
-                                                    ""
-                                                ? userProvider
-                                                    .customer!.namaDisplay
-                                                : userProvider.customer
-                                                            ?.email !=
-                                                        null
-                                                    ? userProvider.customer!.email
-                                                        .split('@')
-                                                        .first
-                                                    : 'Customer',
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            userProvider.customer?.namaKota ??
-                                                "",
-                                            style:
-                                                const TextStyle(fontSize: 14),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // ── Profile completion / Edit button ──
-                                if (!userProvider.isLoading &&
-                                    !isProfileComplete)
-                                  _buildProfileCompletionBanner(customer)
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            onPressed: () {
-                                              context
-                                                  .read<NavigationProvider>()
-                                                  .navigateToPage(
-                                                    context,
-                                                    EditAccountPage(),
-                                                    targetTabIndex: 3,
-                                                  );
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.grey.shade300,
-                                              foregroundColor: Colors.black,
-                                              elevation: 0,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 22,
-                                                      vertical: 10),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.edit),
-                                                SizedBox(width: 8),
-                                                Text('Edit Profil',
-                                                    style: TextStyle(
-                                                        fontSize: 14)),
+      // ── Pola sama seperti MainOrderPage:
+      // SafeArea → SmartRefresher → CustomScrollView → slivers
+      body: SafeArea(
+        child: SmartRefresher(
+          controller: _refreshController,
+          onRefresh: _onRefresh,
+          physics: const AlwaysScrollableScrollPhysics(),
+          header: buildRefreshHeader(),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // ── Profil Section ─────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: userProvider.isLoading
+                      ? ShimmerPlaceholder(radius: 20, height: 200)
+                      : Container(
+                          margin: const EdgeInsets.only(top: 20, bottom: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  userProvider.photoUrl == null
+                                      ? Container(
+                                          width: 68,
+                                          height: 68,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Constants.primaryColorVendor,
+                                                Constants.primaryColorVendor
+                                                    .withOpacity(0.7),
                                               ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              _resolveAvatarInitial(
+                                                  userProvider),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 32,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
+                                        )
+                                      : AvatarCircle(
+                                          size: 82,
+                                          imgUrl: userProvider.photoUrl,
+                                        ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _resolveDisplayName(userProvider),
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          userProvider.customer?.namaKota ?? "",
+                                          style: const TextStyle(fontSize: 14),
                                         ),
                                       ],
                                     ),
                                   ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              // ── Profile completion / Edit button ──
+                              if (!userProvider.isLoading && !isProfileComplete)
+                                _buildProfileCompletionBanner(customer)
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            context
+                                                .read<NavigationProvider>()
+                                                .navigateToPage(
+                                                  context,
+                                                  EditAccountPage(),
+                                                  targetTabIndex: 3,
+                                                );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                Colors.grey.shade300,
+                                            foregroundColor: Colors.black,
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 22, vertical: 10),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.edit),
+                                              SizedBox(width: 8),
+                                              Text('Edit Profil',
+                                                  style:
+                                                      TextStyle(fontSize: 14)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
-                  ],
+                        ),
                 ),
               ),
-            ),
 
-            // ── TabBar sebagai SliverPersistentHeader ─────────────
-            // Menggunakan SliverOverlapAbsorber agar overlap di-handle
-            SliverOverlapAbsorber(
-              handle:
-                  NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-              sliver: SliverAppBar(
-                backgroundColor: const Color(0xFFF9F9F9),
+              // ── TabBar pinned menggunakan SliverPersistentHeader ──
+              SliverPersistentHeader(
                 pinned: true,
-                floating: false,
-                automaticallyImplyLeading: false,
-                toolbarHeight: 0,
-                elevation: 0,
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(kTextTabBarHeight + 10),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Column(
-                      children: [
-                        TabBar(
-                          controller: _tabController,
-                          overlayColor: const WidgetStatePropertyAll(
-                              Colors.transparent),
-                          indicatorColor: Constants.primaryColorVendor,
-                          labelColor: Constants.primaryColorVendor,
-                          tabs: const [
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 10),
-                              child: Tab(text: "Likes"),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 10),
-                              child: Tab(text: "Saves"),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ),
+                delegate: _StickyTabBarDelegate(
+                  TabBar(
+                    controller: _tabController,
+                    overlayColor:
+                        const WidgetStatePropertyAll(Colors.transparent),
+                    indicatorColor: Constants.primaryColorVendor,
+                    labelColor: Constants.primaryColorVendor,
+                    tabs: const [
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Tab(text: "Likes"),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Tab(text: "Saves"),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ],
 
-          // ── Body: TabBarView — setiap tab punya scroll sendiri ──
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              PortofolioAccountSection(data: "like"),
-              PortofolioAccountSection(data: "save"),
+              // ── Tab content ───────────────────────────────────────
+              // Pakai SliverToBoxAdapter + IndexedStack agar KEDUA tab
+              // tetap mounted di background (tidak di-dispose saat switch).
+              // Ini memastikan loadLiked & loadSaved keduanya tetap jalan
+              // dan data save bisa dibuka saat tab di-switch.
+              SliverFillRemaining(
+                child: IndexedStack(
+                  index: _currentTab,
+                  children: const [
+                    _TabContent(data: 'like'),
+                    _TabContent(data: 'save'),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -378,8 +368,8 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
                     const SizedBox(height: 2),
                     Text(
                       '${missingFields.length} informasi belum dilengkapi',
-                      style: TextStyle(
-                          color: Colors.grey.shade600, fontSize: 12),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
                   ],
                 ),
@@ -403,8 +393,7 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
                       width: 4,
                       height: 4,
                       decoration: BoxDecoration(
-                          color: Colors.blue.shade400,
-                          shape: BoxShape.circle),
+                          color: Colors.blue.shade400, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 10),
                     Text(field,
@@ -433,13 +422,67 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
               ),
               child: const Text(
                 'Lengkapi Sekarang',
-                style:
-                    TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Delegate untuk TabBar yang sticky/pinned di dalam CustomScrollView ───────
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  const _StickyTabBarDelegate(this.tabBar);
+
+  final TabBar tabBar;
+
+  // tinggi = tinggi TabBar + padding bawah 10px
+  @override
+  double get minExtent => tabBar.preferredSize.height + 10;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height + 10;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: const Color(0xFFF9F9F9),
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) =>
+      tabBar != oldDelegate.tabBar;
+}
+
+// ── _TabContent: wrapper agar PortofolioAccountSection bisa scroll ────────────
+// Dibungkus CustomScrollView agar grid-nya scrollable di dalam IndexedStack.
+class _TabContent extends StatefulWidget {
+  final String data;
+  const _TabContent({required this.data});
+
+  @override
+  State<_TabContent> createState() => _TabContentState();
+}
+
+class _TabContentState extends State<_TabContent>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return CustomScrollView(
+      physics: const NeverScrollableScrollPhysics(), // scroll dihandle parent
+      slivers: [
+        PortofolioAccountSection(data: widget.data),
+      ],
     );
   }
 }

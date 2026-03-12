@@ -35,8 +35,16 @@ class _EditAccountPageState extends State<EditAccountPage> {
 
   Future<void> update(BuildContext context) async {
     final userProvider = context.read<UserProvider>();
+
+    // ✅ Guard: customer bisa null jika session belum siap
+    final customer = userProvider.customer;
+    if (customer == null) {
+      CustomSnackbar.showErrorSnackbar(
+          context, "Sesi tidak ditemukan, coba login ulang");
+      return;
+    }
+
     final kotaId = selectedKota?.noId;
-    final customer = userProvider.customer!;
     try {
       final updatedCustomer = customer.copyWith(
         namaDisplay: nameController.text.trim().isNotEmpty
@@ -53,15 +61,17 @@ class _EditAccountPageState extends State<EditAccountPage> {
 
       final result = await customerService.update(updatedCustomer);
 
-      print(result);
+      debugPrint('[EditAccountPage] update result: $result');
+      if (!context.mounted) return;
+
       context
           .read<UserProvider>()
           .checkLoginGoogle(role: 'customer', silent: true);
-
       CustomSnackbar.showSuccessSnackbar(context, "Berhasil memperbarui data");
       Navigator.of(context).pop();
     } catch (e) {
-      print('Error updating customer: $e');
+      debugPrint('[EditAccountPage] Error updating customer: $e');
+      if (!context.mounted) return;
       CustomSnackbar.showErrorSnackbar(context, "Gagal memperbarui data");
     }
   }
@@ -82,190 +92,178 @@ class _EditAccountPageState extends State<EditAccountPage> {
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
-    final userProvider = context.read<UserProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      loadData(userProvider.customer!);
+      if (!mounted) return;
+      // ✅ Guard: tidak pakai ! langsung, cek null dulu
+      final customer = context.read<UserProvider>().customer;
+      if (customer != null) loadData(customer);
     });
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    usernameController.dispose();
+    emailController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
-    final customer = userProvider.customer!;
+
+    // ✅ Guard: tampilkan loading jika customer belum tersedia
+    final customer = userProvider.customer;
+    if (customer == null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          title: const Text(
+            "Edit Profile",
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F9F9),
         elevation: 1,
-        title: Text(
+        title: const Text(
           "Edit Profile",
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       body: SingleChildScrollView(
-          child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Alert
-              if (customer.userName == "" || customer.namaDisplay == "")
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.blue.shade100,
-                      width: 1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // ── Alert banner jika profil belum lengkap ──
+                if (customer.userName.isEmpty || customer.namaDisplay.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.shade100, width: 1),
                     ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(Icons.info_outline,
+                              color: Colors.blue.shade700, size: 18),
                         ),
-                        child: Icon(
-                          Icons.info_outline,
-                          color: Colors.blue.shade700,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
-                          maxLines: null,
-                          overflow: TextOverflow.visible,
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontSize: 13,
-                            height: 1.4,
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
+                            maxLines: null,
+                            overflow: TextOverflow.visible,
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+
+                // ── Foto Section ──
+                userProvider.photoUrl == null
+                    ? Container(
+                        width: 82,
+                        height: 82,
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.person),
+                      )
+                    : AvatarCircle(size: 82, imgUrl: userProvider.photoUrl),
+                const SizedBox(height: 10),
+                const SizedBox(height: 30),
+
+                // ── Form Section ──
+                CustomTextField(
+                  label: "Nama Lengkap",
+                  controller: nameController,
+                  placeholder: "Nama Lengkap",
+                  keyboardType: TextInputType.text,
+                  errorMessage: nameError,
+                ),
+                CustomTextField(
+                  label: "Username",
+                  controller: usernameController,
+                  placeholder: "Username",
+                  keyboardType: TextInputType.text,
+                  errorMessage: usernameError,
+                ),
+                CustomTextField(
+                  label: "Email",
+                  controller: emailController,
+                  readOnly: true,
+                  placeholder: "Email",
+                  keyboardType: TextInputType.text,
+                  errorMessage: emailError,
+                ),
+                SingleSelectDropdown<KotaModel>(
+                  config: KotaDropdownConfig(
+                    label: 'Kota Domisili',
+                    errorMessage: kotaError,
+                    debounceDuration: 500,
+                    enableRemoteSearch: true,
+                  ),
+                  selectedValue: selectedKota,
+                  onChanged: (value) {
+                    setState(() => selectedKota = value);
+                  },
                 ),
 
-              // Foto Section
-              userProvider.photoUrl == null
-                  ? Container(
-                      width: 82,
-                      height: 82,
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        shape: BoxShape.circle,
+                // ── Button Section ──
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 50),
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      backgroundColor: Constants.primaryColorVendor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.person),
-                    )
-                  : AvatarCircle(
-                      size: 82,
-                      imgUrl: userProvider.photoUrl,
                     ),
-              SizedBox(
-                height: 10,
-              ),
-              // GestureDetector(
-              //   onTap: () {
-              //     context.read<NavigationProvider>().navigateToPage(
-              //           context,
-              //           ImageUploadPage(
-              //             type: "profile",
-              //           ),
-              //           targetTabIndex: 3,
-              //           targetPage: "ImageUploadPage",
-              //         );
-              //     print("Ubah Foto Profil");
-              //   },
-              //   child: Text(
-              //     "Ubah foto Profil",
-              //     style: TextStyle(
-              //       fontWeight: FontWeight.bold,
-              //       color: Constants.primaryColor,
-              //     ),
-              //   ),
-              // ),
-              SizedBox(
-                height: 30,
-              ),
-              // Form Section
-              CustomTextField(
-                label: "Nama Lengkap",
-                controller: nameController,
-                placeholder: "Nama Lengkap",
-                keyboardType: TextInputType.text,
-                errorMessage: nameError,
-              ),
-              CustomTextField(
-                label: "Username",
-                controller: usernameController,
-                placeholder: "Username",
-                keyboardType: TextInputType.text,
-                errorMessage: usernameError,
-              ),
-              CustomTextField(
-                label: "Email",
-                controller: emailController,
-                readOnly: true,
-                placeholder: "Email",
-                keyboardType: TextInputType.text,
-                errorMessage: emailError,
-              ),
-              SingleSelectDropdown<KotaModel>(
-                config: KotaDropdownConfig(
-                  label: 'Kota Domisili',
-                  errorMessage: kotaError,
-                  debounceDuration: 500, // Custom debounce
-                  enableRemoteSearch: true, // Enable remote API call
-                ),
-                selectedValue: selectedKota,
-                onChanged: (value) {
-                  setState(() => selectedKota = value);
-                  print('Selected kota: ${value?.namaKota}');
-                },
-              ),
-              // Button Section
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 50),
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    backgroundColor: Constants.primaryColorVendor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () async {
-                    var isValid = validateForm();
-                    if (!isValid) return;
-                    await update(context);
-                  },
-                  child: Text(
-                    "Simpan",
-                    style: TextStyle(fontSize: 16),
+                    onPressed: () async {
+                      final isValid = validateForm();
+                      if (!isValid) return;
+                      await update(context);
+                    },
+                    child: const Text("Simpan", style: TextStyle(fontSize: 16)),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      )),
+      ),
     );
   }
 
@@ -281,22 +279,16 @@ class _EditAccountPageState extends State<EditAccountPage> {
     usernameError = null;
     kotaError = null;
 
-    // =============================
-    // VALIDASI NAMA
-    // =============================
+    // ── Validasi Nama ──
     if (nama.isEmpty) {
       nameError = "Nama lengkap tidak boleh kosong";
       result = false;
     } else if (nama.length < 3) {
       nameError = "Nama terlalu pendek";
       result = false;
-    } else {
-      nameError = null;
     }
 
-    // =============================
-    // VALIDASI USERNAME
-    // =============================
+    // ── Validasi Username ──
     if (username.isEmpty) {
       usernameError = "Username tidak boleh kosong";
       result = false;
@@ -309,29 +301,15 @@ class _EditAccountPageState extends State<EditAccountPage> {
     } else if (username != username.toLowerCase()) {
       usernameError = "Username harus menggunakan huruf kecil";
       result = false;
-    } else {
-      usernameError = null;
     }
 
-    // =============================
-    // VALIDASI KOTA
-    // =============================
-    if (kota == null || kota == "") {
+    // ── Validasi Kota ──
+    if (kota == null) {
       kotaError = "Kota domisili wajib dipilih";
       result = false;
-    } else {
-      kotaError = null;
     }
 
-    // =============================
-    // UPDATE UI
-    // =============================
     setState(() {});
-
-    print("==============================");
-    print("Hasil Validasi: $result");
-    print("==============================");
-
     return result;
   }
 }

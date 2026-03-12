@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
@@ -14,11 +13,11 @@ import 'package:mpjnew/src/features/customer/view/history/widget/status_config.d
 import 'package:mpjnew/src/features/customer/view/history/widget/summary_card.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
-import 'package:mpjnew/src/features/customer/view/history/detail_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/features/customer/widget/order_status_flow.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -37,6 +36,8 @@ class MainOrderPage extends StatefulWidget {
 class _MainOrderPageState extends State<MainOrderPage> {
   final RefreshController _refreshController =
       RefreshController(initialRefresh: false);
+
+  /// null = semua, non-null = filter by status
   String? _selectedFilter;
 
   bool _isInitialized = false;
@@ -46,6 +47,12 @@ class _MainOrderPageState extends State<MainOrderPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAndInit());
+  }
+
+  @override
+  void dispose() {
+    _refreshController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkAndInit() async {
@@ -86,10 +93,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
       return;
     }
     try {
-      await Future.wait([
-        // _checkAndInit(),
-        context.read<PesananProvider>().loadOrder(context),
-      ]);
+      await context.read<PesananProvider>().loadOrder(context);
       _refreshController.refreshCompleted();
     } catch (e) {
       debugPrint('[MainOrderPage] ❌ Refresh error: $e');
@@ -97,23 +101,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
-  // ── Buka payment page ──────────────────────────────────────────────────
-  //
-  // Menggunakan Navigator.push biasa (bukan navigateToPage) agar back button
-  // kembali ke MainOrderPage tanpa mereset tab atau stack navigasi.
-  //
-  // Alur:
-  //   linkSnap ada  → WebviewPage (Snap Midtrans)
-  //                     ↳ error/user minta fallback → WaitingPaymentPage (core)
-  //   linkSnap null → WaitingPaymentPage (core)
   void _openPayment(PesananModel o) {
     if (o.linkSnap != null) {
       context.read<NavigationProvider>().navigateToPage(
             context,
-            WebviewPage(
-              url: o.linkSnap!,
-              paymentData: o,
-            ),
+            WebviewPage(url: o.linkSnap!, paymentData: o),
             targetTabIndex: 2,
           );
     } else {
@@ -175,11 +167,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: Colors.grey.shade500,
-                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 16, color: Colors.grey.shade500),
                 ],
               ),
             ),
@@ -219,6 +208,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
     final unpaid = provider.pesananUnpaid.length;
     final inProgress = provider.pesananProgress.length;
 
+    // ✅ Warna dari getStatus — tidak hardcode
+    final cfgUnpaid = getStatus('menunggu bayar');
+    final cfgProgress = getStatus('proses');
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
       child: Row(
@@ -237,9 +230,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
             child: SummaryCard(
               label: 'Belum Bayar',
               value: unpaid,
-              color: const Color(0xFF1565C0),
-              bgColor: const Color(0xFFE3F2FD),
-              icon: Icons.payment_outlined,
+              color: cfgUnpaid.color, // ✅ dari getStatus
+              bgColor: cfgUnpaid.bgColor, // ✅ dari getStatus
+              icon: cfgUnpaid.icon, // ✅ dari getStatus
               onTap: () => setState(() => _selectedFilter = 'menunggu bayar'),
             ),
           ),
@@ -248,9 +241,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
             child: SummaryCard(
               label: 'Diproses',
               value: inProgress,
-              color: const Color(0xFF00838F),
-              bgColor: const Color(0xFFE0F7FA),
-              icon: Icons.camera_outlined,
+              color: cfgProgress.color, // ✅ dari getStatus
+              bgColor: cfgProgress.bgColor, // ✅ dari getStatus
+              icon: cfgProgress.icon, // ✅ dari getStatus
               onTap: () => setState(() => _selectedFilter = null),
             ),
           ),
@@ -261,16 +254,21 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   // ─────────────────────────────────────────────────────────────
   // FILTER CHIPS
+  // ✅ Chip definition pakai _ChipItem agar value tidak ambigu String?
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFilterChips() {
-    final chips = [
-      {'value': null, 'label': 'Semua'},
-      {'value': 'menunggu bayar', 'label': 'Belum Bayar'},
-      {'value': 'persiapan', 'label': 'Persiapan'},
-      {'value': 'proses', 'label': 'Proses'},
-      {'value': 'review', 'label': 'Review'},
-      {'value': 'revisi', 'label': 'Revisi'},
+    // ✅ Gunakan label dari OrderStatusFlow.displayLabel — satu sumber kebenaran
+    final chips = <_ChipItem>[
+      _ChipItem(value: null, label: 'Semua'),
+      _ChipItem(
+          value: 'menunggu bayar',
+          label: OrderStatusFlow.displayLabel('menunggu bayar')),
+      _ChipItem(
+          value: 'persiapan', label: OrderStatusFlow.displayLabel('persiapan')),
+      _ChipItem(value: 'proses', label: OrderStatusFlow.displayLabel('proses')),
+      _ChipItem(value: 'review', label: OrderStatusFlow.displayLabel('review')),
+      _ChipItem(value: 'revisi', label: OrderStatusFlow.displayLabel('revisi')),
     ];
 
     return Container(
@@ -283,35 +281,34 @@ class _MainOrderPageState extends State<MainOrderPage> {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final chip = chips[i];
-          final value = chip['value'];
-          final label = chip['label'] as String;
-          final isSelected = _selectedFilter == value;
-          final cfg = value != null ? getStatus(value) : null;
+          final isSelected = _selectedFilter == chip.value;
+
+          // ✅ cfg hanya diambil jika value bukan null — tidak ada null-check error
+          final StatusConfig? cfg =
+              chip.value != null ? getStatus(chip.value!) : null;
+
+          final activeColor = cfg?.color ?? const Color(0xFF0F0F0F);
 
           return GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
-              setState(() => _selectedFilter = value);
+              setState(() => _selectedFilter = chip.value);
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? (cfg?.color ?? const Color(0xFF0F0F0F))
-                    : Colors.white,
+                color: isSelected ? activeColor : Colors.white,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
-                  color: isSelected
-                      ? (cfg?.color ?? const Color(0xFF0F0F0F))
-                      : Colors.grey.shade200,
+                  color: isSelected ? activeColor : Colors.grey.shade200,
                   width: isSelected ? 1.5 : 1,
                 ),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: (cfg?.color ?? Colors.black).withOpacity(0.2),
+                          color: activeColor.withOpacity(0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -319,7 +316,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
                     : [],
               ),
               child: Text(
-                label,
+                chip.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -377,7 +374,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
                         context.read<NavigationProvider>().navigateToPage(
                               context,
                               DetailOrderPageV2(pesananModel: o),
-                              // DetailOrderPage(pesananModel: o),
                               targetTabIndex: 2,
                               targetPage: 'DetailOrderPage',
                               hrsLogin: true,
@@ -389,7 +385,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetTabIndex: 1,
                               targetPage: 'RoomChatPage',
                             ),
-                    // ── Payment: Navigator.push biasa agar back = kembali ke sini
                     onPay: () => _openPayment(o),
                     onReview: () => showDialog(
                       context: context,
@@ -442,11 +437,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
                   color: Colors.grey.shade100,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.check_circle_outline_rounded,
-                  size: 20,
-                  color: Colors.grey.shade500,
-                ),
+                child: Icon(Icons.check_circle_outline_rounded,
+                    size: 20, color: Colors.grey.shade500),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -456,31 +448,32 @@ class _MainOrderPageState extends State<MainOrderPage> {
                     const Text(
                       'Pesanan Selesai',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0F0F0F),
-                      ),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F0F0F)),
                     ),
                     Text(
                       count > 0
                           ? '$count pesanan telah selesai'
                           : 'Belum ada pesanan selesai',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.grey.shade400,
-              ),
+              Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+// ── Helper class untuk chip definition ────────────────────────────────────────
+class _ChipItem {
+  final String? value;
+  final String label;
+  const _ChipItem({required this.value, required this.label});
 }

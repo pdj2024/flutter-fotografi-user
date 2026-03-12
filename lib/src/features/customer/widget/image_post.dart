@@ -3,43 +3,35 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/services/media_preload_service.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 
-/// Widget untuk menampilkan gambar post dengan swipe horizontal.
-///
-/// State like/save TIDAK disimpan di sini.
-/// Semua logic ada di PortofolioProvider — widget ini hanya menerima
-/// nilai dan callback dari luar (stateless dari sisi business logic).
 class ImagePost extends StatefulWidget {
   final List<MediaUrlModel> mediaUrl;
-  final bool isLiked;
-  final bool isSaved;
-  final int likeCount;
   final BoxFit fit;
   final bool enablePreload;
 
-  // Callback — null = disable tap (saat API sedang berjalan)
-  final VoidCallback? onLike;
-  final VoidCallback? onSave;
-
-  // Tampilkan spinner kecil saat API sedang berjalan
+  // Like / Save state (dikelola oleh parent — SinglePostPage)
+  final bool isLiked;
+  final bool isSaved;
   final bool isLikeInProgress;
   final bool isSaveInProgress;
+  final int likeCount;
+  final VoidCallback? onLike;
+  final VoidCallback? onSave;
 
   const ImagePost({
     super.key,
     required this.mediaUrl,
     this.fit = BoxFit.cover,
-    this.enablePreload = true,
+    this.enablePreload = false,
     this.isLiked = false,
     this.isSaved = false,
+    this.isLikeInProgress = false,
+    this.isSaveInProgress = false,
     this.likeCount = 0,
     this.onLike,
     this.onSave,
-    this.isLikeInProgress = false,
-    this.isSaveInProgress = false,
   });
 
   @override
@@ -47,82 +39,29 @@ class ImagePost extends StatefulWidget {
 }
 
 class _ImagePostState extends State<ImagePost> {
+  late final PageController _pageController;
   int _currentIndex = 0;
-  bool _isImageLoaded = false;
-  double? _imageHeight;
 
-  final MediaPreloadService _preloadService = MediaPreloadService();
-  bool _isPreloading = false;
-  final Set<int> _preloadedIndices = {};
+  double? _imageHeight;
+  bool _isImageLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.enablePreload) {
-      _preloadAllImages();
-    }
+    _pageController = PageController();
   }
 
   @override
-  void didUpdateWidget(ImagePost oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.mediaUrl != oldWidget.mediaUrl && widget.enablePreload) {
-      _preloadAllImages();
-    }
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
-  Future<void> _preloadAllImages() async {
-    if (_isPreloading) return;
-
-    final validMedia = widget.mediaUrl
-        .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
-        .toList();
-
-    if (validMedia.isEmpty) return;
-
-    setState(() => _isPreloading = true);
-
-    try {
-      final urls = validMedia
-          .map((m) => m.displayUrl)
-          .where((url) => url != null && url.isNotEmpty)
-          .cast<String>()
-          .toList();
-
-      await _preloadService.preloadUrls(urls, priority: 10);
-
-      if (mounted) {
-        setState(() {
-          for (int i = 0; i < validMedia.length; i++) {
-            _preloadedIndices.add(i);
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('[ImagePost] ⚠️ Preload error: $e');
-    } finally {
-      if (mounted) setState(() => _isPreloading = false);
-    }
-  }
-
-  void _preloadAdjacentImages(int currentIndex) {
-    final validMedia = widget.mediaUrl
-        .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
-        .toList();
-
-    for (final offset in [1, -1]) {
-      final idx = currentIndex + offset;
-      if (idx >= 0 &&
-          idx < validMedia.length &&
-          !_preloadedIndices.contains(idx)) {
-        final url = validMedia[idx].displayUrl;
-        if (url != null) {
-          _preloadService.preloadUrls([url], priority: 9);
-          _preloadedIndices.add(idx);
-        }
-      }
-    }
-  }
+  List<MediaUrlModel> get _validMedia => widget.mediaUrl
+      .where((m) =>
+          (m.idMedia != null && m.idMedia!.isNotEmpty) ||
+          (m.url != null && m.url!.isNotEmpty))
+      .toList();
 
   // ═══════════════════════════════════════════════════════════
   // BUILD
@@ -130,96 +69,76 @@ class _ImagePostState extends State<ImagePost> {
 
   @override
   Widget build(BuildContext context) {
-    final validMedia = widget.mediaUrl
-        .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
-        .toList();
+    final validMedia = _validMedia;
 
     if (validMedia.isEmpty) return _buildEmptyPlaceholder();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Gambar ────────────────────────────────────────
-        GestureDetector(
-          onHorizontalDragEnd: (details) {
-            if (validMedia.length <= 1) return;
-
-            if (details.primaryVelocity! < -300 &&
-                _currentIndex < validMedia.length - 1) {
-              setState(() {
-                _currentIndex++;
-                _isImageLoaded = false;
-              });
-              _preloadAdjacentImages(_currentIndex);
-            } else if (details.primaryVelocity! > 300 && _currentIndex > 0) {
-              setState(() {
-                _currentIndex--;
-                _isImageLoaded = false;
-              });
-              _preloadAdjacentImages(_currentIndex);
-            }
-          },
-          child: Container(
-            width: double.infinity,
-            color: Colors.grey.shade50,
-            constraints: BoxConstraints(
-              minHeight: _imageHeight ?? 200,
-              maxHeight: _imageHeight ?? double.infinity,
+        // ── Carousel ─────────────────────────────────────────
+        Stack(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: _imageHeight ?? 300,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: validMedia.length,
+                physics: const ClampingScrollPhysics(),
+                onPageChanged: (index) => setState(() => _currentIndex = index),
+                itemBuilder: (context, index) =>
+                    _buildImageItem(validMedia[index]),
+              ),
             ),
-            child: Stack(
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  transitionBuilder: (child, animation) =>
-                      FadeTransition(opacity: animation, child: child),
-                  child: _buildImageItem(
-                    validMedia[_currentIndex],
-                    key: ValueKey(_currentIndex),
-                    isPreloaded: _preloadedIndices.contains(_currentIndex),
-                  ),
-                ),
-                if (validMedia.length > 1)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: _buildCounter(validMedia.length),
-                  ),
-                if (widget.enablePreload && _isPreloading)
-                  Positioned(
-                    bottom: 12,
-                    left: 12,
-                    child: _buildPreloadIndicator(),
-                  ),
-              ],
-            ),
-          ),
+            if (validMedia.length > 1)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: _buildCounter(validMedia.length),
+              ),
+          ],
         ),
 
-        // ── Action row (like / dots / save) ───────────────
+        // ── Action bar (like, save, dot indicator) ───────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 9, 16, 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // ── Like button ──────────────────────────────
-              _LikeButton(
-                isLiked: widget.isLiked,
+              // Like button
+              _ActionButton(
+                icon: widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                activeColor: Colors.red,
+                isActive: widget.isLiked,
                 isInProgress: widget.isLikeInProgress,
                 onTap: widget.onLike,
               ),
-
-              // ── Dot indicators ───────────────────────────
-              if (validMedia.length > 1)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: _buildIndicator(validMedia.length),
+              if (widget.likeCount > 0) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.likeCount}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
                 ),
+              ],
+              const SizedBox(width: 12),
+              // Save button
 
-              // ── Save button ──────────────────────────────
-              _SaveButton(
-                isSaved: widget.isSaved,
+              // Dot indicator (centre)
+              if (validMedia.length > 1) ...[
+                const Spacer(),
+                _buildDotIndicator(validMedia.length),
+                const Spacer(),
+              ] else
+                const Spacer(),
+
+              _ActionButton(
+                icon: widget.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                activeColor: Colors.amber.shade700,
+                isActive: widget.isSaved,
                 isInProgress: widget.isSaveInProgress,
                 onTap: widget.onSave,
               ),
@@ -234,39 +153,16 @@ class _ImagePostState extends State<ImagePost> {
   // IMAGE ITEM
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildImageItem(
-    MediaUrlModel media, {
-    Key? key,
-    bool isPreloaded = false,
-  }) {
+  Widget _buildImageItem(MediaUrlModel media) {
+    final imageUrl = media.url ?? media.idMedia;
+    if (imageUrl == null || imageUrl.isEmpty) return _buildErrorWidget();
+
     return CachedNetworkImage(
-      key: key,
-      imageUrl: media.idMedia!,
+      imageUrl: imageUrl,
       fit: widget.fit,
       width: double.infinity,
-      placeholder: (context, url) {
-        if (isPreloaded) return _buildSubtleLoadingPlaceholder();
-
-        if (media.thumbUrl != null && media.thumbUrl!.isNotEmpty) {
-          return Stack(
-            children: [
-              CachedNetworkImage(
-                imageUrl: media.thumbUrl!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: _imageHeight,
-                placeholder: (_, __) => _buildLoadingPlaceholder(),
-                errorWidget: (_, __, ___) => _buildLoadingPlaceholder(),
-              ),
-              _buildLoadingOverlay(),
-            ],
-          );
-        }
-        return _buildLoadingPlaceholder();
-      },
+      placeholder: (_, __) => _buildShimmerPlaceholder(),
       errorWidget: (_, __, ___) => _buildErrorWidget(),
-      fadeInDuration: const Duration(milliseconds: 300),
-      fadeOutDuration: const Duration(milliseconds: 150),
       memCacheWidth: 1080,
       maxWidthDiskCache: 1080,
       imageBuilder: (context, imageProvider) {
@@ -279,14 +175,18 @@ class _ImagePostState extends State<ImagePost> {
           image: imageProvider,
           fit: widget.fit,
           width: double.infinity,
-          errorBuilder: (_, __, ___) => _buildErrorWidget(),
+          height: _imageHeight,
         );
       },
     );
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // DIMENSION DETECTION
+  // ═══════════════════════════════════════════════════════════
+
   Future<void> _loadImageDimensions(ImageProvider imageProvider) async {
-    if (!mounted) return;
+    if (!mounted || _isImageLoaded) return;
 
     final stream = imageProvider.resolve(const ImageConfiguration());
     final completer = Completer<void>();
@@ -295,14 +195,12 @@ class _ImagePostState extends State<ImagePost> {
     listener = ImageStreamListener(
       (ImageInfo info, bool _) {
         if (!mounted) return;
-
         final screenWidth = MediaQuery.of(context).size.width;
         final ar = info.image.width / info.image.height;
         setState(() {
           _imageHeight = screenWidth / ar;
           _isImageLoaded = true;
         });
-
         stream.removeListener(listener);
         if (!completer.isCompleted) completer.complete();
       },
@@ -332,143 +230,55 @@ class _ImagePostState extends State<ImagePost> {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // HELPER WIDGETS
+  // INDICATOR & COUNTER
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildLoadingPlaceholder() => Container(
-        width: double.infinity,
-        height: _imageHeight ?? 300,
-        color: Colors.grey.shade50,
-        child: Stack(
-          children: [
-            const ShimmerPlaceholder(
-                width: double.infinity, height: double.infinity),
-            _buildLoadingOverlay(),
-          ],
-        ),
-      );
-
-  Widget _buildSubtleLoadingPlaceholder() => Container(
-        width: double.infinity,
-        height: _imageHeight ?? 300,
-        color: Colors.grey.shade50,
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.black54),
-            ),
-          ),
-        ),
-      );
-
-  Widget _buildLoadingOverlay() => Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+  Widget _buildDotIndicator(int count) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(count, (index) {
+        final isActive = _currentIndex == index;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          height: 6,
+          width: isActive ? 20 : 6,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.95),
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: isActive ? Constants.primaryColor : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Memuat gambar...',
-                style: TextStyle(
-                  color: Colors.grey.shade800,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+        );
+      }),
+    );
+  }
 
-  Widget _buildPreloadIndicator() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(12),
+  Widget _buildCounter(int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '${_currentIndex + 1}/$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-            const SizedBox(width: 6),
-            const Text(
-              'Memuat...',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
+      ),
+    );
+  }
 
-  Widget _buildIndicator(int count) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(count, (index) {
-          final isActive = _currentIndex == index;
-          final isPreloaded = _preloadedIndices.contains(index);
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            height: 6,
-            width: isActive ? 20 : 6,
-            decoration: BoxDecoration(
-              color: isActive
-                  ? Constants.primaryColor
-                  : (isPreloaded ? Colors.grey.shade300 : Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          );
-        }),
-      );
+  // ═══════════════════════════════════════════════════════════
+  // PLACEHOLDER WIDGETS
+  // ═══════════════════════════════════════════════════════════
 
-  Widget _buildCounter(int count) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          '${_currentIndex + 1}/$count',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            height: 1.2,
-          ),
-        ),
+  Widget _buildShimmerPlaceholder() => ShimmerPlaceholder(
+        width: double.infinity,
+        height: _imageHeight ?? 300,
       );
 
   Widget _buildErrorWidget() => Container(
@@ -484,18 +294,10 @@ class _ImagePostState extends State<ImagePost> {
               const SizedBox(height: 8),
               Text(
                 'Gagal memuat gambar',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () => setState(() => _isImageLoaded = false),
-                child: Text(
-                  'Coba lagi',
-                  style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12),
-                ),
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -515,7 +317,10 @@ class _ImagePostState extends State<ImagePost> {
               const SizedBox(height: 8),
               Text(
                 'Tidak ada gambar',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -523,19 +328,21 @@ class _ImagePostState extends State<ImagePost> {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// LIKE BUTTON
-// Menampilkan ikon + jumlah like.
-// Saat isInProgress: tampilkan spinner, tap dinonaktifkan.
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ACTION BUTTON (reusable, same pattern as PortofolioCard)
+// ═══════════════════════════════════════════════════════════
 
-class _LikeButton extends StatelessWidget {
-  final bool isLiked;
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color activeColor;
+  final bool isActive;
   final bool isInProgress;
   final VoidCallback? onTap;
 
-  const _LikeButton({
-    required this.isLiked,
+  const _ActionButton({
+    required this.icon,
+    required this.activeColor,
+    required this.isActive,
     required this.isInProgress,
     required this.onTap,
   });
@@ -543,85 +350,29 @@ class _LikeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: isInProgress ? null : onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: isInProgress
-                ? Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        isLiked ? Colors.red : Colors.black54,
-                      ),
-                    ),
-                  )
-                : AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    transitionBuilder: (child, anim) =>
-                        ScaleTransition(scale: anim, child: child),
-                    child: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      key: ValueKey(isLiked),
-                      color: isLiked ? Colors.red : Colors.black,
-                      size: 28,
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SAVE BUTTON
-// Saat isInProgress: tampilkan spinner, tap dinonaktifkan.
-// ═══════════════════════════════════════════════════════════════
-
-class _SaveButton extends StatelessWidget {
-  final bool isSaved;
-  final bool isInProgress;
-  final VoidCallback? onTap;
-
-  const _SaveButton({
-    required this.isSaved,
-    required this.isInProgress,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: isInProgress ? null : onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 29,
-        height: 29,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
         child: isInProgress
-            ? Padding(
-                padding: const EdgeInsets.all(4),
+            ? SizedBox(
+                width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isSaved ? Colors.amber.shade700 : Colors.black54,
+                  valueColor: AlwaysStoppedAnimation(
+                    isActive ? activeColor : Colors.black38,
                   ),
                 ),
               )
             : AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 180),
                 transitionBuilder: (child, anim) =>
                     ScaleTransition(scale: anim, child: child),
                 child: Icon(
-                  isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  key: ValueKey(isSaved),
-                  color: isSaved ? Colors.amber : Colors.black,
-                  size: 29,
+                  icon,
+                  key: ValueKey('$icon$isActive'),
+                  size: 26,
+                  color: isActive ? activeColor : Colors.black54,
                 ),
               ),
       ),

@@ -10,7 +10,7 @@
 // Tidak ada dependency ke Flutter/package lain — pure Dart.
 // ════════════════════════════════════════════════════════════════════════
 
-// ── Alur 1 jalur linear ──────────────────────────────────────────────────
+// ── Alur status linear ──────────────────────────────────────────────────
 //
 //   persiapan ──► proses ──► review ──► selesai
 //                               │
@@ -20,7 +20,7 @@
 // Transisi yang valid:
 //   persiapan  → proses    (customer konfirmasi pemotretan selesai)
 //   proses     → review    (vendor upload link + kirim ke review)
-//   review     → revisi    (customer minta revisi)   ← UPDATED
+//   review     → revisi    (customer minta revisi)
 //   revisi     → review    (vendor selesai revisi, kirim ulang ke review)
 //   review     → selesai   (customer selesaikan)
 // ─────────────────────────────────────────────────────────────────────────
@@ -48,9 +48,36 @@ class StatusTransition {
   });
 }
 
-/// Pusat aturan alur status pesanan fotografi
+// ════════════════════════════════════════════════════════════════════════
+// StatusInfoLabel
+//
+// Label informasi tambahan yang ditampilkan di UI masing-masing app.
+// Tidak disimpan ke database — hanya untuk keperluan tampilan.
+// ════════════════════════════════════════════════════════════════════════
+
+class StatusInfoLabel {
+  /// Ikon/emoji yang merepresentasikan kondisi saat ini
+  final String icon;
+
+  /// Judul singkat kondisi saat ini
+  final String title;
+
+  /// Penjelasan detail apa yang perlu dilakukan / sedang terjadi
+  final String body;
+
+  const StatusInfoLabel({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// OrderStatusFlow
+// ════════════════════════════════════════════════════════════════════════
+
 class OrderStatusFlow {
-  // ── Tabel semua transisi yang valid ─────────────────────────────────
+  // ── Tabel semua transisi yang valid ──────────────────────────────────
   static const List<StatusTransition> transitions = [
     StatusTransition(
       from: 'persiapan',
@@ -68,8 +95,6 @@ class OrderStatusFlow {
       confirmMessage: 'Pastikan link hasil kerja sudah diisi.\n\n'
           'Customer akan mereview hasil pengerjaan Anda.',
     ),
-
-    // ── review → revisi (customer minta revisi) ──────────────────────
     StatusTransition(
       from: 'review',
       to: 'revisi',
@@ -78,8 +103,6 @@ class OrderStatusFlow {
       confirmMessage: 'Pesanan akan masuk ke tahap revisi.\n\n'
           'Tuliskan catatan revisi untuk vendor.',
     ),
-
-    // ── revisi → review (vendor selesai revisi) ──────────────────────
     StatusTransition(
       from: 'revisi',
       to: 'review',
@@ -88,7 +111,6 @@ class OrderStatusFlow {
       confirmMessage: 'Pastikan link hasil revisi sudah diperbarui.\n\n'
           'Customer akan mereview ulang hasil pekerjaan Anda.',
     ),
-
     StatusTransition(
       from: 'review',
       to: 'selesai',
@@ -112,7 +134,7 @@ class OrderStatusFlow {
     }
   }
 
-  // ── Display label ────────────────────────────────────────────────────
+  // ── Display label ─────────────────────────────────────────────────────
 
   static String displayLabel(String status) {
     switch (status) {
@@ -123,7 +145,7 @@ class OrderStatusFlow {
       case 'review':
         return 'Review Hasil';
       case 'revisi':
-        return 'Dalam Revisi'; // ← ADDED
+        return 'Dalam Revisi';
       case 'selesai':
         return 'Selesai';
       case 'menunggu bayar':
@@ -135,76 +157,169 @@ class OrderStatusFlow {
     }
   }
 
-  // ── Info card text ───────────────────────────────────────────────────
-
-  static String vendorInfo(String status) {
-    switch (status) {
-      case 'persiapan':
-        return 'Pesanan sedang dalam tahap persiapan pemotretan. '
-            'Customer akan mengonfirmasi setelah sesi pemotretan selesai '
-            'untuk melanjutkan ke tahap pengerjaan.';
-      case 'proses':
-        return 'Upload link hasil pekerjaan (Google Drive, Dropbox, dll), '
-            'lalu kirim ke customer untuk direview.';
-      case 'review':
-        return 'Customer sedang mereview hasil pekerjaan Anda. '
-            'Tunggu keputusan customer — revisi atau selesaikan.';
-      case 'revisi': // ← ADDED
-        return 'Customer meminta revisi. Perbarui hasil pekerjaan sesuai '
-            'catatan yang diberikan, lalu kirim ulang ke customer untuk direview.';
-      case 'selesai':
-        return 'Pesanan telah selesai. Terima kasih atas kerja keras Anda!';
-      default:
-        return '';
-    }
-  }
-
-  static String customerInfo(String status) {
-    switch (status) {
-      case 'persiapan':
-        return 'Pesanan Anda sedang dalam tahap persiapan. '
-            'Setelah sesi pemotretan selesai, tekan tombol konfirmasi '
-            'untuk melanjutkan ke tahap pengerjaan oleh vendor.';
-      case 'proses':
-        return 'Vendor sedang mengerjakan hasil pemotretan Anda. '
-            'Anda akan diberitahu saat hasil siap untuk direview.';
-      case 'review':
-        return 'Hasil pekerjaan vendor sudah siap! '
-            'Silakan buka link yang diberikan untuk melihat hasilnya, '
-            'lalu pilih Revisi jika ada yang perlu diperbaiki '
-            'atau Selesaikan jika sudah memuaskan.';
-      case 'revisi': // ← ADDED
-        return 'Permintaan revisi Anda sudah diterima vendor. '
-            'Vendor sedang mengerjakan perbaikan sesuai catatan yang Anda berikan. '
-            'Harap tunggu hingga vendor mengirimkan ulang hasil revisi untuk direview.';
-      case 'selesai':
-        return 'Pesanan telah selesai. '
-            'Terima kasih telah menggunakan layanan kami!';
-      default:
-        return '';
-    }
-  }
-
-  // ── Default deskripsi progress ───────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════
+  // defaultDeskripsi
+  //
+  // Deskripsi NETRAL yang disimpan ke HistoryOrderModel.deskripsi.
+  // Tidak menyebut "customer" atau "vendor" secara spesifik agar
+  // cocok ditampilkan di kedua app tanpa perlu dua versi data.
+  // ════════════════════════════════════════════════════════════════════
 
   static String defaultDeskripsi(String from, String to) {
     switch ('$from→$to') {
       case 'persiapan→proses':
-        return 'Customer telah mengonfirmasi pemotretan selesai. '
+        return 'Sesi pemotretan telah dikonfirmasi selesai. '
             'Pesanan masuk ke tahap pengerjaan.';
       case 'proses→review':
-        return 'Vendor telah menyelesaikan pengerjaan. '
-            'Silakan review hasil melalui link yang disediakan.';
-      case 'review→revisi': // ← UPDATED (was review→proses)
-        return 'Customer meminta revisi. '
-            'Vendor akan mengerjakan ulang sesuai catatan.';
-      case 'revisi→review': // ← ADDED
-        return 'Vendor telah menyelesaikan revisi. '
-            'Silakan review ulang hasil melalui link yang disediakan.';
+        return 'Pengerjaan selesai. '
+            'Hasil pekerjaan telah dikirimkan untuk direview.';
+      case 'review→revisi':
+        return 'Revisi diminta. '
+            'Pekerjaan akan diperbaiki sesuai catatan yang diberikan.';
+      case 'revisi→review':
+        return 'Revisi selesai. '
+            'Hasil terbaru telah dikirimkan kembali untuk direview.';
       case 'review→selesai':
-        return 'Customer telah menyetujui hasil pekerjaan. Pesanan selesai.';
+        return 'Hasil pekerjaan disetujui. Pesanan dinyatakan selesai.';
       default:
-        return 'Status diperbarui: ${displayLabel(to)}';
+        return 'Status diperbarui menjadi: ${displayLabel(to)}';
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // vendorInfoLabel & customerInfoLabel
+  //
+  // Label tambahan KHUSUS per role — hanya untuk tampilan UI,
+  // tidak disimpan ke database.
+  //
+  // Berisi panduan/konteks spesifik sesuai peran pengguna
+  // pada status pesanan yang sedang aktif.
+  // ════════════════════════════════════════════════════════════════════
+
+  static StatusInfoLabel vendorInfoLabel(String status) {
+    switch (status) {
+      case 'persiapan':
+        return const StatusInfoLabel(
+          icon: '📅',
+          title: 'Menunggu Konfirmasi Pemotretan',
+          body: 'Lakukan sesi pemotretan sesuai jadwal yang disepakati. '
+              'Customer akan mengonfirmasi setelah sesi selesai '
+              'untuk melanjutkan ke tahap pengerjaan.',
+        );
+      case 'proses':
+        return const StatusInfoLabel(
+          icon: '🖼️',
+          title: 'Sedang Mengerjakan',
+          body: 'Upload hasil pekerjaan ke Google Drive, Dropbox, atau '
+              'platform lainnya. Isi link hasil, lalu kirim ke customer '
+              'untuk direview.',
+        );
+      case 'review':
+        return const StatusInfoLabel(
+          icon: '⏳',
+          title: 'Menunggu Review Customer',
+          body: 'Customer sedang mereview hasil pekerjaan Anda. '
+              'Harap tunggu — customer akan memilih untuk menyetujui '
+              'atau meminta revisi.',
+        );
+      case 'revisi':
+        return const StatusInfoLabel(
+          icon: '✏️',
+          title: 'Mengerjakan Revisi',
+          body: 'Perhatikan catatan revisi dari customer. '
+              'Perbarui hasil pekerjaan, lalu kirim ulang ke customer '
+              'untuk direview kembali.',
+        );
+      case 'selesai':
+        return const StatusInfoLabel(
+          icon: '🎉',
+          title: 'Pesanan Selesai',
+          body: 'Customer telah menyetujui hasil pekerjaan Anda. '
+              'Terima kasih atas kerja keras Anda!',
+        );
+      case 'menunggu bayar':
+        return const StatusInfoLabel(
+          icon: '💳',
+          title: 'Menunggu Pembayaran',
+          body: 'Customer belum menyelesaikan pembayaran. '
+              'Pesanan akan diproses setelah pembayaran dikonfirmasi.',
+        );
+      case 'dibatalkan':
+        return const StatusInfoLabel(
+          icon: '❌',
+          title: 'Pesanan Dibatalkan',
+          body: 'Pesanan ini telah dibatalkan dan tidak dapat dilanjutkan.',
+        );
+      default:
+        return StatusInfoLabel(
+          icon: '📋',
+          title: displayLabel(status),
+          body: '',
+        );
+    }
+  }
+
+  static StatusInfoLabel customerInfoLabel(String status) {
+    switch (status) {
+      case 'persiapan':
+        return const StatusInfoLabel(
+          icon: '📅',
+          title: 'Siapkan Sesi Pemotretan',
+          body: 'Lakukan sesi pemotretan sesuai jadwal yang disepakati '
+              'bersama vendor. Setelah sesi selesai, tekan tombol konfirmasi '
+              'agar pesanan berlanjut ke tahap pengerjaan.',
+        );
+      case 'proses':
+        return const StatusInfoLabel(
+          icon: '⏳',
+          title: 'Vendor Sedang Mengerjakan',
+          body: 'Vendor sedang memproses hasil pemotretan Anda. '
+              'Anda akan mendapat notifikasi saat hasil siap untuk direview.',
+        );
+      case 'review':
+        return const StatusInfoLabel(
+          icon: '👀',
+          title: 'Hasil Siap Direview',
+          body: 'Buka link hasil yang diberikan vendor untuk melihat '
+              'hasilnya. Pilih Selesaikan jika sudah memuaskan, '
+              'atau Minta Revisi jika ada yang perlu diperbaiki.',
+        );
+      case 'revisi':
+        return const StatusInfoLabel(
+          icon: '🔧',
+          title: 'Vendor Mengerjakan Revisi',
+          body: 'Permintaan revisi Anda telah diterima vendor. '
+              'Harap tunggu hingga vendor mengirimkan hasil revisi '
+              'untuk Anda review kembali.',
+        );
+      case 'selesai':
+        return const StatusInfoLabel(
+          icon: '🎉',
+          title: 'Pesanan Selesai',
+          body: 'Pesanan Anda telah selesai. '
+              'Jangan lupa berikan ulasan untuk vendor agar membantu '
+              'pengguna lain.',
+        );
+      case 'menunggu bayar':
+        return const StatusInfoLabel(
+          icon: '💳',
+          title: 'Selesaikan Pembayaran',
+          body: 'Pesanan berhasil dibuat. Silakan selesaikan pembayaran '
+              'agar vendor dapat segera memproses pesanan Anda.',
+        );
+      case 'dibatalkan':
+        return const StatusInfoLabel(
+          icon: '❌',
+          title: 'Pesanan Dibatalkan',
+          body: 'Pesanan ini telah dibatalkan. '
+              'Hubungi kami jika Anda memiliki pertanyaan.',
+        );
+      default:
+        return StatusInfoLabel(
+          icon: '📋',
+          title: displayLabel(status),
+          body: '',
+        );
     }
   }
 }

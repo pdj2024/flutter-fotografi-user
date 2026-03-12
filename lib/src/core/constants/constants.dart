@@ -1,16 +1,34 @@
 import 'package:flutter/material.dart';
 
 class Constants {
-  static const Color primaryColor = Color(0xff3b3add); //Color(0xffEE4D2D);
+  // ── Versi Aplikasi ────────────────────────────────────────────
+  // Ketiga nilai ini dibandingkan dengan data dari server.
+  // Update nilai ini setiap kali ada perubahan yang membutuhkan
+  // versi minimum tertentu.
+
+  /// Versi app customer (index 0 dari "customer_ver, vendor_ver")
+  static const String versionApp = '1.0.0';
+
+  /// Versi API minimum yang kompatibel dengan app ini
+  static const String versionApi = '1.0.0';
+
+  /// Versi database minimum yang kompatibel dengan app ini
+  static const String versionDatabase = '1.0.0';
+
+  // ── Warna ─────────────────────────────────────────────────────
+  static const Color primaryColor = Color(0xff3b3add);
   static const Color primaryColorVendor = Color(0xff3b3add);
 
+  // ── Role ──────────────────────────────────────────────────────
   static const String customer = 'customer';
   static const String vendor = 'vendor';
 
+  // ── URL ───────────────────────────────────────────────────────
   static const String baseUrl = 'https://fotoapi1.padajaya.biz.id';
-  // static const String baseUrl = 'http://217.216.34.207:257';
   static const String baseUrlHub = 'https://fotoapi2.padajaya.biz.id';
-  // static const String baseUrlHub = 'http://217.216.34.207:543';
 
-  // 'https://fotoapi.pdj.web.id'; // Ganti dengan URL API Anda
+  // ── Play Store ────────────────────────────────────────────────
+  /// URL Play Store untuk halaman update app customer
+  static const String playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.yourcompany.mpjnew';
 }

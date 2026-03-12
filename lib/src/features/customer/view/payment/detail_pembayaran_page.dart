@@ -6,9 +6,11 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/custom_icons.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/default_value_service.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
+import 'package:mpjnew/src/data/models/default_value_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
@@ -35,11 +37,16 @@ class DetailPembayaranPage extends StatefulWidget {
 }
 
 class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
-  PenawaranService penawaranService = PenawaranService();
-  PaketService paketService = PaketService();
-  HistoryOrderService historyOrderService = HistoryOrderService();
-  PesananService pesananService = PesananService();
-  MetodePembayaranService metodePembayaranService = MetodePembayaranService();
+  // ── Services ──────────────────────────────────────────────────
+  final PenawaranService penawaranService = PenawaranService();
+  final PaketService paketService = PaketService();
+  final HistoryOrderService historyOrderService = HistoryOrderService();
+  final PesananService pesananService = PesananService();
+  final MetodePembayaranService metodePembayaranService =
+      MetodePembayaranService();
+  final DefaultValueService defaultValueService = DefaultValueService();
+
+  // ── State ─────────────────────────────────────────────────────
   List<MetodePembayaranModel> metodePembayaran = [];
   bool isLoading = false;
   String? errorMessage;
@@ -50,13 +57,26 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   PenawaranModel? penawaran;
   PaketModel? paket;
 
+  // PPN config — di-fetch dari server, bukan hardcode
+  PpnModel? ppnModel;
+  // Hasil kalkulasi lengkap dari PpnModel.hitungEstimasi()
+  EstimasiBiaya? estimasi;
+
   String? kodeMetode;
   String? textMetode;
-  int hargaPaket = 0;
-  int biayaPembayaran = 0;
-  int biayaPPN = 0;
-  int biayaDPP = 0;
-  int totalPembayaran = 0;
+  int biayaPembayaran = 0; // biaya metode pembayaran (gateway fee)
+
+  // ── Getters ringkas untuk UI ──────────────────────────────────
+  int get hargaPaket => estimasi?.hargaDasar ?? 0;
+  int get biayaPPN => estimasi?.biayaPpn ?? 0;
+  int get biayaDPP => estimasi?.dpp ?? 0;
+  bool get hasPpn => estimasi?.hasPpn ?? false;
+  bool get inclPpn => estimasi?.inclPpn ?? false;
+
+  /// Total yang dibayar customer = totalCustomer dari estimasi + biaya metode
+  int get totalPembayaran => (estimasi?.totalCustomer ?? 0) + biayaPembayaran;
+
+  // ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -69,6 +89,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     super.dispose();
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // DATA LOADING
+  // ══════════════════════════════════════════════════════════════
+
   Future<void> getData(String id) async {
     try {
       setState(() {
@@ -76,7 +100,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         errorMessage = null;
       });
 
-      await getMetodePembayaran();
+      // Fetch semua data secara paralel untuk efisiensi
+      await Future.wait([
+        getMetodePembayaran(),
+        getPpn(),
+      ]);
 
       final resultPenawaran = await penawaranService.getAll(noId: id);
       if (resultPenawaran.isEmpty) {
@@ -90,7 +118,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       }
       paket = resultPaket.first;
 
-      setHarga();
+      _hitungHarga();
     } catch (e) {
       errorMessage = "Data penawaran tidak ditemukan atau sudah tidak aktif";
     } finally {
@@ -100,12 +128,15 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     }
   }
 
-  void setHarga() {
-    biayaDPP = (penawaran!.harga / 1.11).round();
-    hargaPaket = penawaran!.harga;
-    totalPembayaran = hargaPaket + biayaPembayaran;
-    biayaPPN = totalPembayaran - biayaDPP;
-    setState(() {});
+  /// Fetch konfigurasi PPN dari server.
+  /// Jika gagal, fallback ke PpnModel default (tanpa PPN, tanpa platform fee).
+  Future<void> getPpn() async {
+    try {
+      ppnModel = await defaultValueService.getPpn();
+    } catch (e) {
+      debugPrint('[DetailPembayaran] Gagal fetch PPN, pakai default: $e');
+      ppnModel = const PpnModel(ppn: 0, inclPpn: false, platform: 0);
+    }
   }
 
   Future<void> getMetodePembayaran() async {
@@ -118,11 +149,35 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       }
 
       metodePembayaran = result;
-      setState(() {});
     } catch (e) {
       errorMessage = "Metode pembayaran tidak ditemukan";
     }
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // KALKULASI HARGA
+  // ══════════════════════════════════════════════════════════════
+
+  /// Hitung ulang estimasi biaya menggunakan PpnModel.hitungEstimasi().
+  ///
+  /// Dipanggil setiap kali:
+  ///  - Data pertama kali di-load
+  ///  - User memilih / mengganti metode pembayaran
+  ///
+  /// PpnModel.hitungEstimasi() otomatis menangani 3 skenario:
+  ///  - Incl. PPN  → DPP diekstrak dari dalam harga
+  ///  - Excl. PPN  → PPN ditambahkan di atas harga (ditanggung customer)
+  ///  - Tanpa PPN  → tidak ada tambahan
+  void _hitungHarga() {
+    if (penawaran == null || ppnModel == null) return;
+
+    estimasi = ppnModel!.hitungEstimasi(penawaran!.harga);
+    setState(() {});
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // CREATE PESANAN
+  // ══════════════════════════════════════════════════════════════
 
   Future<void> createPesanan() async {
     try {
@@ -141,7 +196,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         idPaket: penawaran!.idPaket,
         namaPaket: penawaran!.namaPaket,
         kota: penawaran!.kota,
-        harga: totalPembayaran,
+        harga: totalPembayaran, // sudah termasuk biaya metode + PPN (jika excl)
         lokasi: penawaran!.lokasi,
         tglRealisasi: penawaran!.tglRealisasi,
         status: "aktif",
@@ -153,7 +208,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       );
 
       final result = await pesananService.create(newPesanan);
-
       final pesanan = await pesananService.getAll(noBukti: result.noBukti);
 
       final historyMenungguBayar = HistoryOrderService.createMenungguPembayaran(
@@ -163,56 +217,59 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
       await historyOrderService.create(historyMenungguBayar);
 
-      bool chatUpdated = false;
       try {
-        chatUpdated =
+        final chatUpdated =
             await context.read<ChatProvider>().updatePenawaranToPesanan(
                   message: widget.message,
                   pesananId: pesanan.first.noBukti,
                 );
-
         if (!chatUpdated) {
           debugPrint('Warning: Chat message tidak berhasil diupdate');
         }
       } catch (e) {
         debugPrint('Error updating chat: $e');
-        // Tidak menampilkan error ke user karena pesanan sudah berhasil dibuat
       }
 
-      // Step 5: Show success message
-      if (mounted) {
-        CustomSnackbar.showSuccessSnackbar(
-          context,
-          "Pesanan berhasil dibuat, segera selesaikan pembayaran",
-        );
+      if (!context.mounted) return;
 
-        // Step 6: Navigate to payment page
-        if (pesanan.first.linkSnap == null) {
-          context.read<NavigationProvider>().navigateToPage(
-                context,
-                targetTabIndex: 2,
-                WaitingPaymentPage(paymentData: pesanan.first),
-              );
-        } else {
-          context.read<NavigationProvider>().navigateToPage(
-                context,
-                targetTabIndex: 2,
-                WebviewPage(
-                  url: pesanan.first.linkSnap!,
-                  paymentData: pesanan.first,
-                ),
-              );
-        }
+      CustomSnackbar.showSuccessSnackbar(
+        context,
+        "Pesanan berhasil dibuat, segera selesaikan pembayaran",
+      );
+
+      if (pesanan.first.linkSnap == null) {
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              targetTabIndex: 2,
+              WaitingPaymentPage(paymentData: pesanan.first),
+            );
+      } else {
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              targetTabIndex: 2,
+              WebviewPage(
+                url: pesanan.first.linkSnap!,
+                paymentData: pesanan.first,
+              ),
+            );
       }
     } catch (e) {
       errorMessage = e.toString();
-      CustomSnackbar.showErrorSnackbar(context, errorMessage!);
+      if (context.mounted) {
+        CustomSnackbar.showErrorSnackbar(context, errorMessage!);
+      }
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -228,19 +285,14 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       ),
       body: Builder(
         builder: (context) {
-          /// =======================
-          /// 1️⃣ LOADING STATE
-          /// =======================
+          /// 1️⃣ LOADING
           if (isLoading) {
             return Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 children: const [
                   ShimmerPlaceholder(
-                    height: 140,
-                    width: double.infinity,
-                    radius: 12,
-                  ),
+                      height: 140, width: double.infinity, radius: 12),
                   SizedBox(height: 16),
                   ShimmerPlaceholder(
                       height: 100, width: double.infinity, radius: 12),
@@ -252,9 +304,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             );
           }
 
-          /// =======================
-          /// 2️⃣ ERROR STATE
-          /// =======================
+          /// 2️⃣ ERROR
           if (errorMessage != null) {
             return Center(
               child: Column(
@@ -262,32 +312,23 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 children: [
                   const Icon(Icons.error_outline, size: 48, color: Colors.red),
                   const SizedBox(height: 12),
-                  Text(
-                    errorMessage!,
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(errorMessage!, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => getData(widget.penawaranId),
                     child: const Text("Coba Lagi"),
-                  )
+                  ),
                 ],
               ),
             );
           }
 
-          /// =======================
-          /// 3️⃣ EMPTY STATE
-          /// =======================
+          /// 3️⃣ EMPTY
           if (penawaran == null || paket == null) {
-            return const Center(
-              child: Text("Data penawaran tidak tersedia"),
-            );
+            return const Center(child: Text("Data penawaran tidak tersedia"));
           }
 
-          /// =======================
-          /// 4️⃣ SUCCESS STATE
-          /// =======================
+          /// 4️⃣ SUCCESS
           final tanggal = DateFormat("dd MMM yyyy", "id_ID")
               .format(penawaran!.tglRealisasi);
           final waktu = Helper.toLocalTime(penawaran!.tglRealisasi);
@@ -300,9 +341,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      /// =======================
-                      /// 📋 INFORMASI PENAWARAN
-                      /// =======================
+                      // ── Informasi Penawaran ──────────────────
                       _buildCardSection(
                         title: "Informasi Penawaran",
                         content: Column(
@@ -335,9 +374,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                         ),
                       ),
 
-                      /// =======================
-                      /// 💳 METODE PEMBAYARAN
-                      /// =======================
+                      // ── Metode Pembayaran ────────────────────
                       if (penawaran!.noPesanan.isEmpty)
                         _buildCardSection(
                           title: "Metode Pembayaran",
@@ -353,7 +390,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                   textMetode = text;
                                   biayaPembayaran = fee;
                                 });
-                                setHarga();
+                                // Hitung ulang total setelah metode dipilih
+                                _hitungHarga();
                               },
                             ),
                             child: Container(
@@ -418,17 +456,12 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                           ),
                         ),
 
-                      /// =======================
-                      /// 📦 DETAIL PAKET (Expandable)
-                      /// =======================
+                      // ── Detail Paket ─────────────────────────
                       _buildExpandableCard(
                         title: "Detail Paket",
                         isExpanded: isPackageExpanded,
-                        onToggle: () {
-                          setState(() {
-                            isPackageExpanded = !isPackageExpanded;
-                          });
-                        },
+                        onToggle: () => setState(
+                            () => isPackageExpanded = !isPackageExpanded),
                         content: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -500,9 +533,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                         ),
                       ),
 
-                      /// =======================
-                      /// 📍 LOKASI & JADWAL
-                      /// =======================
+                      // ── Lokasi & Jadwal ──────────────────────
                       _buildCardSection(
                         title: "Lokasi & Jadwal",
                         content: Column(
@@ -529,11 +560,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(
-                                  Icons.location_on_outlined,
-                                  size: 20,
-                                  color: Colors.black54,
-                                ),
+                                const Icon(Icons.location_on_outlined,
+                                    size: 20, color: Colors.black54),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
@@ -543,9 +571,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                       const Text(
                                         "Alamat Lengkap",
                                         style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black54,
-                                        ),
+                                            fontSize: 12,
+                                            color: Colors.black54),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
@@ -568,10 +595,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 ),
               ),
 
-              /// =======================
-              /// 💰 BOTTOM BAR - RINGKASAN
-              /// =======================
-
+              // ── Bottom Bar ─────────────────────────────────
               _buildExpandableBottomBar(),
             ],
           );
@@ -580,9 +604,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     );
   }
 
-  /// =======================
-  /// 🎨 WIDGET BUILDERS
-  /// =======================
+  // ══════════════════════════════════════════════════════════════
+  // WIDGET BUILDERS
+  // ══════════════════════════════════════════════════════════════
 
   Widget _buildCardSection({
     required String title,
@@ -608,23 +632,16 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         children: [
           Row(
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
               if (isRequired) ...[
                 const SizedBox(width: 4),
-                const Text(
-                  "*",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
+                const Text("*",
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red)),
               ],
             ],
           ),
@@ -643,31 +660,18 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 20,
-          color: Colors.black54,
-        ),
+        Icon(icon, size: 20, color: Colors.black54),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
-              ),
+              Text(label,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(value,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -680,6 +684,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     String value, {
     bool isBold = false,
     Color? valueColor,
+    Color? labelColor,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -689,7 +694,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: Colors.black87,
+            color: labelColor ?? Colors.black87,
           ),
         ),
         Text(
@@ -717,11 +722,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
         ],
       ),
       child: Material(
@@ -738,21 +739,14 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                        child: Text(title,
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold))),
                     AnimatedRotation(
                       turns: isExpanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: Colors.grey.shade600,
-                      ),
+                      child: Icon(Icons.keyboard_arrow_down_rounded,
+                          color: Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -776,9 +770,35 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     );
   }
 
-  /// =======================
-  /// 🔽 EXPANDABLE BOTTOM BAR
-  /// =======================
+  // ══════════════════════════════════════════════════════════════
+  // EXPANDABLE BOTTOM BAR
+  //
+  // Label dan baris PPN ditampilkan secara dinamis:
+  //
+  //  ┌─ Incl. PPN ───────────────────────────────────────────────┐
+  //  │  Harga Paket (sudah termasuk PPN)      Rp X.XXX.XXX       │
+  //  │  PPN (11%) sudah termasuk             -Rp XXX.XXX         │
+  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
+  //  │  ─────────────────────────────────────────────────────    │
+  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
+  //  └───────────────────────────────────────────────────────────┘
+  //
+  //  ┌─ Excl. PPN ───────────────────────────────────────────────┐
+  //  │  Harga Paket (belum termasuk PPN)      Rp X.XXX.XXX       │
+  //  │  PPN (11%)                             Rp XXX.XXX         │
+  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
+  //  │  ─────────────────────────────────────────────────────    │
+  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
+  //  └───────────────────────────────────────────────────────────┘
+  //
+  //  ┌─ Tanpa PPN ───────────────────────────────────────────────┐
+  //  │  Harga Paket                           Rp X.XXX.XXX       │
+  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
+  //  │  ─────────────────────────────────────────────────────    │
+  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
+  //  └───────────────────────────────────────────────────────────┘
+  // ══════════════════════════════════════════════════════════════
+
   Widget _buildExpandableBottomBar() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -798,24 +818,16 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// =======================
-          /// Header dengan Toggle Button
-          /// =======================
+          // ── Header toggle ──────────────────────────────────
           GestureDetector(
-            onTap: () {
-              setState(() {
-                _isExpanded = !_isExpanded;
-              });
-            },
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   _isExpanded ? "Ringkasan Pembayaran" : "Total Pembayaran",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Row(
                   children: [
@@ -832,10 +844,8 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                     AnimatedRotation(
                       duration: const Duration(milliseconds: 300),
                       turns: _isExpanded ? 0.5 : 0,
-                      child: Icon(
-                        Icons.keyboard_arrow_up_rounded,
-                        color: Colors.black54,
-                      ),
+                      child: const Icon(Icons.keyboard_arrow_up_rounded,
+                          color: Colors.black54),
                     ),
                   ],
                 ),
@@ -843,9 +853,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             ),
           ),
 
-          /// =======================
-          /// Detail Pembayaran (Expandable)
-          /// =======================
+          // ── Detail harga (expandable) ──────────────────────
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
             secondChild: Column(
@@ -853,10 +861,29 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
+
+                // Baris harga paket — label berubah sesuai kondisi PPN
                 _buildPriceRow(
-                  "Harga Paket (Termasuk PPN)",
+                  hasPpn
+                      ? (inclPpn
+                          ? "Harga Paket (sudah termasuk PPN)"
+                          : "Harga Paket (belum termasuk PPN)")
+                      : "Harga Paket",
                   Helper.formatCurrency(hargaPaket),
                 ),
+
+                // Baris PPN — hanya tampil jika ada PPN
+                if (!inclPpn && hasPpn) ...[
+                  const SizedBox(height: 8),
+                  _buildPriceRow(
+                    "PPN (${estimasi!.ppnPersen}%)",
+                    Helper.formatCurrency(biayaPPN),
+                    labelColor: null,
+                    valueColor: null,
+                  )
+                ],
+
+                // Biaya metode pembayaran — hanya tampil jika sudah dipilih
                 if (kodeMetode != null) ...[
                   const SizedBox(height: 8),
                   _buildPriceRow(
@@ -864,9 +891,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                     Helper.formatCurrency(biayaPembayaran),
                   ),
                 ],
+
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
+
                 _buildPriceRow(
                   "Total Pembayaran",
                   Helper.formatCurrency(totalPembayaran),
@@ -881,9 +910,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             duration: const Duration(milliseconds: 300),
           ),
 
-          /// =======================
-          /// Button Bayar Sekarang
-          /// =======================
+          // ── Tombol Bayar ───────────────────────────────────
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -893,8 +920,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                     ? Colors.grey.shade300
                     : Constants.primaryColor,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: kodeMetode == null ? 0 : 2,
               ),
@@ -902,9 +928,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   ? null
                   : kodeMetode == null
                       ? null
-                      : () async {
-                          await createPesanan();
-                        },
+                      : () async => await createPesanan(),
               child: Text(
                 penawaran!.noPesanan.isNotEmpty
                     ? "Penawaran Sudah Ditutup"
