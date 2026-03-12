@@ -6,7 +6,6 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
-import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
 import 'package:provider/provider.dart';
 
 class PostHeader extends StatelessWidget {
@@ -58,10 +57,30 @@ class PostHeader extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              portofolio.usernameVendor ?? '',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
+                            Row(
+                              children: [
+                                Text(
+                                  portofolio.usernameVendor ?? '',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
+                                ),
+                                if (portofolio.ratingVendor != 0) ...[
+                                  SizedBox(
+                                    width: 10,
+                                  ),
+                                  const Icon(Icons.star,
+                                      color: Colors.amber, size: 16),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    portofolio.ratingVendor.toString(),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                             Text(
                               portofolio.namaKategori ?? '',
@@ -70,17 +89,6 @@ class PostHeader extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(width: 6),
-                        if (portofolio.ratingVendor != 0) ...[
-                          const Icon(Icons.star, color: Colors.amber, size: 16),
-                          const SizedBox(width: 2),
-                          Text(
-                            portofolio.ratingVendor.toString(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

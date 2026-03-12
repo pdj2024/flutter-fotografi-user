@@ -34,7 +34,7 @@ class PortofolioModelAdapter extends TypeAdapter<PortofolioModel> {
       tglCreated: fields[14] as DateTime,
       jumlahPaket: fields[15] as int?,
       status: fields[16] as String,
-      ratingVendor: fields[17] as int?,
+      ratingVendor: fields[17] as double?,
       hargaMinPaket: fields[18] as int?,
       hargaMaxPaket: fields[19] as int?,
       jumlahPortofolio: fields[20] as int?,

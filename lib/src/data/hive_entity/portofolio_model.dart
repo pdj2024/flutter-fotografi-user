@@ -62,7 +62,7 @@ class PortofolioModel extends Equatable {
   final String status;
 
   @HiveField(17)
-  final int? ratingVendor;
+  final double? ratingVendor;
 
   @HiveField(18)
   final int? hargaMinPaket;
@@ -201,11 +201,9 @@ class PortofolioModel extends Equatable {
   /// Get semua thumbnail (untuk grid view, list preview)
   List<MediaUrlModel> get thumbnails {
     return mediaUrls.map((media) {
-      // Untuk video, gunakan thumbnail
       if (media.isVideo && media.localThumbPath != null) {
         return media;
       }
-      // Untuk image, gunakan compressed version jika ada
       if (media.isImage && media.isCompressed == true) {
         return media;
       }
@@ -295,6 +293,15 @@ class PortofolioModel extends Equatable {
   // SERIALIZATION
   // =====================================
 
+  /// Helper: parse num (int atau double) ke double secara aman
+  static double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   /// FROM JSON (dari backend)
   factory PortofolioModel.fromJson(Map<String, dynamic> json) {
     return PortofolioModel(
@@ -319,7 +326,9 @@ class PortofolioModel extends Equatable {
           : DateTime.now(),
       jumlahPaket: json['Jumlah_Paket'],
       status: json['Status'] ?? '',
-      ratingVendor: json['Rating_Vendor'],
+      // ✅ FIX: Casting aman int → double untuk semua field numerik desimal
+      ratingVendor: _toDouble(json['Rating_Vendor']),
+      skorTotal: _toDouble(json['Skor_Total']),
       hargaMinPaket: json['Harga_Min_Paket'],
       hargaMaxPaket: json['Harga_Max_Paket'],
       jumlahPortofolio: json['Jumlah_Portofolio'],
@@ -329,9 +338,6 @@ class PortofolioModel extends Equatable {
       fromSavedVendor: json['From_Saved_Vendor'],
       isSaved: json['Is_Saved'],
       isLiked: json['Is_Liked'],
-      skorTotal: json['Skor_Total'] is int
-          ? (json['Skor_Total'] as int).toDouble()
-          : json['Skor_Total'],
       mediaUrls: json['MediaUrls'] != null
           ? (json['MediaUrls'] as List)
               .map((e) => MediaUrlModel.fromJson(e))
@@ -431,7 +437,7 @@ class PortofolioModel extends Equatable {
     DateTime? tglCreated,
     int? jumlahPaket,
     String? status,
-    int? ratingVendor,
+    double? ratingVendor,
     int? hargaMinPaket,
     int? hargaMaxPaket,
     int? jumlahPortofolio,

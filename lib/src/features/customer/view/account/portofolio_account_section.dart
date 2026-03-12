@@ -10,6 +10,9 @@ import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
 
+/// Widget ini mengembalikan Sliver langsung,
+/// agar bisa digabung ke CustomScrollView parent di CustomerAccountPage.
+/// Mengikuti pola PortofolioAccountSection di VendorBioPage.
 class PortofolioAccountSection extends StatefulWidget {
   /// 'like' atau 'save'
   final String data;
@@ -55,89 +58,78 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
         final dataList =
             _isLike ? provider.portofolioLikelist : provider.portofolioSaveList;
 
-        // ── Gunakan CustomScrollView agar bisa menjadi inner scroll
-        // dari NestedScrollView dan mendukung SliverOverlapInjector ──
-        return CustomScrollView(
-          // Kunci: gunakan physics yang memungkinkan NestedScrollView
-          // mengkoordinasikan scroll antara header (outer) dan list (inner)
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // Injector wajib ada untuk mengkompensasi overlap dari header
-            SliverOverlapInjector(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+        // ── Loading skeleton ──────────────────────────────────────
+        if (isLoading && dataList.isEmpty) {
+          return SliverPadding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (_, __) => const ShimmerPlaceholder(radius: 10),
+                childCount: 6,
+              ),
             ),
+          );
+        }
 
-            // ── Loading skeleton ────────────────────────────────────
-            if (isLoading && dataList.isEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (_, __) => const ShimmerPlaceholder(radius: 10),
-                    childCount: 6,
-                  ),
+        // ── Empty state ───────────────────────────────────────────
+        if (dataList.isEmpty) {
+          return SliverFillRemaining(
+            hasScrollBody: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 60),
+                Icon(
+                  _isLike
+                      ? Icons.favorite_border_rounded
+                      : Icons.bookmark_border_rounded,
+                  size: 80,
+                  color: Colors.grey.shade300,
                 ),
-              )
-
-            // ── Empty state ─────────────────────────────────────────
-            else if (dataList.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 60),
-                    Icon(
-                      _isLike
-                          ? Icons.favorite_border_rounded
-                          : Icons.bookmark_border_rounded,
-                      size: 80,
-                      color: Colors.grey.shade300,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _isLike
-                          ? 'Belum ada portofolio yang disukai'
-                          : 'Belum ada portofolio yang disimpan',
-                      style:
-                          TextStyle(fontSize: 14, color: Colors.grey.shade500),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tarik ke bawah untuk memperbarui',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+                Text(
+                  _isLike
+                      ? 'Belum ada portofolio yang disukai'
+                      : 'Belum ada portofolio yang disimpan',
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                  textAlign: TextAlign.center,
                 ),
-              )
+                const SizedBox(height: 8),
+                Text(
+                  'Tarik ke bawah untuk memperbarui',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                ),
+              ],
+            ),
+          );
+        }
 
-            // ── Grid ────────────────────────────────────────────────
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final porto = dataList[index];
-                      return _PortoGridItem(
-                          porto: porto, isLikeSection: _isLike);
-                    },
-                    childCount: dataList.length,
-                  ),
+        // ── Grid + footer ─────────────────────────────────────────
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final porto = dataList[index];
+                    return _PortoGridItem(porto: porto, isLikeSection: _isLike);
+                  },
+                  childCount: dataList.length,
                 ),
               ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 50)),
           ],
         );
       },
@@ -278,7 +270,6 @@ class _QuickActionButton extends StatelessWidget {
       ),
       builder: (context, state, _) {
         final provider = context.read<PortofolioProvider>();
-
         return GestureDetector(
           onTap: state.isInProgress
               ? null
@@ -360,7 +351,6 @@ class _MediaImage extends StatelessWidget {
           errorBuilder: (_, __, ___) => _networkImage(),
         );
       }
-      debugPrint('[PortoSection] ⚠️ Local file missing: ${media.localPath}');
     }
     return _networkImage();
   }

@@ -30,13 +30,7 @@ class SummaryCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 2,
-              offset: Offset(2, 2),
-            )
-          ],
+          
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

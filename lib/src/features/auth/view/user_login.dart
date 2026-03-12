@@ -6,6 +6,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/account/legal_page.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
@@ -554,17 +555,76 @@ class _UserLoginState extends State<UserLogin>
                           /// --- Terms & Privacy ---
                           SlideTransition(
                             position: _slideAnimation,
-                            child: Text(
-                              'Dengan masuk, Anda menyetujui Syarat & Ketentuan\ndan Kebijakan Privasi kami',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontSize: 12,
-                                height: 1.5,
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 50),
+                              child: Wrap(
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  Text(
+                                    'Dengan masuk, Anda menyetujui ',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 12,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalPage(
+                                            type: LegalType.terms),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Syarat & Ketentuan',
+                                      style: TextStyle(
+                                        color: Constants.primaryColor,
+                                        fontSize: 12,
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    ' dan ',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 12,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalPage(
+                                            type: LegalType.privacy),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Kebijakan Privasi',
+                                      style: TextStyle(
+                                        color: Constants.primaryColor,
+                                        fontSize: 12,
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    ' kami',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 12,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-
                           const SizedBox(height: 32),
                         ],
                       ),

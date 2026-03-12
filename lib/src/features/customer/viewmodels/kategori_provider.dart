@@ -22,8 +22,10 @@ class KategoriProvider with ChangeNotifier {
 // ===== Actions =====
 
   /// Ambil data kategori dari API
-  Future<void> loadKategori({String status = 'aktif'}) async {
+  Future<void> loadKategori(
+      {String status = 'aktif', String? namaKategori}) async {
     _isLoadingKategori = true;
+
     _errorKategori = null;
     notifyListeners();
 
@@ -31,6 +33,7 @@ class KategoriProvider with ChangeNotifier {
       // Panggil service
       final kList = await _kategoriService.getAll(
         status: status,
+        namaKategori: namaKategori ?? "",
       );
 
       _kategoriList = kList;

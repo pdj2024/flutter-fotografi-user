@@ -12,7 +12,6 @@ import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
-import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
@@ -57,10 +56,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   int _previousHistoryCount = 0;
   Timer? _updateTimer;
 
-  // ═══════════════════════════════════════════════════════════════
-  // SINGLE SOURCE OF TRUTH untuk warna & icon status
-  // Semua method cukup panggil _cfg(status)
-  // ═══════════════════════════════════════════════════════════════
+  // ── Single source of truth untuk warna & icon status ──
   StatusConfig _cfg(String status) => getStatus(status);
 
   @override
@@ -84,6 +80,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   void dispose() {
     historyProvider.untrackOrder(widget.pesananModel.noBukti);
     _updateTimer?.cancel();
+    _refreshController.dispose();
     super.dispose();
   }
 
@@ -250,6 +247,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,22 +290,16 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     const SizedBox(height: 12),
                     _buildProfileCard(pesanan),
                     const SizedBox(height: 12),
-
-                    // Link hasil kerja (Review / Revisi)
                     if ((status == 'review' || status == 'revisi') &&
                         pesanan.linkUrl != null &&
                         pesanan.linkUrl!.isNotEmpty) ...[
                       _buildLinkResultCard(pesanan),
                       const SizedBox(height: 12),
                     ],
-
-                    // Banner menunggu revisi
                     if (status == 'revisi') ...[
                       _buildRevisiWaitingBanner(),
                       const SizedBox(height: 12),
                     ],
-
-                    // Pembayaran
                     _buildExpandableCard(
                       title: 'Pembayaran',
                       isExpanded: isPaymentExpanded,
@@ -318,16 +310,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                           : null,
                       content: _buildPaymentContent(pesanan),
                     ),
-
-                    // Progress
                     _buildProgressSection(pesanan),
-
-                    // Lokasi & Jadwal
                     _buildCardSection(
                         title: 'Lokasi & Jadwal',
                         content: _buildLocationContent(pesanan)),
-
-                    // Paket
                     if (paket != null)
                       _buildExpandableCard(
                         title: 'Detail Paket',
@@ -348,18 +334,22 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
 
   // ═══════════════════════════════════════════════════════════════
   // STATUS INFO CARD
-  // Warna diambil dari _cfg() — tidak ada lagi switch manual
+  // ✅ Gunakan OrderStatusFlow.customerInfoLabel() — return StatusInfoLabel
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildStatusInfoCard(String status, PesananModel pesanan) {
-    // Default: ambil dari StatusConfig
+    // ── Ambil info dari customerInfoLabel — teks & icon dari satu sumber ──
+    final infoLabel = OrderStatusFlow.customerInfoLabel(status);
+
     StatusConfig cfg = _cfg(status);
     Color borderColor = cfg.color;
     Color bgColor = cfg.bgColor;
     IconData icon = cfg.icon;
 
     String shortText;
-    String fullText;
+    String fullText = infoLabel.body;
 
+    // Override khusus untuk status persiapan berdasarkan tanggal
     if (status == 'persiapan') {
       final now = DateTime.now();
       final tglRealisasi = pesanan.tglRealisasi;
@@ -369,59 +359,44 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           : null;
 
       if (tglShoot == null) {
-        shortText = 'Pesanan dalam tahap persiapan pemotretan.';
-        fullText = OrderStatusFlow.customerInfo(status);
+        fullText = infoLabel.body;
       } else if (today.isBefore(tglShoot)) {
-        // Override warna khusus: belum saatnya
         bgColor = Colors.grey.shade50;
         borderColor = Colors.grey.shade400;
         icon = Icons.schedule_rounded;
-        shortText =
-            'Pemotretan dijadwalkan pada ${Helper.formatTanggal(tglRealisasi!)}.'
-            ' Tombol konfirmasi belum aktif.';
         fullText =
-            'Pemotretan dijadwalkan pada ${Helper.formatTanggal(tglRealisasi)}. '
+            'Pemotretan dijadwalkan pada ${Helper.formatTanggal(tglRealisasi!)}. '
             'Tombol konfirmasi akan aktif pada hari pemotretan atau setelahnya. '
             'Pastikan Anda hadir sesuai jadwal dan siap mengonfirmasi setelah sesi selesai.';
       } else if (today.isAtSameMomentAs(tglShoot)) {
-        // Override warna khusus: hari ini
-        bgColor = cfg.bgColor; // pakai bgColor dari StatusConfig (persiapan)
-        borderColor = cfg.color;
         icon = Icons.camera_alt_outlined;
-        shortText = 'Pemotretan dijadwalkan hari ini.'
-            ' Konfirmasi setelah sesi selesai.';
         fullText = 'Pemotretan dijadwalkan hari ini. Setelah sesi selesai, '
             'segera tekan tombol Konfirmasi Pemotretan Selesai di bawah '
             'agar vendor dapat mulai mengerjakan hasil foto Anda.';
       } else {
-        // Override warna khusus: sudah lewat
         bgColor = _cfg('proses').bgColor;
         borderColor = _cfg('proses').color;
         icon = Icons.warning_amber_rounded;
-        shortText = 'Pemotretan sudah melewati tanggal yang dijadwalkan'
-            ' (${Helper.formatTanggal(tglRealisasi!)}). Segera konfirmasi.';
         fullText = 'Pemotretan sudah melewati tanggal yang dijadwalkan '
-            '(${Helper.formatTanggal(tglRealisasi)}). '
+            '(${Helper.formatTanggal(tglRealisasi!)}). '
             'Segera konfirmasi jika sesi telah selesai dilaksanakan. '
             'Jika tidak dikonfirmasi dalam 3×24 jam dari tanggal realisasi, '
             'pesanan akan otomatis lanjut ke tahap pengerjaan oleh vendor.';
       }
-    } else {
-      fullText = OrderStatusFlow.customerInfo(status);
-      if (fullText.isEmpty) return const SizedBox.shrink();
-
-      final dotSpace = fullText.indexOf('. ');
-      if (dotSpace != -1) {
-        shortText = fullText.substring(0, dotSpace + 1);
-      } else {
-        const maxShort = 60;
-        shortText = fullText.length > maxShort
-            ? '${fullText.substring(0, maxShort).trimRight()}...'
-            : fullText;
-      }
     }
 
     if (fullText.isEmpty) return const SizedBox.shrink();
+
+    // Potong kalimat pertama untuk shortText
+    final dotSpace = fullText.indexOf('. ');
+    if (dotSpace != -1) {
+      shortText = fullText.substring(0, dotSpace + 1);
+    } else {
+      const maxShort = 60;
+      shortText = fullText.length > maxShort
+          ? '${fullText.substring(0, maxShort).trimRight()}...'
+          : fullText;
+    }
 
     final bool canExpand = shortText.trim() != fullText.trim();
 
@@ -493,10 +468,14 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // REVISI WAITING BANNER — warna dari _cfg('revisi')
+  // REVISI WAITING BANNER
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildRevisiWaitingBanner() {
     final cfg = _cfg('revisi');
+    // ✅ Teks dari customerInfoLabel, bukan hardcode
+    final info = OrderStatusFlow.customerInfoLabel('revisi');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -512,8 +491,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               color: cfg.color.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child:
-                Icon(Icons.hourglass_top_rounded, size: 18, color: cfg.color),
+            child: Icon(cfg.icon, size: 18, color: cfg.color),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -521,7 +499,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Menunggu Revisi dari Vendor',
+                  info.title, // ✅ dari customerInfoLabel
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -530,7 +508,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Vendor sedang mengerjakan perbaikan. Anda akan diberitahu saat hasil revisi siap.',
+                  info.body, // ✅ dari customerInfoLabel
                   style: TextStyle(fontSize: 12, color: cfg.color, height: 1.4),
                 ),
               ],
@@ -542,8 +520,9 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // LINK HASIL KERJA — warna dari _cfg()
+  // LINK HASIL KERJA
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildLinkResultCard(PesananModel pesanan) {
     final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
     final cfg = _cfg(status);
@@ -562,7 +541,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Container(
@@ -602,10 +580,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
-          // Link Box
           InkWell(
             onTap: () => context.read<NavigationProvider>().navigateToPage(
                   context,
@@ -645,8 +620,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               ),
             ),
           ),
-
-          // Customer action (hanya saat review)
           if (status == 'review') ...[
             const SizedBox(height: 10),
             _buildCustomerActionArea('review', pesanan),
@@ -659,6 +632,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
   // STICKY BOTTOM BAR
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildStickyKonfirmasiBar(PesananModel pesanan) {
     final now = DateTime.now();
     final tglRealisasi = pesanan.tglRealisasi;
@@ -672,12 +646,23 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         tglShoot != null && today.isAtSameMomentAs(tglShoot);
     final bool isAfterShoot = tglShoot != null && today.isAfter(tglShoot);
 
-    // Warna dot indikator: grey = belum, biru = hari ini, orange = sudah lewat
+    // ✅ Warna dot dari _cfg — tidak ada magic color manual
     final dotColor = isBeforeShoot
         ? Colors.grey
         : isOnShootDay
             ? _cfg('persiapan').color
             : _cfg('proses').color;
+
+    // ✅ Label dari OrderStatusFlow.displayLabel
+    final shootLabel = isBeforeShoot
+        ? 'Sesi pemotretan belum dimulai'
+        : isOnShootDay
+            ? 'Sesi pemotretan sedang berlangsung hari ini'
+            : 'Sesi pemotretan sudah berlangsung';
+
+    // ✅ Label tombol dari OrderStatusFlow.transitions
+    final transition = OrderStatusFlow.get('persiapan', 'proses');
+    final btnLabel = transition?.actionLabel ?? 'Konfirmasi Pemotretan Selesai';
 
     return Container(
       padding: EdgeInsets.only(
@@ -708,11 +693,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isBeforeShoot
-                      ? 'Sesi pemotretan belum dimulai'
-                      : isOnShootDay
-                          ? 'Sesi pemotretan sedang berlangsung hari ini'
-                          : 'Sesi pemotretan sudah berlangsung',
+                  shootLabel,
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.grey.shade700,
@@ -729,9 +710,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               onPressed:
                   (isOnShootDay || isAfterShoot) ? _konfirmasiPemotretan : null,
               icon: const Icon(Icons.camera_alt_rounded, size: 20),
-              label: const Text(
-                'Konfirmasi Pemotretan Selesai',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              label: Text(
+                btnLabel, // ✅ dari OrderStatusFlow.transitions
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Constants.primaryColor,
@@ -753,12 +735,18 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
 
   // ═══════════════════════════════════════════════════════════════
   // CUSTOMER ACTION AREA
+  // ✅ Label tombol dari OrderStatusFlow.transitions
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildCustomerActionArea(String status, PesananModel pesanan) {
     if (status != 'review') return const SizedBox.shrink();
 
     final cfgRevisi = _cfg('revisi');
     final cfgSelesai = _cfg('selesai');
+
+    // ✅ Label dari transitions — satu sumber kebenaran
+    final revisiTransition = OrderStatusFlow.get('review', 'revisi');
+    final selesaiTransition = OrderStatusFlow.get('review', 'selesai');
 
     return Row(
       children: [
@@ -771,9 +759,12 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     height: 14,
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: cfgRevisi.color))
-                : const Icon(Icons.edit_note_rounded, size: 18),
-            label: const Text('Minta Revisi',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+                : Icon(cfgRevisi.icon, size: 18), // ✅ icon dari cfg
+            label: Text(
+              revisiTransition?.actionLabel ??
+                  'Minta Revisi', // ✅ label dari transitions
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             style: OutlinedButton.styleFrom(
               foregroundColor: cfgRevisi.color,
               side: BorderSide(color: cfgRevisi.color, width: 1.5),
@@ -793,9 +784,12 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     height: 14,
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.check_circle_outline_rounded, size: 18),
-            label: const Text('Selesaikan',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+                : Icon(cfgSelesai.icon, size: 18), // ✅ icon dari cfg
+            label: Text(
+              selesaiTransition?.actionLabel ??
+                  'Selesaikan', // ✅ label dari transitions
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: cfgSelesai.color,
               foregroundColor: Colors.white,
@@ -813,6 +807,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
   // PROGRESS SECTION
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildProgressSection(PesananModel pesanan) {
     return Consumer<HistoryOrderProvider>(
       builder: (context, hp, _) {
@@ -909,7 +904,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
 
   Widget _buildTimelineItem(HistoryOrderModel history,
       {required bool isFirst, required bool isLast}) {
-    // ✅ Warna dari _cfg() — tidak ada lagi switch manual
+    // ✅ Warna & label dari _cfg() + OrderStatusFlow.displayLabel
     final cfg = _cfg(history.statusProgressPesanan);
     final dotColor = isFirst ? cfg.color : Colors.grey.shade400;
 
@@ -947,7 +942,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 2),
-                  // Badge status
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -956,8 +950,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      OrderStatusFlow.displayLabel(
-                          history.statusProgressPesanan),
+                      // ✅ Label dari cfg (sudah pakai OrderStatusFlow.displayLabel di dalamnya)
+                      cfg.label,
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
@@ -965,7 +959,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  // Konten deskripsi
                   if (history.statusProgressPesanan == 'revisi' ||
                       (history.statusProgressPesanan == 'proses' &&
                           history.deskripsi.toLowerCase().contains('revisi')))
@@ -991,7 +984,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     );
   }
 
-  // ✅ Terima cfg agar warna border sesuai status
   Widget _buildRevisionNote(String deskripsi, StatusConfig cfg) {
     return Container(
       padding: const EdgeInsets.all(10),
@@ -1113,6 +1105,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
   // ULASAN SECTION
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildUlasanSection(PesananModel pesanan) {
     if (ulasan == null) {
       return SizedBox(
@@ -1255,12 +1248,12 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // PROFILE CARD — warna dari _cfg()
+  // PROFILE CARD
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildProfileCard(PesananModel pesanan) {
     final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
     final cfg = _cfg(status);
-    final displayLabel = OrderStatusFlow.displayLabel(status);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1275,7 +1268,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         children: [
           Row(
             children: [
-              // Avatar vendor
               pesanan.idMediaVendor != null && pesanan.idMediaVendor!.isNotEmpty
                   ? CircleAvatar(
                       radius: 26,
@@ -1332,7 +1324,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                         style: const TextStyle(
                             fontSize: 12, color: Colors.black45)),
                     const SizedBox(height: 6),
-                    // ✅ Badge status — warna dari cfg
+                    // ✅ Badge menggunakan cfg.label (dari OrderStatusFlow.displayLabel)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -1346,7 +1338,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                         children: [
                           Icon(cfg.icon, size: 12, color: cfg.color),
                           const SizedBox(width: 4),
-                          Text(displayLabel,
+                          Text(cfg.label, // ✅ dari cfg, bukan hardcode
                               style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -1357,7 +1349,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                   ],
                 ),
               ),
-              // Chat button
               SizedBox(
                 height: 40,
                 width: 40,
@@ -1392,9 +1383,17 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // HELPERS (tidak berubah)
+  // PAYMENT
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildPaymentSummary(PesananModel pesanan) {
+    final isPaid = pesanan.statusBayar == 'settlement';
+    // ✅ Warna dari getStatus — bukan hardcode Colors.green / Colors.orange
+    final payColor =
+        isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
+    final payBg =
+        isPaid ? _cfg('selesai').bgColor : _cfg('menunggu bayar').bgColor;
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
@@ -1403,25 +1402,14 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: pesanan.statusBayar == 'settlement'
-                  ? Colors.green.shade50
-                  : Colors.orange.shade50,
+              color: payBg,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                  color: pesanan.statusBayar == 'settlement'
-                      ? Colors.green.shade200
-                      : Colors.orange.shade200),
+              border: Border.all(color: payColor.withOpacity(0.4)),
             ),
             child: Text(
-              pesanan.statusBayar == 'settlement'
-                  ? 'Sudah Bayar'
-                  : 'Belum Bayar',
+              isPaid ? 'Sudah Bayar' : 'Belum Bayar',
               style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: pesanan.statusBayar == 'settlement'
-                      ? Colors.green.shade700
-                      : Colors.orange.shade700),
+                  fontSize: 11, fontWeight: FontWeight.w600, color: payColor),
             ),
           ),
           Text(
@@ -1437,6 +1425,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   Widget _buildPaymentContent(PesananModel pesanan) {
+    final isPaid = pesanan.statusBayar == 'settlement';
+    final payColor =
+        isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1447,19 +1439,18 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
             copyable: true),
         const SizedBox(height: 8),
         _buildInfoRow(
-            label: 'Metode Pembayaran',
-            value: pesanan.metodeBayar ?? '-',
-            icon: Icons.account_balance_wallet_outlined),
+          label: 'Metode Pembayaran',
+          value: pesanan.metodeBayar != null
+              ? pesanan.metodeBayar!.replaceAll('_', ' ').toUpperCase()
+              : '-',
+          icon: Icons.account_balance_wallet_outlined,
+        ),
         const SizedBox(height: 8),
         _buildInfoRow(
             label: 'Status Pembayaran',
             icon: Icons.schedule_outlined,
-            value: pesanan.statusBayar == 'settlement'
-                ? 'Sudah Bayar'
-                : 'Belum Bayar',
-            valueColor: pesanan.statusBayar == 'settlement'
-                ? Colors.green
-                : Colors.orange),
+            value: isPaid ? 'Sudah Bayar' : 'Belum Bayar',
+            valueColor: payColor), // ✅ warna dari cfg
         const SizedBox(height: 16),
         const Divider(),
         const SizedBox(height: 12),

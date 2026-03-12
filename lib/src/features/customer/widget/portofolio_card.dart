@@ -15,16 +15,6 @@ import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// PortofolioCard
-///
-/// Card tidak punya logic API atau Hive sendiri.
-/// Semua like/save logic ada di PortofolioProvider.
-/// Card hanya:
-///   1. Membaca state dari provider via Selector (efisien, tidak rebuild semua)
-///   2. Memanggil provider.toggleLike / toggleSave saat user tap
-///
-/// ✅ UPDATE: Gambar kini mengikuti rasio asli (1:1, 4:3, 16:9, dst.)
-///           + carousel swipe jika portofolio punya lebih dari 1 gambar
 class PortofolioCard extends StatefulWidget {
   const PortofolioCard({
     Key? key,
@@ -32,7 +22,7 @@ class PortofolioCard extends StatefulWidget {
     this.imageUrl,
     required this.name,
     this.rating,
-    this.aspectRatio = 1.0, // kept for API compat, no longer used internally
+    this.aspectRatio = 1.0,
     required this.noId,
     required this.idVendor,
     required this.portofolio,
@@ -42,8 +32,8 @@ class PortofolioCard extends StatefulWidget {
   final String photographerIcon;
   final String? imageUrl;
   final String name;
-  final int? rating;
-  final double aspectRatio; // deprecated — height is now auto-detected
+  final double? rating;
+  final double aspectRatio;
   final String noId;
   final String idVendor;
 
@@ -53,6 +43,7 @@ class PortofolioCard extends StatefulWidget {
 
 class _PortofolioCardState extends State<PortofolioCard> {
   // ── Carousel ─────────────────────────────────────────────
+  late final PageController _pageController;
   int _currentIndex = 0;
 
   // ── Dynamic image height ──────────────────────────────────
@@ -67,10 +58,17 @@ class _PortofolioCardState extends State<PortofolioCard> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _measureCaption();
     });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   // ── Caption helpers ───────────────────────────────────────
@@ -101,7 +99,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
     return c.replaceAll(RegExp(r'<[^>]*>'), '').trim();
   }
 
-  // ── Image dimension detection (same logic as ImagePost) ───
+  // ── Image dimension detection ─────────────────────────────
 
   Future<void> _loadImageDimensions(ImageProvider imageProvider) async {
     if (!mounted || _isImageLoaded) return;
@@ -115,23 +113,19 @@ class _PortofolioCardState extends State<PortofolioCard> {
         if (!mounted) return;
         final screenWidth = MediaQuery.of(context).size.width;
         final ar = info.image.width / info.image.height;
-        if (mounted) {
-          setState(() {
-            _imageHeight = screenWidth / ar;
-            _isImageLoaded = true;
-          });
-        }
+        setState(() {
+          _imageHeight = screenWidth / ar;
+          _isImageLoaded = true;
+        });
         stream.removeListener(listener);
         if (!completer.isCompleted) completer.complete();
       },
       onError: (_, __) {
         if (!mounted) return;
-        if (mounted) {
-          setState(() {
-            _imageHeight = 300;
-            _isImageLoaded = true;
-          });
-        }
+        setState(() {
+          _imageHeight = 300;
+          _isImageLoaded = true;
+        });
         stream.removeListener(listener);
         if (!completer.isCompleted) completer.complete();
       },
@@ -139,7 +133,6 @@ class _PortofolioCardState extends State<PortofolioCard> {
 
     stream.addListener(listener);
 
-    // Timeout fallback
     Future.delayed(const Duration(seconds: 5), () {
       if (!completer.isCompleted && mounted) {
         setState(() {
@@ -152,31 +145,11 @@ class _PortofolioCardState extends State<PortofolioCard> {
     });
   }
 
-  // ── Carousel helpers ──────────────────────────────────────
+  // ── Media helpers ─────────────────────────────────────────
 
   List<MediaUrlModel> get _validMedia => widget.portofolio.mediaUrls
       .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
       .toList();
-
-  void _onSwipe(DragEndDetails details) {
-    final media = _validMedia;
-    if (media.length <= 1) return;
-
-    if (details.primaryVelocity! < -300 && _currentIndex < media.length - 1) {
-      setState(() {
-        _currentIndex++;
-        // Reset height so next image can recalculate its own ratio
-        _isImageLoaded = false;
-        _imageHeight = null;
-      });
-    } else if (details.primaryVelocity! > 300 && _currentIndex > 0) {
-      setState(() {
-        _currentIndex--;
-        _isImageLoaded = false;
-        _imageHeight = null;
-      });
-    }
-  }
 
   // ═══════════════════════════════════════════════════════════
   // BUILD
@@ -221,39 +194,29 @@ class _PortofolioCardState extends State<PortofolioCard> {
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: GestureDetector(
-                onHorizontalDragEnd: _onSwipe,
-                child: Container(
-                  width: double.infinity,
-                  color: Colors.grey.shade50,
-                  // Use detected height; fall back to 300 while loading
-                  height: _imageHeight ?? 300,
-                  child: Stack(
-                    children: [
-                      // ── Animated image switch ──────────────
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 280),
-                        switchInCurve: Curves.easeInOut,
-                        switchOutCurve: Curves.easeInOut,
-                        transitionBuilder: (child, anim) =>
-                            FadeTransition(opacity: anim, child: child),
-                        child: media.isEmpty
-                            ? _buildNoImagePlaceholder()
-                            : _buildImageItem(
-                                media[_currentIndex],
-                                key: ValueKey('${porto.noId}_$_currentIndex'),
-                              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: _imageHeight ?? 300,
+                child: Stack(
+                  children: [
+                    PageView.builder(
+                      controller: _pageController,
+                      itemCount: media.isEmpty ? 1 : media.length,
+                      physics: const ClampingScrollPhysics(),
+                      onPageChanged: (index) =>
+                          setState(() => _currentIndex = index),
+                      itemBuilder: (context, index) {
+                        if (media.isEmpty) return _buildNoImagePlaceholder();
+                        return _buildImageItem(media[index]);
+                      },
+                    ),
+                    if (media.length > 1)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: _buildCounterBadge(media.length),
                       ),
-
-                      // ── Counter badge (top-right) ──────────
-                      if (media.length > 1)
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: _buildCounterBadge(media.length),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -290,7 +253,6 @@ class _PortofolioCardState extends State<PortofolioCard> {
                           },
                           child: Row(
                             children: [
-                              // Avatar
                               ClipOval(
                                 child: SizedBox(
                                   width: 30,
@@ -313,13 +275,31 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      widget.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 16,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                    Row(
+                                      children: [
+                                        Text(
+                                          widget.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (widget.rating != null &&
+                                            widget.rating! > 0) ...[
+                                          const SizedBox(width: 10),
+                                          const Icon(Icons.star_rounded,
+                                              color: Colors.amber, size: 16),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            widget.rating.toString(),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                     Row(
                                       crossAxisAlignment:
@@ -358,25 +338,10 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                   ],
                                 ),
                               ),
-                              if (widget.rating != null &&
-                                  widget.rating! > 0) ...[
-                                const SizedBox(width: 6),
-                                const Icon(Icons.star_rounded,
-                                    color: Colors.amber, size: 16),
-                                const SizedBox(width: 2),
-                                Text(
-                                  widget.rating.toString(),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
                       ),
-                      // ── Action buttons ─────────────────────
                       Row(
                         children: [
                           _ActionButton(
@@ -507,20 +472,16 @@ class _PortofolioCardState extends State<PortofolioCard> {
   // IMAGE ITEM
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildImageItem(MediaUrlModel media, {Key? key}) {
+  Widget _buildImageItem(MediaUrlModel media) {
     return CachedNetworkImage(
-      key: key,
       imageUrl: media.idMedia!,
       fit: BoxFit.cover,
       width: double.infinity,
       placeholder: (_, __) => _buildShimmerPlaceholder(),
       errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
-      fadeInDuration: const Duration(milliseconds: 280),
-      fadeOutDuration: const Duration(milliseconds: 150),
       memCacheWidth: 1080,
       maxWidthDiskCache: 1080,
       imageBuilder: (context, imageProvider) {
-        // Detect dimensions on first load of each image
         if (!_isImageLoaded) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _loadImageDimensions(imageProvider);
@@ -531,7 +492,6 @@ class _PortofolioCardState extends State<PortofolioCard> {
           fit: BoxFit.cover,
           width: double.infinity,
           height: _imageHeight,
-          errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
         );
       },
     );
@@ -572,11 +532,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.photo_library_outlined,
-            color: Colors.white,
-            size: 13,
-          ),
+          const Icon(Icons.photo_library_outlined,
+              color: Colors.white, size: 13),
           const SizedBox(width: 4),
           Text(
             '${_currentIndex + 1}/$count',
@@ -605,11 +562,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
         height: _imageHeight ?? 300,
         color: Colors.grey.shade100,
         child: Center(
-          child: Icon(
-            Icons.broken_image_outlined,
-            size: 40,
-            color: Colors.grey.shade400,
-          ),
+          child: Icon(Icons.broken_image_outlined,
+              size: 40, color: Colors.grey.shade400),
         ),
       );
 
@@ -618,11 +572,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
         height: 300,
         color: Colors.grey.shade200,
         child: Center(
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            size: 40,
-            color: Colors.grey.shade400,
-          ),
+          child: Icon(Icons.image_not_supported_outlined,
+              size: 40, color: Colors.grey.shade400),
         ),
       );
 
