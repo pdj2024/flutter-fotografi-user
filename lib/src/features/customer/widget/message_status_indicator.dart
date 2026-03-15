@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 
-/// ✅ UPDATED: Message status indicator with "received" instead of "delivered"
+/// Message status indicator.
 ///
 /// Status flow:
-/// 1. pending → Clock icon (gray) - Message being sent
-/// 2. sent → Single check (gray) - Sent to server
-/// 3. received → Double check (gray) - Received by recipient device
-/// 4. read → Double check (blue) - Read by recipient
-/// 5. failed → Error icon (red) - Failed to send
+/// 1. messageId.startsWith('local-') → Clock icon (pending) — belum confirmed server
+/// 2. sent    → Single check (gray)  — sudah di server
+/// 3. received → Double check (gray) — sudah diterima recipient
+/// 4. read    → Double check (blue)  — sudah dibaca recipient
+/// 5. failed  → Error icon (red)     — gagal kirim
 class MessageStatusIndicator extends StatelessWidget {
   final ChatModel message;
   final double size;
@@ -30,23 +30,24 @@ class MessageStatusIndicator extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return _buildStatusIcon();
-  }
+  Widget build(BuildContext context) => _buildStatusIcon();
 
   Widget _buildStatusIcon() {
     final status = message.sendStatusEnum;
 
-    // ✅ Pending (Clock)
-    if (status.isPending) {
+    // ✅ FIX: Cek local ID — jika messageId masih 'local-xxx' berarti
+    // pesan belum di-confirm server, tampilkan pending regardless of sendStatus.
+    // Ini menangani kasus di mana local echo belum di-replace oleh FCM echo #1.
+    final isLocalEcho = message.messageId.startsWith('local-');
+
+    if (isLocalEcho || status.isPending) {
       return Icon(
         Icons.access_time_rounded,
         size: size,
-        color: pendingColor ?? Colors.grey.shade200,
+        color: pendingColor ?? Colors.grey.shade300,
       );
     }
 
-    // ✅ Failed (Error)
     if (status.isFailed) {
       return Icon(
         Icons.error_outline_rounded,
@@ -55,7 +56,6 @@ class MessageStatusIndicator extends StatelessWidget {
       );
     }
 
-    // ✅ Sent (Single check - gray)
     if (status.isSent) {
       return Icon(
         Icons.check_rounded,
@@ -64,7 +64,6 @@ class MessageStatusIndicator extends StatelessWidget {
       );
     }
 
-    // ✅ Received (Double check - gray) - Changed from "delivered"
     if (status.isReceived) {
       return Icon(
         Icons.done_all_rounded,
@@ -73,7 +72,6 @@ class MessageStatusIndicator extends StatelessWidget {
       );
     }
 
-    // ✅ Read (Double check - blue)
     if (status.isRead) {
       return Icon(
         Icons.done_all_rounded,
@@ -82,21 +80,19 @@ class MessageStatusIndicator extends StatelessWidget {
       );
     }
 
-    // ✅ Default (empty)
     return const SizedBox.shrink();
   }
 }
 
-/// ✅ Extension for SendStatus enum
+/// Extension for SendStatus enum
 extension SendStatusExtension on SendStatus {
-  /// Get icon for status
   IconData get icon {
     switch (this) {
       case SendStatus.pending:
         return Icons.access_time_rounded;
       case SendStatus.sent:
         return Icons.check_rounded;
-      case SendStatus.received: // ✅ Changed
+      case SendStatus.received:
         return Icons.done_all_rounded;
       case SendStatus.read:
         return Icons.done_all_rounded;
@@ -107,14 +103,13 @@ extension SendStatusExtension on SendStatus {
     }
   }
 
-  /// Get color for status
   Color getColor(BuildContext context) {
     switch (this) {
       case SendStatus.pending:
         return Colors.grey.shade500;
       case SendStatus.sent:
         return Colors.grey.shade500;
-      case SendStatus.received: // ✅ Changed
+      case SendStatus.received:
         return Colors.grey.shade500;
       case SendStatus.read:
         return Colors.blue.shade600;
@@ -125,14 +120,13 @@ extension SendStatusExtension on SendStatus {
     }
   }
 
-  /// Get label for status
   String get label {
     switch (this) {
       case SendStatus.pending:
         return 'Mengirim...';
       case SendStatus.sent:
         return 'Terkirim';
-      case SendStatus.received: // ✅ Changed from "Delivered"
+      case SendStatus.received:
         return 'Diterima';
       case SendStatus.read:
         return 'Dibaca';
@@ -143,10 +137,9 @@ extension SendStatusExtension on SendStatus {
     }
   }
 
-  /// Check status type
   bool get isPending => this == SendStatus.pending;
   bool get isSent => this == SendStatus.sent;
-  bool get isReceived => this == SendStatus.received; // ✅ Changed
+  bool get isReceived => this == SendStatus.received;
   bool get isRead => this == SendStatus.read;
   bool get isFailed => this == SendStatus.failed;
 }

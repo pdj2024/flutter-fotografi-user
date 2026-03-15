@@ -268,27 +268,28 @@ class ChatModel {
     };
   }
 
-  /// TO JSON (SignalR)
-  Map<String, dynamic> toSignalRJson() {
+  Map<String, dynamic> toJsonQueue() {
     return {
-      "messageId": messageId,
-      "roomId": roomId,
-      "sender": senderId,
-      "senderId": senderId,
-      "message": message,
-      "sentAt": sentAt.toUtc().toIso8601String(),
-      "editedAt": editedAt?.toUtc().toIso8601String(),
-      "receivedAt": receivedAt?.toUtc().toIso8601String(), // ✅ Changed
-      "readAt": readAt?.toUtc().toIso8601String(),
-      "tipeUser": tipeUser,
-      "noInvoice": noInvoice,
-      "noPenawaran": noPenawaran,
-      "idPaket": idPaket,
-      "status": status,
-      "jenisPesan": jenisPesan,
-      "sendStatus": sendStatus,
-      "roomType": roomType,
-      "localId": localId,
+      // ✅ Key sama persis dengan yang dibaca fromJson()
+      "Message_Id": messageId,
+      "Room_Id": roomId,
+      "Sender_Id": senderId,
+      "Tipe_User": tipeUser,
+      "Message": message,
+      "Jenis_Pesan": jenisPesan,
+      "Id_Paket": idPaket,
+      "No_Pesanan": noInvoice,
+      "No_Penawaran": noPenawaran,
+      "Status": status,
+      "Send_Status": sendStatus,
+      "Room_Type": roomType,
+      "Sent_At": sentAt.toUtc().toIso8601String(),
+      "Edited_At": editedAt?.toUtc().toIso8601String(),
+      "Received_At": receivedAt?.toUtc().toIso8601String(),
+      "Read_At": readAt?.toUtc().toIso8601String(),
+      "User_Ids": userIds,
+      "Receiver_Ids": receiverIds,
+      "Local_Id": localId, // ✅ Wajib ada untuk offline queue tracking
     };
   }
 

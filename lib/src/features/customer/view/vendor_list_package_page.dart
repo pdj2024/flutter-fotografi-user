@@ -112,10 +112,17 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
     setState(() => isLoading = true);
     try {
       final roomChatProvider = context.read<RoomChatProvider>();
-      roomChatProvider.setTawaranPaket(paket);
-      roomChatProvider.activeRoomId = null;
-      roomChatProvider.vendorId = paket.id_vendor;
-      await roomChatProvider.sendMessage(currentUserId: userProvider.userId!);
+
+      // ✅ Isar edition: activeRoomId sekarang read-only (getter, bukan setter).
+      // Gunakan sendMessageToPartner — method ini akan:
+      //   1. Set vendorId = partnerId
+      //   2. Set tawaranPaket = paket
+      //   3. Panggil sendMessage → ChatSyncService → Isar → stream update UI
+      await roomChatProvider.sendMessageToPartner(
+        currentUserId: userProvider.userId!,
+        partnerId: paket.id_vendor,
+        paket: paket,
+      );
 
       if (!mounted) return;
       setState(() => isLoading = false);
@@ -145,10 +152,8 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
       backgroundColor: const Color(0xFFF5F5F7),
       body: CustomScrollView(
         slivers: [
-          // ── Sliver AppBar — info vendor ringkas ───────────
           _buildSliverAppBar(),
 
-          // ── Konten paket ──────────────────────────────────
           if (isLoading)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -186,7 +191,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                         paket: paket,
                         vendorId: widget.vendor.noId,
                         ulasanList: ulasanList,
-                        onSend: () => _sendPaket(paket),
                       ),
                     );
                   },
@@ -199,10 +203,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
     );
   }
 
-  // ─── Sliver AppBar ─────────────────────────────────────────────
-  // Info vendor ringkas: foto kecil + nama + kota + tombol chat.
-  // Tidak ada duplikasi nama/foto karena collapsed & expanded
-  // menampilkan hal yang sama dalam proporsi berbeda.
   Widget _buildSliverAppBar() {
     final vendor = widget.vendor;
 
@@ -219,10 +219,10 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
             color: Colors.black.withOpacity(0.4),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          child:
+              const Icon(Icons.arrow_back, color: Colors.white, size: 20),
         ),
       ),
-      // Collapsed: judul halaman saja
       title: const Text(
         'Pilihan Paket',
         style: TextStyle(
@@ -232,7 +232,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
         ),
       ),
       actions: [
-        // Tombol chat di AppBar — selalu visible
         GestureDetector(
           onTap: () {
             context.read<NavigationProvider>().popAllToRoot();
@@ -267,7 +266,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
         background: Stack(
           fit: StackFit.expand,
           children: [
-            // Background foto profil vendor
             vendor.idMedia.isNotEmpty
                 ? CachedNetworkImage(
                     imageUrl: vendor.idMedia,
@@ -278,8 +276,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                         Container(color: const Color(0xFF1A1A2E)),
                   )
                 : Container(color: const Color(0xFF1A1A2E)),
-
-            // Gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -292,15 +288,12 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                 ),
               ),
             ),
-
-            // Info vendor di bagian bawah expanded
             Positioned(
               bottom: 16,
               left: 20,
               right: 20,
               child: Row(
                 children: [
-                  // Avatar
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -340,7 +333,8 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             shadows: [
-                              Shadow(color: Colors.black54, blurRadius: 6),
+                              Shadow(
+                                  color: Colors.black54, blurRadius: 6),
                             ],
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -395,7 +389,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
     );
   }
 
-  // ─── Error State ───────────────────────────────────────────────
   Widget _buildErrorState() {
     return Center(
       child: Padding(
@@ -407,12 +400,14 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
             const SizedBox(height: 16),
             const Text(
               'Gagal memuat paket',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style:
+                  TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               errorMessage!,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              style: TextStyle(
+                  color: Colors.grey.shade600, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -433,7 +428,6 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
     );
   }
 
-  // ─── Empty State ───────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
       child: Padding(

@@ -4,7 +4,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
-import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/paket_ulasan_list_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
@@ -15,14 +15,12 @@ class OfferCard extends StatelessWidget {
   final String vendorId;
   final bool isPreview;
   final List<UlasanModel>? ulasanList;
-  final VoidCallback? onSend;
 
   const OfferCard({
     super.key,
     required this.paket,
     required this.vendorId,
     this.isPreview = true,
-    this.onSend,
     this.ulasanList,
   });
 
@@ -347,19 +345,23 @@ class OfferCard extends StatelessWidget {
 
   void _showDetailDialog(BuildContext context) {
     final roomChatProv = context.read<RoomChatProvider>();
-    final userProv = context.read<UserProvider>();
+
+    // ✅ FIX: Set vendorId SEBELUM dialog dibuka
+    // paket.id_vendor sudah ada di OfferCard — tidak perlu tunggu user tap send
+    roomChatProv.vendorId = paket.id_vendor;
 
     CustomDialog.showDetailPaketDialog(
       context: context,
       paket: paket,
       isAsk: true,
-      onSend: () async {
-        final currentUserId = userProv.userId;
-        if (currentUserId == null) {
-          debugPrint('❌ No userId, cannot send');
-          return;
-        }
-        onSend?.call();
+      onSend: () {
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              RoomChatPage(
+                partnerId: vendorId,
+              ),
+              targetTabIndex: 1,
+            );
       },
     );
   }

@@ -1,37 +1,20 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/payment_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/progres_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
-import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:provider/provider.dart';
 
 import 'utils/notification_channel_manager.dart';
 import 'utils/notification_helper.dart';
 import 'handlers/chat_notification_handler.dart';
-import 'handlers/like_notification_handler.dart';
-import 'handlers/review_notification_handler.dart';
 
-/// Background message handler (MUST be top-level function)
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('═══════════════════════════════════════════════════');
-  debugPrint('[FCM Background] 📨 Message: ${message.messageId}');
-  debugPrint('[FCM Background] 📦 Data: ${message.data}');
-  debugPrint('═══════════════════════════════════════════════════');
-
-  await FCMService.instance.handleBackgroundMessage(message);
-}
-
-/// Main FCM Service - Coordinator
 class FCMService {
   static final FCMService instance = FCMService._internal();
   factory FCMService() => instance;
@@ -41,36 +24,57 @@ class FCMService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // Handlers
   late ChatNotificationHandler _chatHandler;
-  late LikeNotificationHandler _likeHandler;
   late PaymentNotificationHandler _paymentHandler;
   late ProgressNotificationHandler _progressHandler;
-  late ReviewNotificationHandler _reviewHandler;
 
-  // State
   String? _fcmToken;
   bool _initialized = false;
   String? _currentUserId;
   String? _activeRoomId;
 
-  // Callbacks
+  ChatProvider? _chatProvider;
+  HistoryOrderProvider? _historyOrderProvider;
+  PesananProvider? _pesananProvider;
+
   Function(ChatModel)? onChatMessageReceived;
-  Function(String portofolioId, String userId)? onLikeReceived;
   Function(HistoryOrderModel)? onProgressReceived;
-  Function(UlasanModel)? onReviewReceived;
   Function(String roomId)? onNotificationTapped;
   Function(String orderId)? onOrderNotificationTapped;
   String Function(String roomId, String senderId)? getSenderName;
 
-  // Getters
   String? get fcmToken => _fcmToken;
   bool get isInitialized => _initialized;
 
-  BuildContext? _appContext; // Store app context
+  // =========================================
+  // PROVIDER INJECTION
+  // =========================================
 
-  void setAppContext(BuildContext context) {
-    _appContext = context;
+  void setChatProvider(ChatProvider provider) {
+    _chatProvider = provider;
+    debugPrint('[FCM] ✅ ChatProvider injected');
+    if (_initialized) _rebuildChatHandler();
+  }
+
+  void setHistoryOrderProvider(HistoryOrderProvider provider) {
+    _historyOrderProvider = provider;
+    debugPrint('[FCM] ✅ HistoryOrderProvider injected');
+  }
+
+  void setPesananProvider(PesananProvider provider) {
+    _pesananProvider = provider;
+    debugPrint('[FCM] ✅ PesananProvider injected');
+  }
+
+  void clearProviders() {
+    _chatProvider = null;
+    _historyOrderProvider = null;
+    _pesananProvider = null;
+    debugPrint('[FCM] 🗑️ Providers cleared');
+  }
+
+  void setAppContext(dynamic context) {
+    // no-op
   }
 
   // =========================================
@@ -86,7 +90,6 @@ class FCMService {
     try {
       debugPrint('[FCM] 🚀 Initializing...');
 
-      // 1. Request permission
       final settings = await _firebaseMessaging.requestPermission(
         alert: true,
         badge: true,
@@ -95,38 +98,29 @@ class FCMService {
       );
 
       debugPrint('[FCM] 📱 Permission: ${settings.authorizationStatus}');
-
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
         debugPrint('[FCM] ❌ Permission denied');
         return;
       }
 
-      // 2. Initialize local notifications
       await _initializeLocalNotifications();
-
-      // 3. Initialize handlers
       _initializeHandlers();
 
-      // 4. Get FCM token
       _fcmToken = await _firebaseMessaging.getToken();
       debugPrint('[FCM] 🔑 Token: $_fcmToken');
 
       if (_fcmToken == null) {
-        debugPrint('[FCM] ⚠️ Token is NULL, retrying...');
+        debugPrint('[FCM] ⚠️ Token null, retrying...');
         await Future.delayed(const Duration(seconds: 2));
         _fcmToken = await _firebaseMessaging.getToken();
         debugPrint('[FCM] 🔄 Retry token: $_fcmToken');
       }
 
-      // 5. Setup message handlers
-      _setupMessageHandlers();
-      _setupProgressCallback();
+      _setupMessageListeners();
 
-      // 6. Setup token refresh listener
       _firebaseMessaging.onTokenRefresh.listen((newToken) async {
         debugPrint('[FCM] 🔄 Token refreshed: $newToken');
         _fcmToken = newToken;
-
         if (_currentUserId != null) {
           await _sendTokenToBackend(newToken, _currentUserId!);
         }
@@ -135,34 +129,25 @@ class FCMService {
       _initialized = true;
       debugPrint('[FCM] ✅ Initialization complete');
     } catch (e, st) {
-      debugPrint('[FCM] ❌ Initialization error: $e');
-      debugPrint('[FCM] Stack: $st');
+      debugPrint('[FCM] ❌ Initialization error: $e\n$st');
     }
   }
 
   Future<void> _initializeLocalNotifications() async {
-    debugPrint('[FCM] 🔔 Setting up local notifications...');
-
-    // Create channels
     await NotificationChannelManager.createAllChannels(_notificationsPlugin);
 
-    // Initialize plugin
-    const androidSettings =
-        AndroidInitializationSettings('ic_stat_pacific_data_jaya');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
     const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
+      android: AndroidInitializationSettings('ic_stat_pacific_data_jaya'),
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      ),
     );
 
     await _notificationsPlugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
+      onDidReceiveNotificationResponse: _onLocalNotificationTapped,
     );
 
     debugPrint('[FCM] ✅ Local notifications ready');
@@ -171,162 +156,114 @@ class FCMService {
   void _initializeHandlers() {
     _chatHandler = ChatNotificationHandler(
       notificationsPlugin: _notificationsPlugin,
-      currentUserId: _currentUserId,
-      activeRoomId: _activeRoomId,
+      getCurrentUserId: () => _currentUserId,
+      getActiveRoomId: () => _activeRoomId,
       onMessageReceived: (message) {
-        // Pass to ChatProvider
-        if (_appContext != null) {
-          try {
-            final chatProvider = _appContext!.read<ChatProvider>();
-            chatProvider.handleMessageFromFCM(message);
-          } catch (e) {
-            debugPrint('[FCM] ⚠️ Error passing to ChatProvider: $e');
-          }
+        if (_chatProvider != null) {
+          _chatProvider!.handleMessageFromFCM(message);
+          debugPrint('[FCM] ✅ Chat → ChatProvider.handleMessageFromFCM');
+        } else {
+          debugPrint('[FCM] ⚠️ ChatProvider belum diinjeksi, pakai callback');
+          onChatMessageReceived?.call(message);
         }
-
-        // Also trigger app-level callback
-        onChatMessageReceived?.call(message);
       },
       getSenderName: (roomId, senderId) {
-        if (_appContext != null) {
-          try {
-            final chatProvider = _appContext!.read<ChatProvider>();
-            return chatProvider.getSenderName(roomId, senderId);
-          } catch (e) {
-            debugPrint('[FCM] ⚠️ Error getting sender name: $e');
-            return 'Unknown User';
-          }
+        if (_chatProvider != null) {
+          return _chatProvider!.getSenderName(roomId, senderId);
         }
-        return 'Pesan baru';
+        return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
+      },
+      // ✅ FIX: sambungkan ke ChatProvider.updateMessageStatus
+      // Sebelumnya null → received/read tidak pernah dikirim ke server
+      // → vendor melihat status pesan tetap 'sent' selamanya
+      onUpdateMessageStatus: (messageId, roomId, newStatus) async {
+        debugPrint('[FCM] 🔄 Update status: $messageId → $newStatus');
+        if (_chatProvider != null) {
+          await _chatProvider!.updateMessageStatus(messageId, newStatus);
+        } else {
+          debugPrint('[FCM] ⚠️ ChatProvider null, skip status update');
+        }
       },
     );
 
-    _likeHandler = LikeNotificationHandler(
-      notificationsPlugin: _notificationsPlugin,
-      onLikeReceived: (portofolioId, userId) =>
-          onLikeReceived?.call(portofolioId, userId),
-    );
-
-    _progressHandler = ProgressNotificationHandler(
-      notificationsPlugin: _notificationsPlugin,
-      onProgressReceived: (data) => onProgressReceived?.call(data),
-    );
-
-    // _reviewHandler = ReviewNotificationHandler(
-    //   notificationsPlugin: _notificationsPlugin,
-    //   onReviewReceived: (data) => onReviewReceived?.call(data),
-    // );
-
-    debugPrint('[FCM] ✅ Handlers initialized');
-  }
-
-  void _setupMessageHandlers() {
-    debugPrint('[FCM] 📡 Setting up message handlers...');
-
-    // Foreground
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-    // Background (app opened from notification)
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-
-    // Terminated
-    _firebaseMessaging.getInitialMessage().then((message) {
-      if (message != null) {
-        _handleNotificationTap(message);
-      }
-    });
-
-    debugPrint('[FCM] ✅ Message handlers ready');
-  }
-
-  void _setupProgressCallback() {
     _progressHandler = ProgressNotificationHandler(
       notificationsPlugin: _notificationsPlugin,
       onProgressReceived: (progressData) {
-        debugPrint('═══════════════════════════════════════════════════');
-        debugPrint('[FCM] 📊 PROGRESS CALLBACK TRIGGERED');
-        debugPrint('═══════════════════════════════════════════════════');
-        debugPrint('[FCM]   Order: ${progressData.noOrder}');
-        debugPrint('[FCM]   Status: ${progressData.statusProgressPesanan}');
-
-        // ✅ STEP 1: Pass to HistoryOrderProvider
-        if (_appContext != null) {
-          try {
-            final historyProvider = _appContext!.read<HistoryOrderProvider>();
-
-            // Update provider dengan data baru
-            historyProvider.handleProgressFromFCM(progressData);
-
-            debugPrint('[FCM] ✅ HistoryOrderProvider updated');
-          } catch (e) {
-            debugPrint('[FCM] ⚠️ Error passing to HistoryOrderProvider: $e');
-          }
+        debugPrint('[FCM] 📊 Progress: ${progressData.noOrder}');
+        if (_historyOrderProvider != null) {
+          _historyOrderProvider!.handleProgressFromFCM(progressData);
+          debugPrint('[FCM] ✅ HistoryOrderProvider updated');
         }
-
-        // ✅ STEP 2: Trigger app-level callback if set
         onProgressReceived?.call(progressData);
-
-        debugPrint('═══════════════════════════════════════════════════');
       },
     );
+
+    _paymentHandler = PaymentNotificationHandler(
+      notificationsPlugin: _notificationsPlugin,
+      onPaymentReceived: (pesanan) {
+        if (_pesananProvider != null) {
+          _pesananProvider!.handlePaymentFromFCM(pesanan);
+          debugPrint('[FCM] ✅ PesananProvider updated (payment)');
+        }
+      },
+    );
+
+    debugPrint('[FCM] ✅ Handlers initialized (chat, progress, payment)');
+  }
+
+  void _rebuildChatHandler() {
+    _chatHandler = ChatNotificationHandler(
+      notificationsPlugin: _notificationsPlugin,
+      getCurrentUserId: () => _currentUserId,
+      getActiveRoomId: () => _activeRoomId,
+      onMessageReceived: (message) {
+        if (_chatProvider != null) {
+          _chatProvider!.handleMessageFromFCM(message);
+        } else {
+          onChatMessageReceived?.call(message);
+        }
+      },
+      getSenderName: (roomId, senderId) {
+        if (_chatProvider != null) {
+          return _chatProvider!.getSenderName(roomId, senderId);
+        }
+        return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
+      },
+      // ✅ FIX: sama dengan _initializeHandlers
+      onUpdateMessageStatus: (messageId, roomId, newStatus) async {
+        debugPrint('[FCM] 🔄 Rebuild — update status: $messageId → $newStatus');
+        if (_chatProvider != null) {
+          await _chatProvider!.updateMessageStatus(messageId, newStatus);
+        }
+      },
+    );
+    debugPrint('[FCM] 🔄 ChatHandler rebuilt');
   }
 
   // =========================================
-  // TOKEN MANAGEMENT
+  // MESSAGE LISTENERS
   // =========================================
 
-  Future<void> registerToken(String userId) async {
-    try {
-      debugPrint('[FCM] 📤 Registering token for: $userId');
-      _currentUserId = userId;
-
-      if (_fcmToken == null) {
-        _fcmToken = await _firebaseMessaging.getToken();
-      }
-
-      if (_fcmToken != null) {
-        await _sendTokenToBackend(_fcmToken!, userId);
-      }
-    } catch (e) {
-      debugPrint('[FCM] ❌ Register token error: $e');
-    }
-  }
-
-  Future<void> unregisterToken(String userId, String token) async {
-    try {
-      debugPrint('[FCM] 📤 Unregistering token...');
-      // TODO: Call backend to remove token
-      _currentUserId = null;
-      DeviceTokenService deviceTokenService = DeviceTokenService();
-      await deviceTokenService.addDeviceToken(userId, token);
-      debugPrint('[FCM] ✅ Token unregistered');
-    } catch (e) {
-      debugPrint('[FCM] ❌ Unregister token error: $e');
-    }
-  }
-
-  Future<void> _sendTokenToBackend(String token, String userId) async {
-    try {
-      debugPrint('[FCM] 📤 Sending token to backend');
-      // TODO: Implement API call
-      DeviceTokenService deviceTokenService = DeviceTokenService();
-      await deviceTokenService.addDeviceToken(userId, token);
-      debugPrint('[FCM] ✅ Token sent successfully');
-    } catch (e) {
-      debugPrint('[FCM] ❌ Send token error: $e');
-    }
+  void _setupMessageListeners() {
+    debugPrint('[FCM] 📡 Setting up listeners...');
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+    _firebaseMessaging.getInitialMessage().then((message) {
+      if (message != null) _handleMessageOpenedApp(message);
+    });
+    debugPrint('[FCM] ✅ Listeners ready');
   }
 
   // =========================================
-  // MESSAGE HANDLERS
+  // FOREGROUND HANDLER
   // =========================================
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM Foreground] 🔄 Processing message...');
+    debugPrint('[FCM] ☀️ Foreground message: ${message.messageId}');
 
     try {
       final type = NotificationType.fromString(message.data['type']);
-      debugPrint('[FCM Foreground] Type: $type');
+      debugPrint('[FCM] Type: $type');
 
       switch (type) {
         case NotificationType.chat:
@@ -335,116 +272,27 @@ class FCMService {
         case NotificationType.payment:
           await _paymentHandler.handleMessage(message);
           break;
-        case NotificationType.like:
-          await _likeHandler.handleMessage(message);
-          break;
         case NotificationType.progress:
           await _progressHandler.handleMessage(message);
           break;
-        case NotificationType.review:
-          await _reviewHandler.handleMessage(message);
-          break;
-        default:
-          debugPrint(
-              '[FCM Foreground] ⚠️ Unknown type: ${message.data['type']}');
-      }
-    } catch (e, st) {
-      debugPrint('[FCM Foreground] ❌ Error: $e');
-      debugPrint('[FCM Foreground] Stack: $st');
-    }
-  }
-
-  Future<void> handleBackgroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM Background] 🔄 Processing message...');
-
-    try {
-      final type = NotificationType.fromString(message.data['type']);
-
-      // ✅ PERBAIKAN: Inisialisasi handler secara lokal untuk background
-      // karena background handler berjalan di isolate terpisah
-      final FlutterLocalNotificationsPlugin localPlugin =
-          FlutterLocalNotificationsPlugin();
-
-      // Setup channels jika belum
-      await NotificationChannelManager.createAllChannels(localPlugin);
-
-      switch (type) {
-        case NotificationType.chat:
-          // ✅ Create temporary handler for background
-          final chatHandler = ChatNotificationHandler(
-            notificationsPlugin: localPlugin,
-            currentUserId: null, // No user context in background
-            activeRoomId: null,
-            onMessageReceived: null,
-            getSenderName: null,
-          );
-          await chatHandler.showNotification(message);
-          break;
-
-        case NotificationType.payment:
-          // ✅ Create temporary handler for background
-          _paymentHandler = PaymentNotificationHandler(
-            notificationsPlugin: _notificationsPlugin,
-            onPaymentReceived: (pesanan) {
-              // Update PesananProvider/UI dengan data terbaru
-              if (_appContext != null) {
-                try {
-                  final pesananProvider = _appContext!.read<PesananProvider>();
-                  pesananProvider
-                      .handlePaymentFromFCM(pesanan); // implement di provider
-                } catch (e) {
-                  debugPrint('[FCM] ⚠️ Error passing to PesananProvider: $e');
-                }
-              }
-            },
-          );
-          // await paymentHandler.showNotification(message);
-          break;
-
         case NotificationType.like:
-          final likeHandler = LikeNotificationHandler(
-            notificationsPlugin: localPlugin,
-            onLikeReceived: null,
-          );
-          await likeHandler.showNotification(message);
-          break;
-
-        case NotificationType.progress:
-          final progressHandler = ProgressNotificationHandler(
-            notificationsPlugin: localPlugin,
-            onProgressReceived: null,
-          );
-          final progressData = progressHandler.parseProgressData(message);
-          if (progressData != null) {
-            await progressHandler.showNotification(message, progressData);
-          }
-          ;
-          break;
-
         case NotificationType.review:
-          // final reviewHandler = ReviewNotificationHandler(
-          //   notificationsPlugin: localPlugin,
-          //   onReviewReceived: null,
-          // );
-          // final ulasanData = reviewHandler.parseUlasanData(message);
-
-          // if (ulasanData != null) {
-          //   await reviewHandler.showNotification(message, ulasanData);
-          // }
+          debugPrint('[FCM] ℹ️ $type — not handled in customer app');
           break;
-
         default:
-          debugPrint('[FCM Background] ⚠️ Unknown type');
+          debugPrint('[FCM] ⚠️ Unknown type: ${message.data['type']}');
       }
     } catch (e, st) {
-      debugPrint('[FCM Background] ❌ Error: $e');
-      debugPrint('[FCM Background] Stack: $st');
+      debugPrint('[FCM] ❌ Foreground error: $e\n$st');
     }
   }
 
-  void _handleNotificationTap(RemoteMessage message) {
-    debugPrint('[FCM] 👆 Notification tapped');
+  // =========================================
+  // NOTIFICATION TAP
+  // =========================================
 
+  void _handleMessageOpenedApp(RemoteMessage message) {
+    debugPrint('[FCM] 👆 Notification tap (from background)');
     final type = NotificationType.fromString(message.data['type']);
     final detail = NotificationHelper.parseDetail(message.data['detail']);
 
@@ -462,14 +310,12 @@ class FCMService {
     }
   }
 
-  void _onNotificationTapped(NotificationResponse response) {
+  void _onLocalNotificationTapped(NotificationResponse response) {
     debugPrint('[FCM] 👆 Local notification tapped');
-
     final payload = NotificationHelper.parsePayload(response.payload);
     if (payload == null) return;
 
     final type = NotificationType.fromString(payload['type']);
-
     switch (type) {
       case NotificationType.chat:
         final roomId = payload['roomId'] as String?;
@@ -485,17 +331,47 @@ class FCMService {
   }
 
   // =========================================
-  // UTILITIES
+  // TOKEN MANAGEMENT
+  // =========================================
+
+  Future<void> registerToken(String userId) async {
+    try {
+      debugPrint('[FCM] 📤 Registering token for: $userId');
+      _currentUserId = userId;
+      _fcmToken ??= await _firebaseMessaging.getToken();
+      if (_fcmToken != null) {
+        await _sendTokenToBackend(_fcmToken!, userId);
+      }
+    } catch (e) {
+      debugPrint('[FCM] ❌ registerToken error: $e');
+    }
+  }
+
+  Future<void> _sendTokenToBackend(String token, String userId) async {
+    try {
+      final deviceTokenService = DeviceTokenService();
+      await deviceTokenService.addDeviceToken(userId, token);
+      debugPrint('[FCM] ✅ Token sent to backend');
+    } catch (e) {
+      debugPrint('[FCM] ❌ _sendTokenToBackend error: $e');
+    }
+  }
+
+  // =========================================
+  // ACTIVE ROOM
   // =========================================
 
   void setActiveRoom(String? roomId) {
-    if (_activeRoomId != roomId) {
-      _activeRoomId = roomId;
-
-      // Update chat handler dengan active room baru
-      _initializeHandlers();
-    }
+    if (_activeRoomId == roomId) return;
+    _activeRoomId = roomId;
+    debugPrint('[FCM] 🏠 Active room: $roomId');
+    // ✅ Tidak perlu rebuild handler — getCurrentUserId/getActiveRoomId
+    // adalah live getter yang selalu baca nilai terbaru
   }
+
+  // =========================================
+  // UTILITIES
+  // =========================================
 
   void clearMessagesForSender(String senderId) {
     _chatHandler.clearMessagesForSender(senderId);
@@ -508,18 +384,18 @@ class FCMService {
   Future<void> subscribeToTopic(String topic) async {
     try {
       await _firebaseMessaging.subscribeToTopic(topic);
-      debugPrint('[FCM] ✅ Subscribed to: $topic');
+      debugPrint('[FCM] ✅ Subscribed: $topic');
     } catch (e) {
-      debugPrint('[FCM] ❌ Subscribe error: $e');
+      debugPrint('[FCM] ❌ subscribeToTopic error: $e');
     }
   }
 
   Future<void> unsubscribeFromTopic(String topic) async {
     try {
       await _firebaseMessaging.unsubscribeFromTopic(topic);
-      debugPrint('[FCM] ✅ Unsubscribed from: $topic');
+      debugPrint('[FCM] ✅ Unsubscribed: $topic');
     } catch (e) {
-      debugPrint('[FCM] ❌ Unsubscribe error: $e');
+      debugPrint('[FCM] ❌ unsubscribeFromTopic error: $e');
     }
   }
 
@@ -529,20 +405,19 @@ class FCMService {
       _fcmToken = null;
       debugPrint('[FCM] ✅ Token deleted');
     } catch (e) {
-      debugPrint('[FCM] ❌ Delete token error: $e');
+      debugPrint('[FCM] ❌ deleteToken error: $e');
     }
   }
 
   void dispose() {
-    debugPrint('[FCM] 🗑️ Disposing...');
     onChatMessageReceived = null;
-    onLikeReceived = null;
     onProgressReceived = null;
-    onReviewReceived = null;
     onNotificationTapped = null;
     onOrderNotificationTapped = null;
     getSenderName = null;
     _currentUserId = null;
     _activeRoomId = null;
+    clearProviders();
+    debugPrint('[FCM] 🗑️ Disposed');
   }
 }

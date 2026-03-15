@@ -25,7 +25,6 @@ class CustomDialog {
       builder: (context) {
         final roomChatProvider = context.read<RoomChatProvider>();
         roomChatProvider.messageController.clear();
-        final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
         final maxHeight = MediaQuery.of(context).size.height * 0.5;
 
@@ -34,7 +33,7 @@ class CustomDialog {
           child: AnimatedPadding(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
-            padding: EdgeInsets.only(
+            padding: const EdgeInsets.only(
               left: 10,
               right: 10,
               bottom: 20,
@@ -44,9 +43,7 @@ class CustomDialog {
               backgroundColor: Colors.transparent,
               insetPadding: EdgeInsets.zero,
               child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: maxHeight,
-                ),
+                constraints: BoxConstraints(maxHeight: maxHeight),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -62,7 +59,7 @@ class CustomDialog {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    /// ================= HEADER =================
+                    // ── Header ──────────────────────────────────────────
                     Row(
                       children: [
                         IconButton(
@@ -70,9 +67,9 @@ class CustomDialog {
                           onPressed: () => Navigator.pop(context),
                         ),
                         const SizedBox(width: 8),
-                        Text(
+                        const Text(
                           "Detail Paket",
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -80,9 +77,9 @@ class CustomDialog {
                       ],
                     ),
                     Divider(color: Colors.grey.shade300),
-                    SizedBox(
-                      height: 5,
-                    ),
+                    const SizedBox(height: 5),
+
+                    // ── Nama & Harga ─────────────────────────────────────
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -108,7 +105,7 @@ class CustomDialog {
 
                     const SizedBox(height: 12),
 
-                    /// ================= RINCIAN (SCROLLABLE) =================
+                    // ── Rincian (scrollable) ─────────────────────────────
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -153,7 +150,7 @@ class CustomDialog {
                       ),
                     ),
 
-                    /// ================= INPUT / ACTION =================
+                    // ── Input / Action ───────────────────────────────────
                     if (isAsk)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -187,16 +184,46 @@ class CustomDialog {
                             valueListenable: roomChatProvider.messageController,
                             builder: (context, value, _) {
                               final hasText = value.text.trim().isNotEmpty;
-                              return hasText
-                                  ? IconButton(
-                                      icon: const Icon(Icons.send,
-                                          color: Constants.primaryColor),
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        onSend?.call();
-                                      },
-                                    )
-                                  : const SizedBox.shrink();
+                              return AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                transitionBuilder: (child, anim) =>
+                                    ScaleTransition(scale: anim, child: child),
+                                child: hasText
+                                    ? IconButton(
+                                        key: const ValueKey('sendPaketBtn'),
+                                        icon: const Icon(Icons.send,
+                                            color: Constants.primaryColor),
+                                        onPressed: () async {
+                                          final userId = context
+                                              .read<UserProvider>()
+                                              .userId!;
+
+                                          // Tutup dialog dulu
+                                          Navigator.pop(context);
+
+                                          // ✅ Attach paket agar idPaket
+                                          // masuk ke ChatModel yang dikirim
+                                          roomChatProvider.attachPaket(
+                                            paket.no_id,
+                                            paket,
+                                          );
+
+                                          // ✅ Safety: set vendorId lagi
+                                          // (sudah di-set di OfferCard tapi
+                                          // jika dialog dipanggil dari tempat
+                                          // lain yang belum set vendorId)
+                                          roomChatProvider.vendorId =
+                                              paket.id_vendor;
+
+                                          await roomChatProvider.sendMessage(
+                                            currentUserId: userId,
+                                          );
+
+                                          onSend?.call();
+                                        },
+                                      )
+                                    : const SizedBox.shrink(),
+                              );
                             },
                           ),
                         ],

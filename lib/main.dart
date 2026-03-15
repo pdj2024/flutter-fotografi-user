@@ -1,97 +1,133 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
+import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
+import 'package:mpjnew/src/core/services/fcm/utils/notification_channel_manager.dart';
+import 'package:mpjnew/src/core/services/fcm/utils/notification_helper.dart';
+import 'package:mpjnew/src/core/services/fcm_chat_provider.dart';
 import 'package:mpjnew/src/core/services/version_check_service.dart';
-import 'package:mpjnew/src/data/hive_entity/chat_message_entity.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
-import 'package:mpjnew/src/data/hive_entity/room_chat_entity.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
+// ✅ Isar — ganti dari Hive chat storage
+import 'package:mpjnew/src/data/isar/service/chat_isar_service.dart';
+import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
 import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
+import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
-import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
-import 'package:mpjnew/src/features/customer/services/paket_service.dart';
-import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
-import 'src/features/auth/services/user_provider.dart';
-import 'src/features/customer/services/customer_service.dart';
 import 'src/core/routing/navigation_provider.dart';
-import 'src/features/customer/services/portofolio_service.dart';
 
 var companyNameGlobal = 'PT. ABC';
 
-/// ✅ Background message handler (MUST be top-level function)
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  debugPrint('═══════════════════════════════════════════════════');
-  debugPrint('[Background] 📨 Message received: ${message.messageId}');
-  debugPrint('[Background] Type: ${message.data['type']}');
-  debugPrint('═══════════════════════════════════════════════════');
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKGROUND HANDLER
+// Wajib top-level (bukan private, bukan method class).
+// Hanya boleh akses: SharedPreferences, FlutterSecureStorage, http.
+// TIDAK BOLEH akses Isar (butuh main isolate).
+// ═══════════════════════════════════════════════════════════════════════════
 
-  await FCMService.instance.handleBackgroundMessage(message);
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  debugPrint('[BGHandler] 📨 Message: ${message.messageId}');
+  debugPrint('[BGHandler] Type: ${message.data['type']}');
+
+  try {
+    final type = NotificationType.fromString(message.data['type']);
+
+    if (type == NotificationType.chat) {
+      // ✅ Enqueue ke SharedPreferences + hit API status → received
+      // Isar tidak bisa diakses di background isolate
+      final success =
+          await ChatStorageService.enqueueBackgroundMessage(message);
+
+      debugPrint(success
+          ? '[BGHandler] ✅ Chat enqueued + received status sent'
+          : '[BGHandler] ⏭️ Skipped (duplicate/invalid)');
+
+      if (success) {
+        await _showBackgroundChatNotification(message);
+      }
+    } else if (type == NotificationType.progress ||
+        type == NotificationType.review) {
+      await _showBackgroundNonChatNotification(message, type);
+    }
+  } catch (e, st) {
+    debugPrint('[BGHandler] ❌ Error: $e\n$st');
+  }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════════════════════════════════════
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("🚀 CUSTOMER APP INITIALIZATION START");
-    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('🚀 CUSTOMER APP INITIALIZATION START');
+    debugPrint('═══════════════════════════════════════════════════');
 
-    // ✅ Initialize Firebase
+    // ── 1. Firebase ────────────────────────────────────────────────────────
     await Firebase.initializeApp();
-    debugPrint("✅ Firebase initialized");
+    debugPrint('✅ Firebase initialized');
 
-    // ✅ Set background message handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    debugPrint("✅ Background message handler registered");
+    // ✅ Daftarkan background handler SEBELUM runApp
+    // Nama fungsi tanpa underscore — top-level wajib public
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    debugPrint('✅ Background message handler registered');
 
-    // ✅ Initialize FCM Service
-    await FCMService.instance.initialize();
-    debugPrint("✅ FCM Service initialized");
-    debugPrint(
-        "   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}");
+    // ── 2. Isar — SEBELUM Hive ────────────────────────────────────────────
+    // Isar adalah single source of truth untuk chat (pesan + room)
+    // Hive tetap dipakai untuk storage non-chat (pesanan, paket, dll)
+    await ChatIsarService.instance.initialize();
+    debugPrint('✅ Isar initialized');
 
-    // ✅ Initialize Hive
+    // ── 3. Hive ────────────────────────────────────────────────────────────
     await Hive.initFlutter();
-    debugPrint("✅ Hive initialized");
+    debugPrint('✅ Hive initialized');
 
-    // ✅ Register Hive adapters
-    if (!Hive.isAdapterRegistered(0)) {
-      Hive.registerAdapter(ChatMessageEntityAdapter());
-    }
+    // ✅ Hive adapters — typeId chat (0, 7) sudah pindah ke Isar, tidak perlu didaftarkan
     if (!Hive.isAdapterRegistered(1)) {
       Hive.registerAdapter(MediaCacheStatusAdapter());
     }
@@ -110,26 +146,44 @@ void main() async {
     if (!Hive.isAdapterRegistered(6)) {
       Hive.registerAdapter(PortofolioModelAdapter());
     }
-    if (!Hive.isAdapterRegistered(7)) {
-      Hive.registerAdapter(RoomChatEntityAdapter());
-    }
-    debugPrint("✅ Hive adapters registered");
+    debugPrint('✅ Hive adapters registered');
 
+    // ── 4. Local services ──────────────────────────────────────────────────
     final pesananLocalService = PesananLocalService();
     await pesananLocalService.initialize();
+    debugPrint('✅ PesananLocalService initialized');
 
-    // ✅ Initialize AuthService singleton
+    // ── 5. AuthService ─────────────────────────────────────────────────────
     await authService.initialize();
-    debugPrint("✅ AuthService initialized");
+    final userId = authService.userId;
+    if (userId != null) {
+      // ✅ Set current user agar ChatStorageService bisa bedakan
+      // pesan sendiri (own message confirmation) vs pesan masuk (incoming)
+      ChatStorageService.instance.setCurrentUser(userId);
+      debugPrint('✅ ChatStorageService user set: $userId');
+    }
+    debugPrint('✅ AuthService initialized');
 
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("✅ INITIALIZATION COMPLETE");
-    debugPrint("═══════════════════════════════════════════════════");
+    // ── 6. FCM ─────────────────────────────────────────────────────────────
+    // ✅ FcmChatProvider dibuat dahulu sebelum FCMService.initialize
+    // agar callback bisa langsung terhubung saat init
+    final fcmChatProvider = FcmChatProvider();
 
-    // Run app
+    await FCMService.instance.initialize();
+    debugPrint('✅ FCM Service initialized');
+    debugPrint(
+        '   Token: ${FCMService.instance.fcmToken ?? 'Not available yet'}');
+
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('✅ INITIALIZATION COMPLETE');
+    debugPrint('═══════════════════════════════════════════════════');
+
     runApp(
       MultiProvider(
         providers: [
+          // ✅ FcmChatProvider — paling atas agar bisa diakses provider lain
+          ChangeNotifierProvider.value(value: fcmChatProvider),
+
           ChangeNotifierProvider(
             create: (_) {
               final provider = UserProvider(
@@ -161,55 +215,61 @@ void main() async {
           ),
           ChangeNotifierProvider(
             create: (_) => PesananProvider(
-                pesananService: PesananService(),
-                historyService: HistoryOrderService()),
+              pesananService: PesananService(),
+              historyService: HistoryOrderService(),
+            ),
           ),
 
-          // ✅ ChatProvider - No SignalR initialization needed
+          // ✅ ChatProvider — Isar edition
           ChangeNotifierProvider(create: (_) => ChatProvider()),
 
-          ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
+          // ✅ RoomChatProvider — depends on ChatProvider + FcmChatProvider
+          ChangeNotifierProxyProvider2<ChatProvider, FcmChatProvider,
+              RoomChatProvider>(
             create: (context) => RoomChatProvider(
               chatProv: context.read<ChatProvider>(),
+              fcmChatProv: context.read<FcmChatProvider>(),
             ),
-            update: (context, chatProvider, previousRoomChatProvider) {
-              return previousRoomChatProvider ??
-                  RoomChatProvider(chatProv: chatProvider);
+            update: (_, chatProvider, fcmChatProvider, previous) {
+              return previous ??
+                  RoomChatProvider(
+                    chatProv: chatProvider,
+                    fcmChatProv: fcmChatProvider,
+                  );
             },
           ),
 
-          // ✅ HistoryOrderProvider - No SignalR initialization needed
           ChangeNotifierProvider(
             create: (_) => HistoryOrderProvider()..initialize(),
           ),
-
           ChangeNotifierProvider(create: (_) => OrderTabProvider()),
         ],
         child: const MyApp(),
       ),
     );
   } catch (e, stackTrace) {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("❌ FATAL INITIALIZATION ERROR");
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("Error: $e");
-    debugPrint("Stack: $stackTrace");
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('❌ FATAL INITIALIZATION ERROR');
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('Error: $e');
+    debugPrint('Stack: $stackTrace');
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MY APP
+// ═══════════════════════════════════════════════════════════════════════════
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // ✅ Global navigator key for session handling
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Setup session expired handler
     _setupSessionExpiredHandler();
 
-    // ✅ Setup FCM callbacks after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupFCMCallbacks(context);
     });
@@ -247,287 +307,158 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  /// ✅ Setup FCM callbacks for all notification types
+  // ─── FCM Callbacks ────────────────────────────────────────────────────────
+
   void _setupFCMCallbacks(BuildContext context) {
-    debugPrint("═══════════════════════════════════════════════════");
-    debugPrint("[Main] 🔧 SETTING UP FCM CALLBACKS");
-    debugPrint("═══════════════════════════════════════════════════");
+    debugPrint('[Main] 🔧 Setting up FCM callbacks...');
 
     try {
-      // ✅ Set app context for FCM Service
       FCMService.instance.setAppContext(context);
-      debugPrint("[Main] ✅ App context set");
 
       final chatProvider = context.read<ChatProvider>();
       final historyOrderProvider = context.read<HistoryOrderProvider>();
       final pesananProvider = context.read<PesananProvider>();
       final navigationProvider = context.read<NavigationProvider>();
 
-      // ═══════════════════════════════════════════════════
-      // 1️⃣ CHAT CALLBACKS
-      // ═══════════════════════════════════════════════════
+      // ── Chat ────────────────────────────────────────────────────────────
 
-      /// Get sender name for notification
       FCMService.instance.getSenderName = (roomId, senderId) {
-        debugPrint("[Main] 🔍 getSenderName called");
-        debugPrint("   Room: $roomId, Sender: $senderId");
-
         try {
-          final senderName = chatProvider.getSenderName(roomId, senderId);
-          debugPrint("   ✅ Name: $senderName");
-          return senderName;
+          return chatProvider.getSenderName(roomId, senderId);
         } catch (e) {
-          debugPrint("   ⚠️ Error: $e");
-          return 'New Message';
+          return 'Pesan baru';
         }
       };
 
-      /// Handle chat message received from FCM
+      // ✅ Foreground chat message → ChatStorageService.persistForegroundMessage
+      // (lewat ChatProvider.handleMessageFromFCM — sama dengan vendor)
       FCMService.instance.onChatMessageReceived = (ChatModel message) {
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] 💬 CHAT MESSAGE FROM FCM");
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] Room: ${message.roomId}");
-        debugPrint("[Main] Sender: ${message.senderId}");
-        debugPrint("[Main] Status: ${message.sendStatus}");
-        debugPrint("[Main] Message: ${message.message}");
-
+        debugPrint('[Main] 💬 FCM chat: ${message.roomId} / ${message.messageId}');
         try {
-          // ✅ Pass to ChatProvider to handle local storage updates
           chatProvider.handleMessageFromFCM(message);
-          debugPrint("[Main] ✅ Chat message processed");
         } catch (e, st) {
-          debugPrint("[Main] ❌ Error processing chat: $e");
-          debugPrint("[Main] Stack: $st");
+          debugPrint('[Main] ❌ handleMessageFromFCM error: $e\n$st');
         }
-
-        debugPrint("═══════════════════════════════════════════════════");
       };
 
-      /// Handle chat notification tapped
+      // ✅ Tap notifikasi chat → navigasi ke RoomChatPage
       FCMService.instance.onNotificationTapped = (roomId) {
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] 👆 CHAT NOTIFICATION TAPPED");
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] Room ID: $roomId");
-
+        debugPrint('[Main] 👆 Chat notification tapped: $roomId');
         try {
-          final context = navigatorKey.currentContext;
-          if (context != null) {
-            // ✅ Track room & set active before navigation
-            chatProvider.trackRoom(roomId);
-            chatProvider.setActiveRoom(roomId);
-            FCMService.instance.setActiveRoom(roomId);
+          final ctx = navigatorKey.currentContext;
+          if (ctx == null) return;
 
-            navigationProvider.navigateToPage(
-              context,
-              RoomChatPage(roomId: roomId),
-              targetTabIndex: 1, // Chat tab
-              hrsLogin: false,
-              transitionType: PageTransitionType.slideRight,
-            );
+          chatProvider.trackRoom(roomId);
+          chatProvider.setActiveRoom(roomId);
+          FCMService.instance.setActiveRoom(roomId);
 
-            debugPrint("[Main] ✅ Navigated to room: $roomId");
-          } else {
-            debugPrint("[Main] ⚠️ Navigator context not available");
-          }
+          navigationProvider.navigateToPage(
+            ctx,
+            RoomChatPage(roomId: roomId),
+            targetTabIndex: 1,
+            hrsLogin: false,
+            transitionType: PageTransitionType.slideRight,
+          );
         } catch (e, st) {
-          debugPrint("[Main] ❌ Error navigating: $e");
-          debugPrint("[Main] Stack: $st");
+          debugPrint('[Main] ❌ onNotificationTapped error: $e\n$st');
         }
-
-        debugPrint("═══════════════════════════════════════════════════");
       };
 
-      // ═══════════════════════════════════════════════════
-      // 2️⃣ PROGRESS CALLBACKS
-      // ═══════════════════════════════════════════════════
+      // ── Progress ────────────────────────────────────────────────────────
 
-      /// Handle progress update from FCM
       FCMService.instance.onProgressReceived = (HistoryOrderModel progress) {
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] 📊 PROGRESS UPDATE FROM FCM");
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] Order: ${progress.noOrder}");
-        debugPrint("[Main] Status: ${progress.statusProgressPesanan}");
-        debugPrint("[Main] Sender: ${progress.senderId}");
-        debugPrint("[Main] Description: ${progress.deskripsi}");
-
+        debugPrint('[Main] 📊 FCM progress: ${progress.noOrder}');
         try {
-          // ✅ STEP 1: Update HistoryOrderProvider
           historyOrderProvider.handleProgressFromFCM(progress);
-          debugPrint("[Main] ✅ HistoryOrderProvider updated");
-
-          // ✅ STEP 2: Update PesananProvider status
           pesananProvider.updateOrderStatus(
             progress.noOrder,
             progress.statusProgressPesanan,
           );
-          debugPrint("[Main] ✅ PesananProvider status updated");
-
-          // ✅ STEP 3: Refresh order list jika diperlukan
           Future.delayed(const Duration(milliseconds: 300), () {
             if (historyOrderProvider.isOrderTracked(progress.noOrder)) {
-              // Refresh history dari API untuk ensure consistency
               historyOrderProvider.fetchHistoryForOrder(
                 progress.noOrder,
-                silent: true, // Silent mode, tidak show loading
+                silent: true,
               );
-              debugPrint("[Main] 🔄 History refreshed from API");
             }
           });
         } catch (e, st) {
-          debugPrint("[Main] ❌ Error processing progress: $e");
-          debugPrint("[Main] Stack: $st");
+          debugPrint('[Main] ❌ onProgressReceived error: $e\n$st');
         }
-
-        debugPrint("═══════════════════════════════════════════════════");
       };
 
-      /// Handle order notification tapped
       FCMService.instance.onOrderNotificationTapped = (String orderId) {
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] 👆 ORDER NOTIFICATION TAPPED");
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] Order ID: $orderId");
-
+        debugPrint('[Main] 👆 Order notification tapped: $orderId');
         try {
-          final context = navigatorKey.currentContext;
-          if (context == null) {
-            debugPrint("[Main] ⚠️ Navigator context not available");
-            return;
-          }
+          final ctx = navigatorKey.currentContext;
+          if (ctx == null) return;
 
-          // ✅ Track order untuk ensure data tersedia
           historyOrderProvider.trackOrder(orderId);
 
-          // Navigate to DetailOrderPage
-          final pesananList = pesananProvider.allPesanan;
-          final pesanan = pesananList.firstWhereOrNull(
-            (p) => p.noBukti == orderId,
-          );
+          final pesanan = pesananProvider.allPesanan
+              .firstWhereOrNull((p) => p.noBukti == orderId);
 
           if (pesanan != null) {
-            final navigationProvider = context.read<NavigationProvider>();
-
             navigationProvider.navigateToPage(
-              context,
+              ctx,
               DetailOrderPageV2(pesananModel: pesanan),
-              // DetailOrderPage(pesananModel: pesanan),
-              targetTabIndex: 2, // Order tab
+              targetTabIndex: 2,
               hrsLogin: true,
             );
-
-            debugPrint("[Main] ✅ Navigated to order detail");
           } else {
-            debugPrint("[Main] ⚠️ Pesanan not found in list");
+            debugPrint('[Main] ⚠️ Pesanan $orderId tidak ditemukan di list');
           }
         } catch (e, st) {
-          debugPrint("[Main] ❌ Error: $e");
-          debugPrint("[Main] Stack: $st");
+          debugPrint('[Main] ❌ onOrderNotificationTapped error: $e\n$st');
         }
-
-        debugPrint("═══════════════════════════════════════════════════");
       };
 
-      // ═══════════════════════════════════════════════════
-      // 3️⃣ LIKE CALLBACKS
-      // ═══════════════════════════════════════════════════
-
-      FCMService.instance.onLikeReceived = (portofolioId, userId) {
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] ❤️ LIKE RECEIVED FROM FCM");
-        debugPrint("═══════════════════════════════════════════════════");
-        debugPrint("[Main] Portfolio: $portofolioId");
-        debugPrint("[Main] User: $userId");
-
-        try {
-          // TODO: Implement like handling for customer
-          // - Update portfolio like count in UI
-          // - Show in-app notification
-          debugPrint("[Main] ℹ️ Like handling (TODO)");
-        } catch (e, st) {
-          debugPrint("[Main] ❌ Error: $e");
-          debugPrint("[Main] Stack: $st");
-        }
-
-        debugPrint("═══════════════════════════════════════════════════");
-      };
-
-      debugPrint("[Main] ✅ FCM callbacks configured successfully");
-      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint('[Main] ✅ FCM callbacks configured');
     } catch (e, st) {
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("[Main] ❌ ERROR SETTING UP FCM CALLBACKS");
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("Error: $e");
-      debugPrint("Stack: $st");
+      debugPrint('[Main] ❌ _setupFCMCallbacks error: $e\n$st');
     }
   }
 
-  /// ✅ Setup session expired handler
+  // ─── Session Expired ──────────────────────────────────────────────────────
+
   void _setupSessionExpiredHandler() {
-    // Dari ApiClient (401 max retry)
     apiClient.onSessionExpired = () {
-      final context = navigatorKey.currentContext;
-      if (context == null) return;
-      _handleSessionExpired(context);
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null) return;
+      _handleSessionExpired(ctx);
     };
 
-    // ✅ Dari AuthService (refresh token gagal)
     authService.onSessionExpired = () {
-      print("🚪 [MyApp] AuthService session expired");
-      final context = navigatorKey.currentContext;
-      if (context == null) return;
-      _handleSessionExpired(context);
+      debugPrint('🚪 [MyApp] AuthService session expired');
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null) return;
+      _handleSessionExpired(ctx);
     };
 
-    debugPrint('✅ [MyApp] Session expired handlers registered');
+    debugPrint('✅ Session expired handlers registered');
   }
 
-  /// ✅ Handle session expired
   void _handleSessionExpired(BuildContext context) async {
     debugPrint('🚪 [MyApp] Handling session expired...');
-
     try {
-      // 1. Disconnect FCM & clear data
       FCMService.instance.clearAllMessageGroups();
 
       final chatProvider = context.read<ChatProvider>();
-
-      // Clear active states
       chatProvider.setActiveRoom(null);
       FCMService.instance.setActiveRoom(null);
 
-      // 2. Logout and clear all data
+      // ✅ Clear Isar chat data saat logout
+      await ChatStorageService.instance.clearAll();
+
       final navigationProvider = context.read<NavigationProvider>();
       await navigationProvider.handleLogout(context);
 
-      debugPrint('✅ [MyApp] Logout complete');
-
-      // 3. Wait for logout to complete
       await Future.delayed(const Duration(milliseconds: 300));
-
       if (!context.mounted) return;
+
       navigationProvider.popAllToRoot();
-      debugPrint('✅ [MyApp] Navigated to MainMenu');
-
-      // 5. Show session expired dialog
-      Future.delayed(const Duration(milliseconds: 500), () {
-        final currentContext = navigatorKey.currentContext;
-        if (currentContext != null && currentContext.mounted) {
-          // CustomDialog.showWarningDialog(
-          //   context: currentContext,
-          //   title: 'Sesi Berakhir',
-          //   message: 'Sesi Anda telah berakhir. Silahkan login kembali.',
-          // );
-        }
-      });
-    } catch (e, stackTrace) {
-      debugPrint('❌ [MyApp] Error handling session expired: $e');
-      debugPrint(stackTrace.toString());
-
-      // Fallback: just navigate to MainMenu
+    } catch (e, st) {
+      debugPrint('❌ [MyApp] _handleSessionExpired error: $e\n$st');
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainMenu()),
@@ -537,6 +468,10 @@ class MyApp extends StatelessWidget {
     }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPLASH
+// ═══════════════════════════════════════════════════════════════════════════
 
 class SplashLogicHandler extends StatefulWidget {
   const SplashLogicHandler({super.key});
@@ -560,54 +495,38 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
   Future<void> _loadInitialData() async {
     try {
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("🚀 LOADING INITIAL DATA");
-      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('🚀 LOADING INITIAL DATA');
+      debugPrint('═══════════════════════════════════════════════════');
 
-      // ✅ Setup session expired callback
       apiClient.onSessionExpired = () {
-        debugPrint("🚪 [Splash] Session expired, logging out...");
-        if (mounted) {
-          final nav = context.read<NavigationProvider>();
-          nav.handleLogout(context);
-        }
+        debugPrint('🚪 [Splash] Session expired');
+        if (mounted) context.read<NavigationProvider>().handleLogout(context);
       };
 
-      // ── 0️⃣ CEK VERSI APLIKASI ──────────────────────────────────
-      // Dilakukan paling awal sebelum load data apapun.
-      // Jika tidak kompatibel, dialog muncul dan user tidak bisa lanjut
-      // sampai update app dari Play Store.
-      debugPrint("🔄 [Splash] Checking app version...");
+      // ── Cek versi app ──────────────────────────────────────────────────
+      debugPrint('🔄 Checking app version...');
       final versionResult = await VersionCheckService().checkVersion();
-
       if (!mounted) return;
 
       if (!versionResult.isCompatible) {
-        debugPrint("⚠️ [Splash] Version incompatible, showing update dialog");
-
-        // Tampilkan dialog — tidak bisa di-dismiss, harus update dulu
+        debugPrint('⚠️ Version incompatible — showing update dialog');
         await VersionCheckService.showUpdateDialogIfNeeded(
             context, versionResult);
-
-        // Setelah dialog ditutup (user buka Play Store), hentikan proses init.
-        // App akan otomatis restart setelah update selesai.
         return;
       }
+      debugPrint('✅ Version check passed');
 
-      debugPrint("✅ [Splash] Version check passed");
-
-      // ── 1️⃣ RESTORE SESSION ─────────────────────────────────────
-      debugPrint("🔄 [Splash] Attempting to restore session...");
+      // ── Restore session ────────────────────────────────────────────────
+      debugPrint('🔄 Restoring session...');
       final userProvider = context.read<UserProvider>();
       final sessionRestored = await userProvider.restoreSession();
 
-      debugPrint("   Session restored: $sessionRestored");
+      debugPrint('   Session restored: $sessionRestored');
 
       if (sessionRestored && userProvider.customer != null) {
-        debugPrint("✅ [Splash] Session restored successfully");
-        debugPrint("   User: ${userProvider.customer!.namaDisplay}");
+        debugPrint('✅ Session restored: ${userProvider.customer!.namaDisplay}');
 
-        // 2️⃣ Set role
         await context.read<NavigationProvider>().saveRole(Constants.customer);
         apiClient.setRole(Constants.customer);
 
@@ -615,57 +534,52 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           userProvider.customer!.noId,
         );
 
-        // 3️⃣ Initialize Chat & History Order Providers
-        debugPrint("🔧 [Splash] Initializing FCM-based providers...");
+        // ✅ Set current user di ChatStorageService
+        // (boleh dipanggil ulang di sini untuk memastikan, meski sudah di-set di main())
+        ChatStorageService.instance
+            .setCurrentUser(userProvider.customer!.noId);
 
+        // ✅ Initialize ChatProvider (Isar edition)
         final chatProvider = context.read<ChatProvider>();
-
         await chatProvider.initialize(
           userId: userProvider.customer!.noId,
           userType: Constants.customer,
         );
-        debugPrint("✅ [Splash] ChatProvider initialized");
+        debugPrint('✅ ChatProvider initialized');
 
-        // Register FCM token
-        await FCMService.instance.registerToken(userProvider.customer!.noId);
-        debugPrint("✅ [Splash] FCM token registered");
+        // ✅ Register FCM token
+        await FCMService.instance
+            .registerToken(userProvider.customer!.noId);
+        debugPrint('✅ FCM token registered');
 
-        // 4️⃣ Load master data in background
+        // ✅ Load master data di background — tidak blocking splash
         Future.microtask(() async {
           try {
             await context.read<KotaProvider>().getAllKotaList();
             await context.read<KategoriProvider>().loadKategori();
-            debugPrint("✅ [Splash] Master data loaded");
+            debugPrint('✅ Master data loaded');
           } catch (e) {
-            debugPrint("⚠️ [Splash] Master data load failed: $e");
+            debugPrint('⚠️ Master data error: $e');
           }
         });
       } else {
-        debugPrint("ℹ️ [Splash] No session found, user not logged in");
-
+        debugPrint('ℹ️ No session — user not logged in');
         await context.read<NavigationProvider>().saveRole(Constants.customer);
         apiClient.setRole(Constants.customer);
       }
 
-      // 5️⃣ Navigate to MainMenu
       _startPage = const MainMenu();
 
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("✅ INITIAL DATA LOAD COMPLETE");
-      debugPrint("═══════════════════════════════════════════════════");
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('✅ INITIAL DATA LOAD COMPLETE');
+      debugPrint('═══════════════════════════════════════════════════');
     } catch (e, stackTrace) {
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("❌ INITIALIZATION ERROR");
-      debugPrint("═══════════════════════════════════════════════════");
-      debugPrint("Error: $e");
-      debugPrint("Stack: $stackTrace");
-
-      _errorMessage = "Terjadi kesalahan saat memuat aplikasi: $e";
+      debugPrint('❌ INITIALIZATION ERROR: $e');
+      debugPrint('Stack: $stackTrace');
+      _errorMessage = 'Terjadi kesalahan saat memuat aplikasi: $e';
       _startPage = _buildErrorPage();
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -677,18 +591,12 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.red,
-              ),
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
               Text(
-                _errorMessage ?? "Terjadi kesalahan",
+                _errorMessage ?? 'Terjadi kesalahan',
                 style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
+                    fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -700,19 +608,15 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
                   });
                   _loadInitialData();
                 },
-                child: const Text("Coba Lagi"),
+                child: const Text('Coba Lagi'),
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const MainMenu(),
-                    ),
-                  );
-                },
-                child: const Text("Lanjut ke Aplikasi"),
+                onPressed: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MainMenu()),
+                ),
+                child: const Text('Lanjut ke Aplikasi'),
               ),
             ],
           ),
@@ -736,11 +640,8 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
               ),
               SizedBox(height: 16),
               Text(
-                "Memuat aplikasi...",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black87,
-                ),
+                'Memuat aplikasi...',
+                style: TextStyle(fontSize: 16, color: Colors.black87),
               ),
             ],
           ),
@@ -748,11 +649,163 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       );
     }
 
-    if (_startPage != null) {
-      return _startPage!;
+    return _startPage ?? const MainMenu();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKGROUND NOTIFICATION HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+Future<void> _showBackgroundChatNotification(RemoteMessage message) async {
+  try {
+    final plugin = FlutterLocalNotificationsPlugin();
+    await NotificationChannelManager.createAllChannels(plugin);
+
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('ic_stat_pacific_data_jaya'),
+      iOS: DarwinInitializationSettings(),
+    );
+    await plugin.initialize(initSettings);
+
+    final detail = _parseDetail(message.data['detail']);
+    final messageId = detail['message_id'] as String? ?? '';
+    final roomId = detail['room_id'] as String? ?? '';
+    final senderId = detail['sender_id'] as String? ?? '';
+    final messageText = detail['message'] as String? ?? '';
+    final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';
+    final sendStatus = detail['send_status'] as String? ?? 'sent';
+
+    // Hanya tampilkan notif untuk pesan baru (status sent dari pengirim)
+    if (sendStatus != 'sent') return;
+    if (messageId.isEmpty || roomId.isEmpty) return;
+
+    final displayText = _formatContent(messageText, jenisPesan);
+
+    final androidDetails = AndroidNotificationDetails(
+      NotificationChannelManager.chatChannelId,
+      'Chat Messages',
+      channelDescription: 'Notifications for new chat messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      icon: 'ic_stat_pacific_data_jaya',
+      enableVibration: true,
+      playSound: true,
+      autoCancel: true,
+      groupKey: 'sender_$senderId',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final payload = NotificationHelper.createPayload({
+      'type': 'chat',
+      'roomId': roomId,
+      'messageId': messageId,
+      'senderId': senderId,
+    });
+
+    await plugin.show(
+      NotificationHelper.generateNotificationId(senderId),
+      'Pesan baru',
+      displayText,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
+    );
+
+    debugPrint('[BGHandler] 🔔 Chat notification shown for room: $roomId');
+  } catch (e) {
+    debugPrint('[BGHandler] ⚠️ _showBackgroundChatNotification error: $e');
+  }
+}
+
+Future<void> _showBackgroundNonChatNotification(
+    RemoteMessage message, NotificationType type) async {
+  try {
+    final plugin = FlutterLocalNotificationsPlugin();
+    await NotificationChannelManager.createAllChannels(plugin);
+
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('ic_stat_pacific_data_jaya'),
+      iOS: DarwinInitializationSettings(),
+    );
+    await plugin.initialize(initSettings);
+
+    String channelId;
+    String title;
+    String body;
+
+    switch (type) {
+      case NotificationType.progress:
+        channelId = NotificationChannelManager.progressChannelId;
+        title = message.notification?.title ?? 'Update Progress';
+        body =
+            message.notification?.body ?? 'Ada update progress pesanan';
+        break;
+      case NotificationType.review:
+        channelId = NotificationChannelManager.reviewChannelId;
+        title = message.notification?.title ?? 'Ulasan Baru';
+        body = message.notification?.body ?? 'Kamu mendapat ulasan baru';
+        break;
+      default:
+        return;
     }
 
-    // Fallback
-    return const MainMenu();
+    final androidDetails = AndroidNotificationDetails(
+      channelId,
+      channelId,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: 'ic_stat_pacific_data_jaya',
+      autoCancel: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await plugin.show(
+      message.hashCode.abs() % 2147483647,
+      title,
+      body,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+    );
+  } catch (e) {
+    debugPrint('[BGHandler] ⚠️ _showBackgroundNonChatNotification error: $e');
+  }
+}
+
+// ─── JSON Helpers ──────────────────────────────────────────────────────────
+
+Map<String, dynamic> _parseDetail(dynamic raw) {
+  if (raw == null) return {};
+  if (raw is Map<String, dynamic>) return raw;
+  try {
+    final decoded = jsonDecode(raw.toString());
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+String _formatContent(String message, String jenisPesan) {
+  if (message.isNotEmpty) return message;
+  switch (jenisPesan) {
+    case 'paket':
+      return '📦 Mengirim paket';
+    case 'penawaran':
+      return '💼 Mengirim penawaran';
+    case 'pesanan':
+      return '🧾 Mengirim pesanan';
+    case 'image':
+      return '🖼️ Mengirim gambar';
+    default:
+      return 'Pesan baru';
   }
 }
