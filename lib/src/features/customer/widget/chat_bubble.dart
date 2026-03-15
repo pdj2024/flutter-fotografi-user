@@ -4,7 +4,6 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'message_status_indicator.dart';
 
-/// ✅ IMPROVED: Chat bubble with better visual design
 class ChatBubble extends StatefulWidget {
   final ChatModel message;
   final bool isMe;
@@ -25,6 +24,12 @@ class ChatBubble extends StatefulWidget {
 
 class _ChatBubbleState extends State<ChatBubble> {
   bool _isPressed = false;
+
+  // ✅ FIX: Helper getter untuk deteksi state bubble
+  bool get _isLocalEcho => widget.message.messageId.startsWith('local-');
+  bool get _isPending =>
+      _isLocalEcho || widget.message.sendStatusEnum.isPending;
+  bool get _isFailed => widget.message.sendStatusEnum.isFailed;
 
   void _showContextMenu(BuildContext context) {
     final RenderBox? bubbleBox = context.findRenderObject() as RenderBox?;
@@ -71,16 +76,12 @@ class _ChatBubbleState extends State<ChatBubble> {
                 curve: Curves.easeOutBack,
                 builder: (context, value, child) {
                   final clampedValue = value.clamp(0.0, 1.0);
-
                   return Transform.scale(
                     scale: clampedValue,
                     alignment: showBelow
                         ? Alignment.topCenter
                         : Alignment.bottomCenter,
-                    child: Opacity(
-                      opacity: clampedValue,
-                      child: child,
-                    ),
+                    child: Opacity(opacity: clampedValue, child: child),
                   );
                 },
                 child: Container(
@@ -121,7 +122,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                           },
                         ),
                       ],
-                      if (widget.message.sendStatusEnum.isFailed &&
+                      if (_isFailed &&
                           widget.isMe &&
                           widget.onRetry != null) ...[
                         Divider(height: 1, color: Colors.grey.shade200),
@@ -184,43 +185,60 @@ class _ChatBubbleState extends State<ChatBubble> {
 
   void _copyMessage() {
     Clipboard.setData(ClipboardData(text: widget.message.message));
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
+        content: const Row(
           children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            const Text(
+            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 12),
+            Text(
               'Pesan disalin',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ],
         ),
         backgroundColor: Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 2),
       ),
     );
-
     HapticFeedback.mediumImpact();
+  }
+
+  // ─── Warna bubble berdasarkan state ──────────────────────────────────────
+
+  Color get _bubbleColor {
+    if (!widget.isMe) return Colors.white;
+    if (_isFailed) return Colors.red.shade50;
+    // ✅ FIX: Pending (local echo) tampil lebih redup dari sent normal
+    return Constants.primaryColor;
+  }
+
+  Color get _textColor {
+    if (!widget.isMe) return Colors.black87;
+    if (_isFailed) return Colors.red.shade900;
+    if (_isPending) return Colors.white.withOpacity(0.8);
+    return Colors.white;
+  }
+
+  Color get _timeColor {
+    if (!widget.isMe) return Colors.grey.shade600;
+    if (_isFailed) return Colors.red.shade700;
+    if (_isPending) return Colors.white.withOpacity(0.6);
+    return Colors.grey.shade200;
+  }
+
+  Color get _shadowColor {
+    if (!widget.isMe) return Colors.black.withOpacity(0.08);
+    if (_isFailed) return Colors.red.withOpacity(0.15);
+    if (_isPending) return Constants.primaryColor.withOpacity(0.1);
+    return Constants.primaryColor.withOpacity(0.2);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isFailed = widget.message.sendStatusEnum.isFailed;
-
     return Align(
       alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
@@ -243,29 +261,21 @@ class _ChatBubbleState extends State<ChatBubble> {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                // ✅ IMPROVED: Better bubble design
+                // ── Bubble ────────────────────────────────────────────────
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    // ✅ Better colors
-                    color: widget.isMe
-                        ? (isFailed
-                            ? Colors.red.shade50
-                            : Constants.primaryColor) // Messenger blue
-                        : Colors.white,
+                    color: _bubbleColor,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18), // ✅ Rounder
+                      topLeft: const Radius.circular(18),
                       topRight: const Radius.circular(18),
                       bottomLeft: Radius.circular(widget.isMe ? 18 : 4),
                       bottomRight: Radius.circular(widget.isMe ? 4 : 18),
                     ),
-                    // ✅ Softer shadow
                     boxShadow: [
                       BoxShadow(
-                        color: widget.isMe
-                            ? Constants.primaryColor.withOpacity(0.2)
-                            : Colors.black.withOpacity(0.08),
+                        color: _shadowColor,
                         blurRadius: _isPressed ? 4 : 8,
                         offset: Offset(0, _isPressed ? 2 : 3),
                       ),
@@ -278,11 +288,8 @@ class _ChatBubbleState extends State<ChatBubble> {
                         widget.message.message,
                         style: TextStyle(
                           fontSize: 15,
-                          // ✅ White text for sent, black for received
-                          color: widget.isMe
-                              ? (isFailed ? Colors.red.shade900 : Colors.white)
-                              : Colors.black87,
-                          height: 1.4, // ✅ Better line spacing
+                          color: _textColor,
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -293,12 +300,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                             _formatTime(widget.message.sentAt),
                             style: TextStyle(
                               fontSize: 11,
-                              // ✅ Appropriate text color
-                              color: widget.isMe
-                                  ? (isFailed
-                                      ? Colors.red.shade700
-                                      : Colors.grey.shade200)
-                                  : Colors.grey.shade600,
+                              color: _timeColor,
                             ),
                           ),
                           if (widget.isMe) ...[
@@ -314,31 +316,24 @@ class _ChatBubbleState extends State<ChatBubble> {
                   ),
                 ),
 
-                // Failed message indicator
-                if (isFailed && widget.isMe)
+                // ── Failed indicator ──────────────────────────────────────
+                if (_isFailed && widget.isMe)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.red.shade200,
-                          width: 1,
-                        ),
+                        border:
+                            Border.all(color: Colors.red.shade200, width: 1),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: 14,
-                            color: Colors.red.shade700,
-                          ),
+                          Icon(Icons.error_outline_rounded,
+                              size: 14, color: Colors.red.shade700),
                           const SizedBox(width: 6),
                           Text(
                             'Gagal terkirim',
@@ -358,6 +353,33 @@ class _ChatBubbleState extends State<ChatBubble> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
+
+                // ✅ FIX: Pending indicator untuk local echo (bukan failed)
+                if (_isPending && !_isFailed && widget.isMe)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: Colors.grey.shade400,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Mengirim...',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],

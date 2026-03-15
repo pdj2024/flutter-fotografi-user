@@ -270,7 +270,7 @@ class _FilterOverlayState extends State<FilterOverlay>
         orderBy: 'username',
         status: 'aktif',
         username: query,
-        // namaDisplay: query,
+        namaDisplay: query,
         no_id: noId,
       );
       final list = res

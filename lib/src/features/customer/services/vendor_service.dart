@@ -3,18 +3,16 @@ import 'package:mpjnew/src/data/models/vendor_model.dart';
 import '../../../core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 
-
 class VendorService {
   final String entity = 'Vendor';
   final String controller = 'vendor';
   final ApiClient _client = apiClient; // ← pakai nama beda
 
-
   /// GET ALL dengan parameter opsional
   Future<List<VendorModel>> getAll({
     String? no_id,
     String? namaDisplay,
-     String? username,
+    String? username,
     String? id_media,
     String? status,
     String? orderBy,
@@ -26,7 +24,7 @@ class VendorService {
         queryParameters: {
           if (no_id != null) 'no_id': no_id,
           if (namaDisplay != null) 'Nama_Display': namaDisplay,
-            if (username != null) 'username': username,
+          if (username != null) 'username': username,
           if (id_media != null) 'id_media': id_media,
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
@@ -35,29 +33,70 @@ class VendorService {
       );
 
       print('==============================');
-  print('Response Body: ${response.body}');
-  print('Status Code: ${response.statusCode}');
-  print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
 
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
 
-     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body);
-    
-     final List<dynamic> data = json['Data'];
+        final List<dynamic> data = json['Data'];
 
-
-      return data.map((e) => VendorModel.fromJson(e)).toList();
-    } 
-    else if (response.statusCode == 204) {
+        return data.map((e) => VendorModel.fromJson(e)).toList();
+      } else if (response.statusCode == 204) {
         // Tidak ada data
         return [];
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
       }
-    else {
-      throw Exception('Gagal load $entity (${response.statusCode})');
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
     }
-  } catch (e) {
-    throw Exception('Error saat mengambil $entity: $e');
   }
+
+  Future<List<VendorModel>> searchVendor({
+    String? no_id,
+    String? namaDisplay,
+    String? username,
+    String? id_media,
+    String? status,
+    String? orderBy,
+    String? orderDir,
+  }) async {
+    try {
+      final response = await apiClient.get(
+        '/$controller/getAll/search',
+        queryParameters: {
+          if (no_id != null) 'no_id': no_id,
+          if (namaDisplay != null) 'Nama_Display': namaDisplay,
+          if (username != null) 'username': username,
+          if (id_media != null) 'id_media': id_media,
+          if (status != null) 'status': status,
+          if (orderBy != null) 'orderby': orderBy,
+          if (orderDir != null) 'orderdir': orderDir,
+        },
+      );
+
+      print('==============================');
+      print('Response Body: ${response.body}');
+      print('Status Code: ${response.statusCode}');
+      print('==============================');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+
+        final List<dynamic> data = json['Data'];
+
+        return data.map((e) => VendorModel.fromJson(e)).toList();
+      } else if (response.statusCode == 204) {
+        // Tidak ada data
+        return [];
+      } else {
+        throw Exception('Gagal load $entity (${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Error saat mengambil $entity: $e');
+    }
   }
 
   /// CREATE
@@ -74,30 +113,31 @@ class VendorService {
   }
 
   /// UPDATE
-Future<void> update(VendorModel model) async {
-  final response = await apiClient.put(
-    '/$controller/update',
-    queryParameters: {'no_id': model.noId}, // Asumsinya noId adalah string di VendorModel
-    body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
-    headers: {'Content-Type': 'application/json'},
-  );
+  Future<void> update(VendorModel model) async {
+    final response = await apiClient.put(
+      '/$controller/update',
+      queryParameters: {
+        'no_id': model.noId
+      }, // Asumsinya noId adalah string di VendorModel
+      body: jsonEncode(apiClient.toJsonSafe(model.toJson())),
+      headers: {'Content-Type': 'application/json'},
+    );
 
-  if (response.statusCode != 200) {
-    throw Exception('Gagal mengupdate $entity');
+    if (response.statusCode != 200) {
+      throw Exception('Gagal mengupdate $entity');
+    }
   }
-}
 
-/// DELETE
-Future<void> delete(String noId) async {
-  final response = await apiClient.delete(
-    '/$controller/delete',
-    queryParameters: {'no_id': noId},
-    headers: {'Content-Type': 'application/json'},
-  );
+  /// DELETE
+  Future<void> delete(String noId) async {
+    final response = await apiClient.delete(
+      '/$controller/delete',
+      queryParameters: {'no_id': noId},
+      headers: {'Content-Type': 'application/json'},
+    );
 
-  if (response.statusCode != 200) {
-    throw Exception('Gagal menghapus $entity');
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menghapus $entity');
+    }
   }
-}
-
 }

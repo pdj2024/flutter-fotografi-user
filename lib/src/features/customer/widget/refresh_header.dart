@@ -110,7 +110,7 @@ class _HeaderContent extends StatelessWidget {
               size: 18, color: Colors.green.shade400),
           const SizedBox(width: 8),
           Text(
-            'Profil berhasil diperbarui',
+            'Data berhasil diperbarui',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
           ),
         ],

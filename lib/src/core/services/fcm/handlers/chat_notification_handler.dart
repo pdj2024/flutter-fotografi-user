@@ -2,182 +2,228 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import '../utils/notification_channel_manager.dart';
 import '../utils/notification_helper.dart';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT NOTIFICATION HANDLER
+//
+// Tanggung jawab handler ini:
+//   1. Parse ChatModel dari RemoteMessage payload
+//   2. Panggil onMessageReceived → FCMService → ChatProvider → ChatStorageService
+//   3. Tampilkan notif lokal (hanya jika bukan active room & bukan pesan sendiri)
+//
+// ✅ FIX BUG 1: currentUserId dan activeRoomId sekarang dibaca live via getter
+//    callback (getCurrentUserId / getActiveRoomId), bukan di-pass saat konstruksi.
+//    Ini memastikan nilai selalu up-to-date setelah login / room change.
+//
+// ✅ TIDAK menyimpan pesan ke storage secara langsung.
+//    Penyimpanan dihandle oleh ChatStorageService via onMessageReceived callback.
+// ═══════════════════════════════════════════════════════════════════════════
+
 class ChatNotificationHandler {
   final FlutterLocalNotificationsPlugin notificationsPlugin;
-  final String? currentUserId;
-  final String? activeRoomId;
 
-  // ✅ Callback untuk update data lokal
+  // ✅ FIX: Gunakan getter callback, bukan nilai final yang di-set saat konstruksi.
+  // Nilai dibaca SAAT pesan datang, bukan saat handler dibuat.
+  // Ini mencegah bug di mana currentUserId null karena user belum login
+  // saat handler pertama kali dibuat.
+  final String? Function() getCurrentUserId;
+  final String? Function() getActiveRoomId;
+
   final Function(ChatModel)? onMessageReceived;
-
-  // ✅ Callback untuk get sender name
   final String Function(String roomId, String senderId)? getSenderName;
 
-  // Track messages by sender for grouping
+  // ✅ Null di Isar edition — ChatStorageService yang handle status update
+  final Future<void> Function(
+      String messageId, String roomId, String newStatus)? onUpdateMessageStatus;
+
+  // Track messages by sender for grouped notification (inbox style)
   final Map<String, List<String>> _messagesBySender = {};
 
   ChatNotificationHandler({
     required this.notificationsPlugin,
-    this.currentUserId,
-    this.activeRoomId,
+    // ✅ FIX: Parameter lama (currentUserId, activeRoomId) diganti dengan getter
+    required this.getCurrentUserId,
+    required this.getActiveRoomId,
     this.onMessageReceived,
     this.getSenderName,
+    this.onUpdateMessageStatus,
   });
 
-  /// ✅ IMPROVED: Handle chat message in foreground
+  // =========================================
+  // FOREGROUND HANDLER
+  // =========================================
+
   Future<void> handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[ChatHandler] ═══════════════════════════════════════');
-    debugPrint('[ChatHandler] 💬 HANDLING FOREGROUND CHAT MESSAGE');
-    debugPrint('[ChatHandler] ═══════════════════════════════════════');
+    debugPrint('[ChatHandler] 💬 Handling foreground message...');
 
     try {
+      final type = message.data['type'] as String? ?? '';
+      debugPrint('[ChatHandler] type: $type');
+
+      // ── Chat message ─────────────────────────────────────────────────────
       final detail = NotificationHelper.parseDetail(message.data['detail']);
-      debugPrint('[ChatHandler] Detail: ${message.data['detail']}');
+      final chatMessage = ChatModel.fromFCM(detail, getCurrentUserId() ?? '');
 
-      final chatMessage = ChatModel.fromFCM(detail, currentUserId ?? "");
+      final currentUserId = getCurrentUserId();
+      final activeRoomId = getActiveRoomId();
 
-      debugPrint('[ChatHandler] ✅ Message parsed: ${chatMessage.messageId}');
+      debugPrint('[ChatHandler] ✅ Parsed: ${chatMessage.messageId}');
       debugPrint('[ChatHandler]   Room: ${chatMessage.roomId}');
       debugPrint('[ChatHandler]   Sender: ${chatMessage.senderId}');
       debugPrint('[ChatHandler]   Status: ${chatMessage.sendStatus}');
-      debugPrint('[ChatHandler]   Message: ${chatMessage.message}');
+      debugPrint('[ChatHandler]   CurrentUser: $currentUserId');
+      debugPrint('[ChatHandler]   ActiveRoom: $activeRoomId');
 
-      // ✅ Determine context
-      final isFromMe = chatMessage.senderId == currentUserId;
-      final isActiveRoom = activeRoomId == chatMessage.roomId;
+      final isStatusEcho = chatMessage.sendStatus == 'received' ||
+          chatMessage.sendStatus == 'read';
+      final isOwnSender =
+          currentUserId != null && chatMessage.senderId == currentUserId;
+      final hasLocalId = chatMessage.localId != null &&
+          chatMessage.localId!.startsWith('local-');
+      final isFromMe = isOwnSender || isStatusEcho || hasLocalId;
+      final isActiveRoom =
+          activeRoomId != null && activeRoomId == chatMessage.roomId;
 
-      debugPrint('[ChatHandler]   From me: $isFromMe');
-      debugPrint('[ChatHandler]   Active room: $isActiveRoom');
+      debugPrint('[ChatHandler]   isOwnSender=$isOwnSender'
+          ' isStatusEcho=$isStatusEcho'
+          ' hasLocalId=$hasLocalId'
+          ' isActiveRoom=$isActiveRoom'
+          ' isFromMe=$isFromMe');
 
-      // ═══════════════════════════════════════════════════════════
-      // ✅ IMPROVED LOGIC: Proper handling for all scenarios
-      // ═══════════════════════════════════════════════════════════
+      // ── Step 1: Persist ke Isar ──────────────────────────────────────────
+      await ChatStorageService.instance.persistForegroundMessage(chatMessage);
 
-      if (isFromMe) {
-        // ═══════════════════════════════════════════════════════════
-        // OWN MESSAGE: Echo from server
-        // ═══════════════════════════════════════════════════════════
-        debugPrint('[ChatHandler] 📤 Own message detected');
-        debugPrint(
-            '[ChatHandler]   Action: Pass to ChatProvider for echo replacement');
+      if (!isFromMe) {
+        // ── Step 2: Update status ke server ─────────────────────────────────
+        // ✅ FIX: lakukan ini SEBELUM notif dan SEBELUM onMessageReceived
+        // agar tidak ada kondisi race yang menyebabkan step ini terlewat
+        final targetStatus = isActiveRoom ? 'read' : 'received';
 
-        // Pass to ChatProvider (will replace local echo)
+        debugPrint('[ChatHandler] 🔄 Attempting status update: '
+            '${chatMessage.messageId} → $targetStatus');
+        debugPrint('[ChatHandler]   onUpdateMessageStatus is null: '
+            '${onUpdateMessageStatus == null}');
+
+        if (chatMessage.sendStatus != targetStatus) {
+          if (onUpdateMessageStatus != null) {
+            await onUpdateMessageStatus!.call(
+              chatMessage.messageId,
+              chatMessage.roomId,
+              targetStatus,
+            );
+            debugPrint('[ChatHandler] ✅ Status update called: $targetStatus');
+          } else {
+            debugPrint('[ChatHandler] ❌ onUpdateMessageStatus is NULL — '
+                'status tidak dikirim ke server!');
+          }
+        } else {
+          debugPrint(
+              '[ChatHandler] ℹ️ Status sudah $targetStatus, skip update');
+        }
+
+        // ── Step 3: Callback ke provider (untuk UI update) ──────────────────
         onMessageReceived?.call(chatMessage);
 
-        // ✅ NO notification for own messages
-        debugPrint('[ChatHandler] 🔕 Skip notification (own message)');
-      } else {
-        // ═══════════════════════════════════════════════════════════
-        // MESSAGE FROM OTHERS
-        // ═══════════════════════════════════════════════════════════
-        debugPrint('[ChatHandler] 📨 Message from others');
-
-        // ✅ CRITICAL: Pass to ChatProvider FIRST
-        // ChatProvider will determine correct status (read/received)
-        // based on isActiveRoom
-        debugPrint('[ChatHandler]   Action: Pass to ChatProvider');
-        onMessageReceived?.call(chatMessage);
-
-        // ✅ Show notification ONLY if NOT in active room
+        // ── Step 4: Tampilkan notif lokal ────────────────────────────────────
         if (!isActiveRoom) {
-          debugPrint('[ChatHandler]   Action: Show notification');
           await showNotification(message);
         } else {
-          debugPrint('[ChatHandler] 🔕 Skip notification (active room)');
+          debugPrint('[ChatHandler] 🔕 Skip notif (active room)');
         }
+      } else {
+        // Own echo — hanya callback ke provider
+        onMessageReceived?.call(chatMessage);
+        debugPrint('[ChatHandler] 🔕 Skip notif — isFromMe=$isFromMe');
       }
-
-      debugPrint('[ChatHandler] ═══════════════════════════════════════');
     } catch (e, st) {
-      debugPrint('[ChatHandler] ❌ Error: $e');
-      debugPrint('[ChatHandler] Stack: $st');
+      debugPrint('[ChatHandler] ❌ Error: $e\n$st');
     }
   }
 
-  /// Show chat notification with proper sender grouping
+  // =========================================
+  // SHOW NOTIFICATION
+  // =========================================
+
+  /// Tampilkan notif lokal dengan grouping per sender (inbox style).
   Future<void> showNotification(RemoteMessage message) async {
     try {
       final detail = NotificationHelper.parseDetail(message.data['detail']);
+
       final sendStatus = detail['send_status'] as String? ?? '';
-      final senderId = detail['sender_id'] as String? ?? '';
 
-      // ✅ CRITICAL: Only show notification for 'sent' status
-      // This ensures we don't show notifications for status updates (received/read)
+      // ✅ FIX: Guard tambahan — hanya tampil untuk status 'sent'
+      // Status received/read adalah echo konfirmasi, bukan pesan baru
       if (sendStatus != 'sent') {
-        debugPrint('[ChatHandler] 🔕 Skip notification (status: $sendStatus)');
-        return;
-      }
-
-      if (senderId == currentUserId) {
-        debugPrint('[ChatHandler] 🔕 Skip notification (same sender)');
+        debugPrint('[ChatHandler] 🔕 Skip notif (status: $sendStatus)');
         return;
       }
 
       final roomId = detail['room_id'] as String? ?? '';
+      final senderId = detail['sender_id'] as String? ?? '';
       final messageText = detail['message'] as String? ?? '';
       final messageId = detail['message_id'] as String? ?? '';
       final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';
 
-      debugPrint('[ChatHandler] 🔔 Preparing notification...');
-      debugPrint('[ChatHandler]   Room: $roomId');
-      debugPrint('[ChatHandler]   Sender: $senderId');
-      debugPrint('[ChatHandler]   Status: $sendStatus');
+      // ✅ FIX: Baca live saat akan tampil notif
+      final currentUserId = getCurrentUserId();
+      final activeRoomId = getActiveRoomId();
 
-      // Skip if from self
+      // Guard: pesan sendiri
       if (senderId == currentUserId) {
-        debugPrint('[ChatHandler] 🔕 Skip (own message)');
+        debugPrint(
+            '[ChatHandler] 🔕 Skip notif (own message): sender=$senderId');
         return;
       }
 
-      // Skip if active room (double-check)
-      if (activeRoomId == roomId) {
+      // Guard: room aktif
+      if (activeRoomId != null && activeRoomId == roomId) {
         debugPrint('[ChatHandler] 🔕 Skip (active room)');
         return;
       }
 
-      // Get sender name
-      String senderName = 'New Message';
+      if (messageId.isEmpty || roomId.isEmpty) {
+        debugPrint('[ChatHandler] ⚠️ Missing messageId/roomId');
+        return;
+      }
+
+      // Resolve sender name
+      String senderName = 'Pesan baru';
       if (getSenderName != null) {
         try {
           senderName = getSenderName!(roomId, senderId);
         } catch (e) {
-          debugPrint('[ChatHandler] ⚠️ Error getting sender name: $e');
+          debugPrint('[ChatHandler] ⚠️ getSenderName error: $e');
         }
       }
 
-      // Format message content
-      final content = _formatMessageContent(messageText, jenisPesan, detail);
+      final content = _formatMessageContent(messageText, jenisPesan);
 
-      // Group by sender
-      final groupKey = 'sender_$senderId';
-
-      // Add to sender's message list
+      // Accumulate messages per sender untuk inbox style
       _messagesBySender.putIfAbsent(senderId, () => []);
       _messagesBySender[senderId]!.add(content);
 
-      // Keep only last 5 messages
+      // Batasi 5 pesan terakhir per sender
       if (_messagesBySender[senderId]!.length > 5) {
-        _messagesBySender[senderId] = _messagesBySender[senderId]!
-            .sublist(_messagesBySender[senderId]!.length - 5);
+        _messagesBySender[senderId] = _messagesBySender[senderId]!.sublist(
+          _messagesBySender[senderId]!.length - 5,
+        );
       }
 
-      // Show grouped notification
       await _showGroupedNotification(
         senderId: senderId,
         senderName: senderName,
-        groupKey: groupKey,
+        groupKey: 'sender_$senderId',
         messageId: messageId,
         roomId: roomId,
       );
 
       debugPrint('[ChatHandler] ✅ Notification shown');
     } catch (e, st) {
-      debugPrint('[ChatHandler] ❌ Error: $e');
-      debugPrint('[ChatHandler] Stack: $st');
+      debugPrint('[ChatHandler] ❌ showNotification error: $e\n$st');
     }
   }
 
@@ -188,81 +234,62 @@ class ChatNotificationHandler {
     required String messageId,
     required String roomId,
   }) async {
-    try {
-      final messages = _messagesBySender[senderId] ?? [];
-      final messageCount = messages.length;
+    final messages = _messagesBySender[senderId] ?? [];
+    final count = messages.length;
 
-      // Create InboxStyle
-      final inboxStyle = InboxStyleInformation(
-        messages,
-        contentTitle: senderName,
-        summaryText:
-            messageCount == 1 ? 'Pesan baru' : '$messageCount pesan baru',
-      );
+    final inboxStyle = InboxStyleInformation(
+      messages,
+      contentTitle: senderName,
+      summaryText: count == 1 ? 'Pesan baru' : '$count pesan baru',
+    );
 
-      final androidDetails = AndroidNotificationDetails(
-        NotificationChannelManager.chatChannelId,
-        'Chat Messages',
-        channelDescription: 'Notifications for new chat messages',
-        importance: Importance.high,
-        priority: Priority.high,
-        showWhen: true,
-        icon: 'ic_stat_pacific_data_jaya',
-        enableVibration: true,
-        playSound: true,
-        groupKey: groupKey,
-        setAsGroupSummary: false,
-        styleInformation: inboxStyle,
-        color: Constants.primaryColor,
-        autoCancel: true,
-      );
+    final androidDetails = AndroidNotificationDetails(
+      NotificationChannelManager.chatChannelId,
+      'Chat Messages',
+      channelDescription: 'Notifications for new chat messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      icon: 'ic_stat_pacific_data_jaya',
+      enableVibration: true,
+      playSound: true,
+      groupKey: groupKey,
+      setAsGroupSummary: false,
+      styleInformation: inboxStyle,
+      color: Constants.primaryColor,
+      autoCancel: true,
+    );
 
-      const iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
 
-      final notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
+    final payload = NotificationHelper.createPayload({
+      'type': 'chat',
+      'roomId': roomId,
+      'messageId': messageId,
+      'senderId': senderId,
+    });
 
-      final payload = NotificationHelper.createPayload({
-        'type': 'chat',
-        'roomId': roomId,
-        'messageId': messageId,
-        'senderId': senderId,
-      });
-
-      // Use same ID for same sender
-      final notificationId =
-          NotificationHelper.generateNotificationId(senderId);
-
-      await notificationsPlugin.show(
-        notificationId,
-        senderName,
-        messageCount == 1 ? messages.first : '$messageCount pesan baru',
-        notificationDetails,
-        payload: payload,
-      );
-
-      debugPrint('[ChatHandler] ✅ Grouped notification shown');
-    } catch (e, st) {
-      debugPrint('[ChatHandler] ❌ Error showing notification: $e');
-      debugPrint('[ChatHandler] Stack: $st');
-    }
+    await notificationsPlugin.show(
+      NotificationHelper.generateNotificationId(senderId),
+      senderName,
+      count == 1 ? messages.first : '$count pesan baru',
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
+    );
   }
 
-  String _formatMessageContent(
-    String message,
-    String jenisPesan,
-    Map<String, dynamic> detail,
-  ) {
+  // =========================================
+  // UTILITIES
+  // =========================================
+
+  String _formatMessageContent(String message, String jenisPesan) {
     if (message.isNotEmpty) {
       return NotificationHelper.truncateText(message);
     }
-
     switch (jenisPesan) {
       case 'paket':
         return '📦 Mengirim paket';
@@ -281,15 +308,13 @@ class ChatNotificationHandler {
     }
   }
 
-  /// Clear messages for sender
   void clearMessagesForSender(String senderId) {
     _messagesBySender.remove(senderId);
-    debugPrint('[ChatHandler] 🗑️ Cleared messages for: $senderId');
+    debugPrint('[ChatHandler] 🗑️ Cleared: $senderId');
   }
 
-  /// Clear all message groups
   void clearAllMessageGroups() {
     _messagesBySender.clear();
-    debugPrint('[ChatHandler] 🗑️ Cleared all message groups');
+    debugPrint('[ChatHandler] 🗑️ Cleared all groups');
   }
 }
