@@ -7,6 +7,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1017834593569:android:eebc195ddebfa4dbd2b260",
+        "android_client_info": {
+          "package_name": "app.pacificdatajaya.fotograficustomer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1017834593569-vdlo9ngapn8u46n5quecvipas6dov9du.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDt1lilE-WWVrKgb_suC-Bus3WevHAED0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1017834593569-lb4aqlsc67kcbajdotroqdrkseb4bisl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1017834593569:android:c4c80fc89e2afe87d2b260",
         "android_client_info": {
           "package_name": "fotografi.pdj01"
@@ -14,7 +43,15 @@
       },
       "oauth_client": [
         {
-          "client_id": "1017834593569-3t4720meijgp7i3jv3f94q3hvin5pkmi.apps.googleusercontent.com",
+          "client_id": "1017834593569-7hlubuh2r3i3jq7vgcccl7uao7d9fscq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "fotografi.pdj01",
+            "certificate_hash": "357e21edc62698cef7ca30e806e97bc530c5a99e"
+          }
+        },
+        {
+          "client_id": "1017834593569-haenv6qupoap4eg6040mhuvmi5ko0pdo.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "fotografi.pdj01",
@@ -22,11 +59,40 @@
           }
         },
         {
-          "client_id": "1017834593569-pfnuq1ja43vv14ua1tm1ga72kvbvds58.apps.googleusercontent.com",
+          "client_id": "1017834593569-vdlo9ngapn8u46n5quecvipas6dov9du.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDt1lilE-WWVrKgb_suC-Bus3WevHAED0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1017834593569-lb4aqlsc67kcbajdotroqdrkseb4bisl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1017834593569:android:c4b747f056ae51b9d2b260",
+        "android_client_info": {
+          "package_name": "fotografi.pdj02"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1017834593569-pn8mg0r3prg7a2koj384rocml2vqc8p3.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "fotografi.pdj01",
-            "certificate_hash": "d15a130fb3b24aca529593fec626bc19f54bf3b5"
+            "package_name": "fotografi.pdj02",
+            "certificate_hash": "357e21edc62698cef7ca30e806e97bc530c5a99e"
           }
         },
         {

@@ -11,6 +11,7 @@ import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
+import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
@@ -119,6 +120,19 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         paket =
             (await PaketService().getAll(noId: pesanan.idPaket)).firstOrNull;
 
+        if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
+          final hasLinkSnap =
+              pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty;
+
+          final metodeList = hasLinkSnap
+              ? await MetodePembayaranService()
+                  .getAll(paymentSnap: pesanan.metodeBayar)
+              : await MetodePembayaranService()
+                  .getAll(caraBayar: pesanan.metodeBayar);
+
+          metodePembayaran = metodeList.firstOrNull;
+        }
+
         if (pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
           final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
           ulasan = list.isNotEmpty ? list.first : null;
@@ -143,11 +157,27 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
 
       final pesanan =
           pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti);
-      if (pesanan != null &&
-          pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
-        final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
-        if (mounted)
-          setState(() => ulasan = list.isNotEmpty ? list.first : null);
+      if (pesanan != null) {
+        // ✅ Refresh metode pembayaran
+        if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
+          final hasLinkSnap =
+              pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty;
+
+          final metodeList = hasLinkSnap
+              ? await MetodePembayaranService()
+                  .getAll(paymentSnap: pesanan.metodeBayar)
+              : await MetodePembayaranService()
+                  .getAll(caraBayar: pesanan.metodeBayar);
+
+          if (mounted)
+            setState(() => metodePembayaran = metodeList.firstOrNull);
+        }
+
+        if (pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
+          final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
+          if (mounted)
+            setState(() => ulasan = list.isNotEmpty ? list.first : null);
+        }
       }
 
       _refreshController.refreshCompleted();

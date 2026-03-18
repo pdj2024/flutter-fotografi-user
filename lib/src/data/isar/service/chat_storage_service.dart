@@ -264,6 +264,8 @@ class ChatStorageService {
 
       if (messageId.isEmpty || roomId.isEmpty) return false;
 
+      await _incrementRoomUnreadCount(roomId, detail);
+
       // ✅ Skip echo status update (received/read) di background.
       // Echo received = partner sudah terima → tidak perlu notif untuk pengirim.
       // Echo read = partner sudah baca → tidak perlu notif untuk pengirim.
@@ -303,6 +305,94 @@ class ChatStorageService {
     }
   }
 
+  static Future<void> _incrementRoomUnreadCount(
+    String roomId,
+    Map<String, dynamic> detail,
+  ) async {
+    try {
+      final isar = ChatIsarService.instance;
+      if (!isar.isInitialized) {
+        await isar.initialize();
+      }
+      final existing = await isar.getRoomById(roomId);
+
+      final messageId = detail['message_id']?.toString() ?? '';
+      final messageText = detail['message']?.toString() ?? '';
+      final jenisPesan = detail['jenis_pesan']?.toString() ?? 'text';
+      final sentAt = DateTime.tryParse(
+            detail['sent_at']?.toString() ?? '',
+          ) ??
+          DateTime.now();
+      final preview =
+          messageText.isNotEmpty ? messageText : _formatPreview(jenisPesan);
+
+      if (existing != null) {
+        // Jangan hitung duplikat — cek dulu apakah messageId sudah ada di list
+        if (messageId.isNotEmpty &&
+            existing.listIdMessageReceived.contains(messageId)) {
+          debugPrint(
+              '[ChatStorageService] ⏭️ _incrementRoomUnreadCount: duplicate $messageId');
+          return;
+        }
+
+        final newList = messageId.isNotEmpty
+            ? [...existing.listIdMessageReceived, messageId]
+            : existing.listIdMessageReceived;
+
+        // copyWith hanya update field yang ada di RoomChatEntity
+        final updated = existing.copyWith(
+          lastMessage: preview,
+          lastMessageAt: sentAt,
+          countStatusReceived: newList.length,
+          listIdMessageReceived: newList,
+        );
+        await isar.saveRoom(updated);
+
+        debugPrint('[ChatStorageService] 🔴 BG unread +1: $roomId '
+            '(total: ${newList.length})');
+      } else {
+        // Room belum ada di Isar — buat minimal agar badge muncul di RoomListPage.
+        // Field wajib (late) harus diisi agar tidak throw LateInitializationError.
+        final newRoom = RoomChatEntity()
+          ..roomId = roomId
+          ..roomType = 'direct'
+          ..idLawan = detail['sender_id']?.toString() ?? ''
+          ..lastMessage = preview
+          ..lastMessageAt = sentAt
+          ..unread = 1
+          ..countStatusReceived = 1
+          ..listIdMessageReceived = messageId.isNotEmpty ? [messageId] : []
+          ..countStatusSent = 0
+          ..listIdMessageSent = []
+          ..userIds = [];
+        // usernameLawan sengaja tidak diisi — null,
+        // akan diisi saat drain (API sync)
+
+        await isar.saveRoom(newRoom);
+
+        debugPrint(
+            '[ChatStorageService] 🔴 BG new room created with unread=1: $roomId');
+      }
+    } catch (e) {
+      debugPrint('[ChatStorageService] ⚠️ _incrementRoomUnreadCount: $e');
+    }
+  }
+
+  static String _formatPreview(String jenisPesan) {
+    switch (jenisPesan) {
+      case 'image':
+        return '🖼️ Gambar';
+      case 'paket':
+        return '📦 Paket';
+      case 'penawaran':
+        return '💼 Penawaran';
+      case 'pesanan':
+        return '💼 Pesanan';
+      default:
+        return 'Pesan baru';
+    }
+  }
+
   Future<int> drainBackgroundQueue({String? activeRoomId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -314,6 +404,18 @@ class ChatStorageService {
       final effectiveActiveRoom =
           activeRoomId ?? prefs.getString(_kActiveRoomKey);
       debugPrint('[ChatStorage] 🏠 Active room: $effectiveActiveRoom');
+
+      if (activeRoomId != null) {
+        final room = await _isar.getRoomById(activeRoomId);
+        if (room != null) {
+          await _isar.saveRoom(room.copyWith(
+            countStatusReceived: 0,
+            listIdMessageReceived: [],
+          ));
+          debugPrint(
+              '[ChatStorageService] 🧹 Unread cleared for active room: $activeRoomId');
+        }
+      }
 
       final List<String> failed = [];
       int processed = 0, readCount = 0, receivedCount = 0;

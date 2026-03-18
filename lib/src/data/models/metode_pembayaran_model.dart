@@ -1,5 +1,6 @@
 class MetodePembayaranModel {
   final String caraBayar;
+  final String paymentSnap;
   final String display;
   final String deskripsi;
   final int fee;
@@ -8,6 +9,7 @@ class MetodePembayaranModel {
 
   MetodePembayaranModel({
     required this.caraBayar,
+    required this.paymentSnap,
     required this.display,
     required this.deskripsi,
     required this.fee,
@@ -21,6 +23,7 @@ class MetodePembayaranModel {
   factory MetodePembayaranModel.fromJson(Map<String, dynamic> json) {
     return MetodePembayaranModel(
       caraBayar: json['Cara_Bayar'] ?? '',
+      paymentSnap: json['Payment_Snap'] ?? '',
       display: json['Display'] ?? '',
       deskripsi: json['Deskripsi'] ?? '',
       fee: json['Fee'] is int
@@ -37,6 +40,7 @@ class MetodePembayaranModel {
   Map<String, dynamic> toJson() {
     return {
       'Cara_Bayar': caraBayar,
+      'Payment_Snap': paymentSnap,
       'Display': display,
       'Deskripsi': deskripsi,
       'Fee': fee,
@@ -50,6 +54,7 @@ class MetodePembayaranModel {
   /// =======================
   MetodePembayaranModel copyWith({
     String? caraBayar,
+    String? paymentSnap,
     String? display,
     String? deskripsi,
     int? fee,
@@ -58,6 +63,7 @@ class MetodePembayaranModel {
   }) {
     return MetodePembayaranModel(
       caraBayar: caraBayar ?? this.caraBayar,
+      paymentSnap: paymentSnap ?? this.paymentSnap,
       display: display ?? this.display,
       deskripsi: deskripsi ?? this.deskripsi,
       fee: fee ?? this.fee,

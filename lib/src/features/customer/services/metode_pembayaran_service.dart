@@ -14,6 +14,7 @@ class MetodePembayaranService {
   Future<List<MetodePembayaranModel>> getAll({
     String? caraBayar,
     String? display,
+    String? paymentSnap,
     String? deskripsi,
     int? minFee,
     int? maxFee,
@@ -27,6 +28,7 @@ class MetodePembayaranService {
         '/$controller/option',
         queryParameters: {
           if (caraBayar != null) 'cara_bayar': caraBayar,
+          if (paymentSnap != null) 'payment_snap': paymentSnap,
           if (display != null) 'display': display,
           if (deskripsi != null) 'deskripsi': deskripsi,
           if (minFee != null) 'min_fee': minFee.toString(),
