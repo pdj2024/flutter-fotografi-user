@@ -1,4 +1,4 @@
-package fotografi.mpjnew
+package app.pacificdatajaya.fotograficustomer
 
 import io.flutter.embedding.android.FlutterActivity
 

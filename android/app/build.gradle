@@ -4,15 +4,30 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace = "fotografi.pdj01"
-    compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    namespace = "app.pacificdatajaya.fotograficustomer"
+    compileSdk = 36 // Bagus, tetap gunakan 35 atau 36
+
+    // 2. Tambahkan blok signingConfigs agar aplikasi punya "tanda tangan" resmi
+    signingConfigs {
+        release {
+            keyAlias = keystoreProperties['keyAlias']
+            keyPassword = keystoreProperties['keyPassword']
+            storeFile = keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword = keystoreProperties['storePassword']
+        }
+    }
 
     compileOptions {
-        coreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
@@ -20,19 +35,21 @@ android {
     }
 
     defaultConfig {
-        applicationId = "fotografi.pdj01"
-        minSdkVersion = flutter.minSdkVersion
-        targetSdk = 34
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId = "app.pacificdatajaya.fotograficustomer"
+        minSdkVersion flutter.minSdkVersion
+        targetSdk 34
+        versionCode flutter.versionCode
+        versionName flutter.versionName
     }
 
     buildTypes {
         release {
-            minifyEnabled false  
-            shrinkResources false  
+            // 3. GANTI signingConfig dari debug menjadi release
+            signingConfig signingConfigs.release
+            
+            minifyEnabled false // Set true jika ingin mengecilkan ukuran app (butuh testing extra)
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
         }
     }
 
