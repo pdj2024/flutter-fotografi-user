@@ -73,3 +73,11 @@ $RECYCLE.BIN/
 ._*
 .Spotlight-V100
 .Trashes
+
+# Keystore dan password (Sangat Sensitif)
+**/android/key.properties
+**/android/app/*.jks
+**/android/app/*.keystore
+
+# Firebase config (Opsional, tapi disarankan jika proyek open source)
+**/android/app/google-services.json
