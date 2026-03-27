@@ -22,29 +22,29 @@ class UserProvider with ChangeNotifier {
   Box? _userBox;
 
   // 🔑 Hive keys
-  static const String _keyRole       = 'user_role';
-  static const String _keyCustomer   = 'user_customer_data';
+  static const String _keyRole = 'user_role';
+  static const String _keyCustomer = 'user_customer_data';
   static const String _keyIsLoggedIn = 'user_is_logged_in';
-  static const String _keyLastSync   = 'user_last_sync';
+  static const String _keyLastSync = 'user_last_sync';
 
   // State
-  String        _role          = Constants.customer;
-  String?       _photoUrl;
+  String _role = Constants.customer;
+  String? _photoUrl;
   CustomerModel? _customer;
-  bool          _isLoading     = false;
-  String?       _error;
-  bool          _isInitialized = false;
+  bool _isLoading = false;
+  String? _error;
+  bool _isInitialized = false;
 
   // Getters
-  String?        get role          => _role;
-  String?        get photoUrl      => _photoUrl;
-  CustomerModel? get customer      => _customer;
-  bool           get isLoading     => _isLoading;
-  String?        get error         => _error;
-  bool           get isInitialized => _isInitialized;
-  bool           get isLoggedIn    => _customer != null && authService.isLoggedIn;
-  String?        get userId        => _customer?.noId;
-  String         get displayName   => _customer?.namaDisplay ?? '';
+  String? get role => _role;
+  String? get photoUrl => _photoUrl;
+  CustomerModel? get customer => _customer;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  bool get isInitialized => _isInitialized;
+  bool get isLoggedIn => _customer != null && authService.isLoggedIn;
+  String? get userId => _customer?.noId;
+  String get displayName => _customer?.namaDisplay ?? '';
 
   // =========================================================
   // 🔧 INITIALIZATION
@@ -78,10 +78,10 @@ class UserProvider with ChangeNotifier {
       final customerJson = jsonEncode(_customer!.toJson());
 
       await _userBox!.putAll({
-        _keyCustomer:   customerJson,
-        _keyRole:       _role,
+        _keyCustomer: customerJson,
+        _keyRole: _role,
         _keyIsLoggedIn: true,
-        _keyLastSync:   DateTime.now().toIso8601String(),
+        _keyLastSync: DateTime.now().toIso8601String(),
       });
 
       await _userBox!.flush();
@@ -132,6 +132,14 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  void updateCustomerLocally(CustomerModel updatedCustomer) {
+    _customer = updatedCustomer;
+    _saveCustomerData(); // persist ke Hive
+    notifyListeners();
+    debugPrint(
+        "✅ [UserProvider] Customer updated locally: ${updatedCustomer.namaDisplay}");
+  }
+
   Future<void> _clearUserData() async {
     try {
       await _userBox?.clear();
@@ -154,7 +162,8 @@ class UserProvider with ChangeNotifier {
     _error = null;
 
     try {
-      print("🔐 [UserProvider] checkLoginGoogle | Role: $role | Silent: $silent");
+      print(
+          "🔐 [UserProvider] checkLoginGoogle | Role: $role | Silent: $silent");
 
       if (silent) {
         // ── SILENT: restore dari storage ─────────────────
@@ -174,7 +183,6 @@ class UserProvider with ChangeNotifier {
         setRole(role);
         print("✅ Silent restore success");
         return GoogleLoginStatus.aktif;
-
       } else {
         // ── INTERACTIVE: Google sign-in ───────────────────
         // signIn() sudah hit backend & simpan token — tidak perlu hit lagi
@@ -196,8 +204,9 @@ class UserProvider with ChangeNotifier {
           return GoogleLoginStatus.error;
         }
 
-        final status = (loginData['Status'] as String?)?.toLowerCase() ?? 'error';
-        final noId   = loginData['No_Id'] as String?;
+        final status =
+            (loginData['Status'] as String?)?.toLowerCase() ?? 'error';
+        final noId = loginData['No_Id'] as String?;
 
         print("📊 Status: $status, No_Id: $noId");
 
@@ -219,12 +228,14 @@ class UserProvider with ChangeNotifier {
 
         // ✅ Customer hanya ada 2 status
         switch (status) {
-          case 'aktif':   return GoogleLoginStatus.aktif;
-          case 'created': return GoogleLoginStatus.created;
-          default:        return GoogleLoginStatus.error;
+          case 'aktif':
+            return GoogleLoginStatus.aktif;
+          case 'created':
+            return GoogleLoginStatus.created;
+          default:
+            return GoogleLoginStatus.error;
         }
       }
-
     } catch (e, stackTrace) {
       _error = "Login gagal: $e";
       print("❌ [UserProvider] checkLoginGoogle error: $e");
@@ -273,9 +284,8 @@ class UserProvider with ChangeNotifier {
       final lastSync = _userBox?.get(_keyLastSync);
       if (lastSync != null) {
         try {
-          final hoursSinceSync = DateTime.now()
-              .difference(DateTime.parse(lastSync))
-              .inHours;
+          final hoursSinceSync =
+              DateTime.now().difference(DateTime.parse(lastSync)).inHours;
           print("ℹ️ Last sync: ${hoursSinceSync}h ago");
           if (hoursSinceSync > 24) {
             print("🔄 Data stale, refreshing...");
@@ -288,7 +298,6 @@ class UserProvider with ChangeNotifier {
 
       print("✅ Session restored: ${_customer!.namaDisplay}");
       return true;
-
     } catch (e, stackTrace) {
       print("❌ [UserProvider] Restore error: $e");
       print(stackTrace);
@@ -326,7 +335,6 @@ class UserProvider with ChangeNotifier {
 
       print("❌ No customer data from backend");
       return false;
-
     } catch (e) {
       print("❌ [UserProvider] Backend refresh error: $e");
       return false;
@@ -394,10 +402,10 @@ class UserProvider with ChangeNotifier {
 
   void clear() {
     _customer = null;
-    _role     = Constants.customer;
-    _error    = null;
+    _role = Constants.customer;
+    _error = null;
     _isLoading = false;
-    _photoUrl  = null;
+    _photoUrl = null;
   }
 
   void _setLoading(bool value) {

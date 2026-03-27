@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/payment_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/progres_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
+import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
@@ -15,6 +17,87 @@ import 'utils/notification_channel_manager.dart';
 import 'utils/notification_helper.dart';
 import 'handlers/chat_notification_handler.dart';
 
+// ─────────────────────────────────────────────────────────────────
+// TOP-LEVEL BACKGROUND HANDLER
+//
+// Wajib top-level (bukan method) karena dijalankan di background isolate.
+// Daftarkan di main.dart:
+//   FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHandler);
+//
+// Background isolate TIDAK bisa akses Provider/Isar secara langsung.
+// Chat message → ChatStorageService.enqueueBackgroundMessage()
+//   → SharedPreferences queue → diproses saat app resume via drainBackgroundQueue()
+// ─────────────────────────────────────────────────────────────────
+@pragma('vm:entry-point')
+Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
+  debugPrint('[FCM] 🌙 Background: ${message.messageId}');
+
+  try {
+    final type = message.data['type']?.toString() ?? '';
+
+    if (type == 'chat') {
+      // Enqueue ke SharedPreferences — aman dari background isolate
+      await ChatStorageService.enqueueBackgroundMessage(message);
+
+      // Tampilkan notifikasi lokal (opsional, bisa juga pakai FCM notification payload)
+      await _showBackgroundChatNotification(message);
+    }
+
+    // Tipe lain (progress, payment) tidak dihandle di background
+    // karena butuh Provider yang tidak tersedia di isolate
+  } catch (e) {
+    debugPrint('[FCM] ❌ Background error: $e');
+  }
+}
+
+Future<void> _showBackgroundChatNotification(RemoteMessage message) async {
+  try {
+    final detail = NotificationHelper.parseDetail(message.data['detail']);
+    if (detail.isEmpty) return;
+
+    final senderId = detail['sender_id']?.toString() ?? '';
+    final messageText = detail['message']?.toString() ?? 'Pesan baru';
+    final senderName = detail['sender_name']?.toString() ?? 'Pesan baru';
+    final roomId = detail['room_id']?.toString() ?? '';
+
+    if (roomId.isEmpty || senderId.isEmpty) return;
+
+    final plugin = FlutterLocalNotificationsPlugin();
+    await NotificationChannelManager.createAllChannels(plugin);
+
+    const androidDetails = AndroidNotificationDetails(
+      'chat_channel',
+      'Chat',
+      channelDescription: 'Notifikasi pesan chat',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+    );
+
+    const details = NotificationDetails(android: androidDetails);
+
+    await plugin.show(
+      roomId.hashCode,
+      senderName,
+      messageText,
+      details,
+      payload: jsonEncode({'type': 'chat', 'roomId': roomId}),
+    );
+  } catch (e) {
+    debugPrint('[FCM] ⚠️ _showBackgroundChatNotification: $e');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// FCM SERVICE — Singleton Orchestrator
+//
+// Menghubungkan Firebase Messaging dengan:
+//   - ChatProvider (Isar-based, offline-first)
+//   - HistoryOrderProvider
+//   - PesananProvider
+//
+//    Semua chat message lewat ChatNotificationHandler → ChatProvider → Isar.
+// ─────────────────────────────────────────────────────────────────
 class FCMService {
   static final FCMService instance = FCMService._internal();
   factory FCMService() => instance;
@@ -33,10 +116,12 @@ class FCMService {
   String? _currentUserId;
   String? _activeRoomId;
 
+  // ── Provider references ───────────────────────────────────────
   ChatProvider? _chatProvider;
   HistoryOrderProvider? _historyOrderProvider;
   PesananProvider? _pesananProvider;
 
+  // ── Callbacks untuk navigasi ──────────────────────────────────
   Function(ChatModel)? onChatMessageReceived;
   Function(HistoryOrderModel)? onProgressReceived;
   Function(String roomId)? onNotificationTapped;
@@ -71,10 +156,6 @@ class FCMService {
     _historyOrderProvider = null;
     _pesananProvider = null;
     debugPrint('[FCM] 🗑️ Providers cleared');
-  }
-
-  void setAppContext(dynamic context) {
-    // no-op
   }
 
   // =========================================
@@ -113,7 +194,6 @@ class FCMService {
         debugPrint('[FCM] ⚠️ Token null, retrying...');
         await Future.delayed(const Duration(seconds: 2));
         _fcmToken = await _firebaseMessaging.getToken();
-        debugPrint('[FCM] 🔄 Retry token: $_fcmToken');
       }
 
       _setupMessageListeners();
@@ -159,10 +239,13 @@ class FCMService {
       getCurrentUserId: () => _currentUserId,
       getActiveRoomId: () => _activeRoomId,
       onMessageReceived: (message) {
+        // ✅ SATU JALUR: selalu lewat ChatProvider → ChatStorageService → Isar
+        // Tidak ada FcmChatProvider lagi
         if (_chatProvider != null) {
           _chatProvider!.handleMessageFromFCM(message);
           debugPrint('[FCM] ✅ Chat → ChatProvider.handleMessageFromFCM');
         } else {
+          // Fallback jika ChatProvider belum diinjeksi
           debugPrint('[FCM] ⚠️ ChatProvider belum diinjeksi, pakai callback');
           onChatMessageReceived?.call(message);
         }
@@ -173,10 +256,9 @@ class FCMService {
         }
         return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
       },
-      // ✅ FIX: sambungkan ke ChatProvider.updateMessageStatus
-      // Sebelumnya null → received/read tidak pernah dikirim ke server
-      // → vendor melihat status pesan tetap 'sent' selamanya
       onUpdateMessageStatus: (messageId, roomId, newStatus) async {
+        // ✅ Update status pesan via ChatProvider → ChatSyncService
+        // Ini penting agar vendor bisa lihat status received/read
         debugPrint('[FCM] 🔄 Update status: $messageId → $newStatus');
         if (_chatProvider != null) {
           await _chatProvider!.updateMessageStatus(messageId, newStatus);
@@ -190,10 +272,7 @@ class FCMService {
       notificationsPlugin: _notificationsPlugin,
       onProgressReceived: (progressData) {
         debugPrint('[FCM] 📊 Progress: ${progressData.noOrder}');
-        if (_historyOrderProvider != null) {
-          _historyOrderProvider!.handleProgressFromFCM(progressData);
-          debugPrint('[FCM] ✅ HistoryOrderProvider updated');
-        }
+        _historyOrderProvider?.handleProgressFromFCM(progressData);
         onProgressReceived?.call(progressData);
       },
     );
@@ -201,14 +280,12 @@ class FCMService {
     _paymentHandler = PaymentNotificationHandler(
       notificationsPlugin: _notificationsPlugin,
       onPaymentReceived: (pesanan) {
-        if (_pesananProvider != null) {
-          _pesananProvider!.handlePaymentFromFCM(pesanan);
-          debugPrint('[FCM] ✅ PesananProvider updated (payment)');
-        }
+        _pesananProvider?.handlePaymentFromFCM(pesanan);
+        debugPrint('[FCM] ✅ PesananProvider updated (payment)');
       },
     );
 
-    debugPrint('[FCM] ✅ Handlers initialized (chat, progress, payment)');
+    debugPrint('[FCM] ✅ Handlers initialized');
   }
 
   void _rebuildChatHandler() {
@@ -229,9 +306,7 @@ class FCMService {
         }
         return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
       },
-      // ✅ FIX: sama dengan _initializeHandlers
       onUpdateMessageStatus: (messageId, roomId, newStatus) async {
-        debugPrint('[FCM] 🔄 Rebuild — update status: $messageId → $newStatus');
         if (_chatProvider != null) {
           await _chatProvider!.updateMessageStatus(messageId, newStatus);
         }
@@ -259,7 +334,7 @@ class FCMService {
   // =========================================
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM] ☀️ Foreground message: ${message.messageId}');
+    debugPrint('[FCM] ☀️ Foreground: ${message.messageId}');
 
     try {
       final type = NotificationType.fromString(message.data['type']);
@@ -267,6 +342,9 @@ class FCMService {
 
       switch (type) {
         case NotificationType.chat:
+          // ✅ Delegasi ke ChatNotificationHandler
+          // Handler akan parse payload → ChatModel → ChatProvider.handleMessageFromFCM
+          // → ChatStorageService → Isar → stream → UI (otomatis)
           await _chatHandler.handleForegroundMessage(message);
           break;
         case NotificationType.payment:
@@ -365,8 +443,7 @@ class FCMService {
     if (_activeRoomId == roomId) return;
     _activeRoomId = roomId;
     debugPrint('[FCM] 🏠 Active room: $roomId');
-    // ✅ Tidak perlu rebuild handler — getCurrentUserId/getActiveRoomId
-    // adalah live getter yang selalu baca nilai terbaru
+    // getCurrentUserId/getActiveRoomId adalah live getter → tidak perlu rebuild handler
   }
 
   // =========================================

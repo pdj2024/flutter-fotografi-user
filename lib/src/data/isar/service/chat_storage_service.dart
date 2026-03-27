@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/isar/data/room_chat_entity.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
@@ -18,30 +19,41 @@ import 'package:http/http.dart' as http;
 const _kBgQueueKey = 'chat_bg_queue';
 const _kActiveRoomKey = 'chat_active_room_id';
 
+/// Key untuk roomId yang perlu di-fetch info-nya dari API.
+///
+/// Diisi saat FCM masuk dengan room yang belum ada di Isar:
+///   - Background: _incrementRoomUnreadCount → buat minimal room → enqueue
+///   - Foreground: _handleIncoming → buat minimal room → enqueue
+///
+/// Di-drain saat:
+///   - App resume (ChatProvider.syncRoomFromHiveAndNotify)
+///   - ChatProvider.initialize (setelah login)
+///   - Foreground FCM masuk (ChatProvider.handleMessageFromFCM)
+const _kPendingRoomFetchKey = 'chat_pending_room_fetch';
+
 /// Bridge antara FCM / REST API dan Isar — Customer Edition.
 ///
-/// ─── Alur Status Pesan ────────────────────────────────────────────────────
+/// ─── Alur Room Baru via FCM ──────────────────────────────────────────────
 ///
-///   [User kirim]
-///   User kirim pesan → simpan ke Isar dengan messageId = "local-xxx"
-///   sendStatus = pending
+///   [FCM masuk — room BELUM ada di Isar]
 ///
-///   [FCM echo #1] senderId = user sendiri, messageId = ID dari DB (baru), status = sent
-///   → Ada local echo "local-xxx" di Isar → REPLACE local-xxx dengan messageId DB
-///   → sendStatus: pending → sent
+///   BACKGROUND isolate:
+///     → _incrementRoomUnreadCount
+///       → buat minimal room (roomId, idLawan, preview)  ← badge muncul
+///       → enqueue roomId ke _kPendingRoomFetchKey
+///     → app resume → ChatProvider._drainPendingRoomFetchIfNeeded()
+///       → drainPendingRoomFetch(userId)
+///         → fetchRooms via apiClient (GET /chat/getRooms)
+///         → UPSERT ke Isar: update usernameLawan, idMediaLawan, userIds
+///         → fetchMessages via apiClient (GET /chat/getAll)
+///         → simpan messages ke Isar (UPSERT)
+///       → Isar stream emit → ChatListPage rebuild (nama, avatar muncul)
 ///
-///   [FCM echo #2] messageId = SAMA dengan #1, status = received
-///   → messageId sudah ada di Isar → UPDATE status saja: sent → received
-///
-///   [FCM echo #3] messageId = SAMA dengan #1, status = read
-///   → messageId sudah ada di Isar → UPDATE status saja: received → read
-///
-/// ─── Anti-double ──────────────────────────────────────────────────────────
-///
-///   Saat FCM echo datang dan _currentUserId BELUM ter-set (race condition):
-///   senderId tidak match → masuk ke path "incoming" → cek local echo via
-///   content match sebelum disimpan sebagai pesan baru → cegah double.
-
+///   FOREGROUND (app terbuka):
+///     → _handleIncoming → buat minimal room → enqueue
+///     → ChatProvider.handleMessageFromFCM
+///       → _drainPendingRoomFetchIfNeeded() langsung
+///       → fetch rooms + messages → UPSERT → stream emit → UI update
 class ChatStorageService {
   static final ChatStorageService instance = ChatStorageService._internal();
   factory ChatStorageService() => instance;
@@ -49,6 +61,7 @@ class ChatStorageService {
 
   final ChatIsarService _isar = ChatIsarService.instance;
   String? _currentUserId;
+  void Function(String roomId)? onRoomResolved;
 
   void setCurrentUser(String userId) {
     _currentUserId = userId;
@@ -61,48 +74,45 @@ class ChatStorageService {
 
   Future<bool> persistForegroundMessage(ChatModel chatModel) async {
     try {
-      if (chatModel.messageId.isEmpty || chatModel.roomId.isEmpty) {
-        debugPrint('[ChatStorage] ⚠️ Invalid: empty id/roomId');
+      if (chatModel.messageId.isEmpty) {
+        debugPrint('[ChatStorage] ⚠️ Invalid: empty messageId');
         return false;
       }
-
+ 
+      final isOwnMessage = chatModel.senderId == _currentUserId;
+ 
+      // ✅ FIX BUG 1: Izinkan roomId kosong untuk own echo (local echo pesan pertama)
+      // Sebelumnya: (messageId.isEmpty || roomId.isEmpty) → tolak semua
+      // Sekarang: roomId kosong hanya valid jika own message (local echo)
+      if (chatModel.roomId.isEmpty && !isOwnMessage) {
+        debugPrint('[ChatStorage] ⚠️ Invalid: empty roomId for incoming message');
+        return false;
+      }
+ 
       debugPrint('[ChatStorage] 📨 persist: ${chatModel.messageId}'
           ' sender=${chatModel.senderId} me=$_currentUserId'
+          ' roomId="${chatModel.roomId.isEmpty ? "(first msg)" : chatModel.roomId}"'
           ' status=${chatModel.sendStatus}');
-
-      // ─── Cek apakah ini pesan milik user sendiri ─────────────────────────
-      // Dua cara mendeteksi: senderId match ATAU ada local echo di Isar
-      final isOwnMessage = chatModel.senderId == _currentUserId;
-
+ 
       if (isOwnMessage) {
         return await _handleOwnEcho(chatModel);
       }
-
-      // senderId tidak match (atau _currentUserId belum di-set)
-      // → Cek dulu apakah messageId sudah ada (echo #2, #3 = received/read)
+ 
       final existsByMessageId = await _isar.messageExists(chatModel.messageId);
       if (existsByMessageId) {
-        // messageId sudah ada → hanya update status (echo received/read)
         await _isar.updateMessageStatus(
             chatModel.messageId, chatModel.sendStatus);
-        debugPrint('[ChatStorage] 🔄 Status update (exists): '
-            '${chatModel.messageId} → ${chatModel.sendStatus}');
         return false;
       }
-
-      // messageId belum ada → cek apakah ada local echo yang cocok
-      // (terjadi saat _currentUserId belum ter-set = race condition)
+ 
       final localEcho = await _findMatchingLocalEcho(chatModel);
       if (localEcho != null) {
-        debugPrint('[ChatStorage] 📤 Own echo detected via local match: '
-            '${localEcho.messageId} → ${chatModel.messageId}');
         return await _replaceLocalEcho(
           localMessageId: localEcho.messageId,
           serverMessage: chatModel,
         );
       }
-
-      // Benar-benar pesan dari orang lain → simpan sebagai incoming
+ 
       return await _handleIncoming(chatModel);
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ persistForegroundMessage: $e\n$st');
@@ -110,89 +120,133 @@ class ChatStorageService {
     }
   }
 
-  // ─── Handle echo pesan sendiri ─────────────────────────────────────────────
-  //
-  // Echo bisa datang dalam urutan apapun karena FCM tidak menjamin urutan:
-  //
-  //   Normal:   #1(sent) → #2(received) → #3(read)
-  //   Race:     #3(read) datang SEBELUM #1(sent) selesai di-confirm
-  //             → local-xxx masih ada, messageId DB belum ada di Isar
-  //
-  // Strategi:
-  //   1. Cari local echo dulu (via localId atau content match)
-  //   2. Jika ada → REPLACE dengan messageId DB + status terbaru
-  //      (apapun statusnya: sent/received/read — ambil yang tertinggi)
-  //   3. Jika tidak ada local echo, cek messageId DB sudah ada di Isar
-  //      → UPDATE status (pastikan tidak downgrade)
-  //   4. Jika tidak ada keduanya → simpan langsung (multi-device)
-  //
-  // Status priority (tidak boleh downgrade): sent < received < read
-
-  static const _statusPriority = {
-    'sent': 1,
-    'received': 2,
-    'read': 3,
-  };
+  static const _statusPriority = {'sent': 1, 'received': 2, 'read': 3};
 
   Future<bool> _handleOwnEcho(ChatModel chatModel) async {
     final incomingStatus = chatModel.sendStatus;
-
-    debugPrint(
-        '[ChatStorage] 📤 Own echo: ${chatModel.messageId} status=$incomingStatus');
-
-    // ── Step 1: Cari local echo dulu ─────────────────────────────────────────
-    // Harus dicek SEBELUM messageExists karena echo #3(read) bisa datang
-    // saat local-xxx masih ada (confirmOptimistic belum selesai)
-
-    // Prioritas 1a: localId dari payload FCM
+ 
+    // ── Coba match dengan localId dulu ──────────────────────────────────
     if (chatModel.localId != null &&
         chatModel.localId!.isNotEmpty &&
         chatModel.localId!.startsWith('local-')) {
       final hasLocal = await _isar.localEchoExists(chatModel.localId!);
       if (hasLocal) {
-        debugPrint('[ChatStorage] ✅ Own echo via localId: '
-            '${chatModel.localId} → ${chatModel.messageId} ($incomingStatus)');
+        final localEntity =
+            await _isar.getMessageByLocalId(chatModel.localId!);
+ 
+        // ✅ Deteksi pesan pertama: local echo punya roomId kosong
+        if (localEntity != null && localEntity.roomId.isEmpty) {
+          return await _handleFirstMessageEcho(
+            localEntity: localEntity,
+            serverMessage: chatModel,
+          );
+        }
+ 
         return await _replaceLocalEcho(
           localMessageId: chatModel.localId!,
           serverMessage: chatModel,
         );
       }
     }
-
-    // Prioritas 1b: content match (fallback jika backend tidak kirim localId)
+ 
+    // ── Fallback: cari by content ────────────────────────────────────────
     final localEcho = await _findMatchingLocalEcho(chatModel);
     if (localEcho != null) {
-      debugPrint('[ChatStorage] ✅ Own echo via content: '
-          '${localEcho.messageId} → ${chatModel.messageId} ($incomingStatus)');
+      if (localEcho.roomId.isEmpty) {
+        return await _handleFirstMessageEcho(
+          localEntity: localEcho,
+          serverMessage: chatModel,
+        );
+      }
       return await _replaceLocalEcho(
         localMessageId: localEcho.messageId,
         serverMessage: chatModel,
       );
     }
-
-    // ── Step 2: Local echo tidak ada → cek messageId DB di Isar ─────────────
+ 
+    // ── Duplikat: sudah ada di Isar ──────────────────────────────────────
     final alreadyExists = await _isar.messageExists(chatModel.messageId);
     if (alreadyExists) {
-      // Update status — tapi jangan downgrade (sent→received→read, tidak boleh balik)
       await _isar.updateMessageStatusIfHigher(
         chatModel.messageId,
         incomingStatus,
         _statusPriority,
       );
-      debugPrint('[ChatStorage] 🔄 Own echo status update (no downgrade): '
-          '${chatModel.messageId} → $incomingStatus');
       return false;
     }
-
-    // ── Step 3: Tidak ada di mana-mana → multi-device, simpan langsung ───────
+ 
     await _isar.saveMessage(ChatMessageEntity.fromChatModel(chatModel));
     await _updateRoomLastMessage(chatModel);
-    debugPrint(
-        '[ChatStorage] 📤 Own saved (no local echo): ${chatModel.messageId}');
     return true;
   }
 
-  // ─── Replace local echo dengan data dari server ────────────────────────────
+  Future<bool> _handleFirstMessageEcho({
+    required ChatMessageEntity localEntity,
+    required ChatModel serverMessage,
+  }) async {
+    final roomId = serverMessage.roomId;
+ 
+    debugPrint('[ChatStorage] 🆕 First message echo: '
+        'localId=${localEntity.messageId} '
+        'roomId=$roomId '
+        'messageId=${serverMessage.messageId}');
+ 
+    if (roomId.isEmpty) {
+      debugPrint('[ChatStorage] ⚠️ Server roomId masih kosong, skip');
+      return false;
+    }
+ 
+    // ── 1. Buat room baru di Isar ─────────────────────────────────────
+    final roomExists = await _isar.getRoomById(roomId);
+    if (roomExists == null) {
+      // idLawan = partner (bukan diri sendiri)
+      final idLawan = serverMessage.userIds
+          .firstWhere((id) => id != _currentUserId, orElse: () => '');
+ 
+      final newRoom = RoomChatEntity()
+        ..roomId = roomId
+        ..roomType = serverMessage.roomType
+        ..idLawan = idLawan
+        ..lastMessage = serverMessage.message.isNotEmpty
+            ? serverMessage.message
+            : _formatPreview(serverMessage.jenisPesan ?? 'text')
+        ..lastMessageAt = serverMessage.sentAt
+        ..unread = 0
+        ..countStatusReceived = 0
+        ..listIdMessageReceived = []
+        ..countStatusSent = 0
+        ..listIdMessageSent = []
+        ..userIds = serverMessage.userIds;
+      // usernameLawan, idMediaLawan: kosong dulu
+      // akan diisi oleh drainPendingRoomFetch
+ 
+      await _isar.saveRoom(newRoom);
+      debugPrint('[ChatStorage] ✅ Room baru: $roomId (idLawan: $idLawan)');
+ 
+      // Enqueue untuk fetch usernameLawan + idMediaLawan dari API
+      await _enqueuePendingRoomFetch(roomId);
+    }
+ 
+    // ── 2. Replace local echo (roomId='') dengan serverMessage ──────────
+    await _isar.replaceLocalMessage(
+      localId: localEntity.messageId,
+      serverEntity: ChatMessageEntity.fromChatModel(serverMessage),
+    );
+ 
+    // ── 3. Update lastMessage room ───────────────────────────────────────
+    await _updateRoomLastMessage(serverMessage);
+ 
+    // ── 4. Notify RoomChatProvider via callback ──────────────────────────
+    // RoomChatProvider akan setup stream dengan roomId asli
+    if (onRoomResolved != null) {
+      debugPrint('[ChatStorage] 📣 onRoomResolved($roomId)');
+      onRoomResolved!(roomId);
+    }
+ 
+    debugPrint('[ChatStorage] ✅ First message handled: '
+        '${localEntity.messageId} → ${serverMessage.messageId}');
+    return true;
+  }
 
   Future<bool> _replaceLocalEcho({
     required String localMessageId,
@@ -204,49 +258,231 @@ class ChatStorageService {
     );
     await _updateRoomLastMessage(serverMessage);
     debugPrint('[ChatStorage] ✅ Local echo replaced: '
-        '$localMessageId → ${serverMessage.messageId} (${serverMessage.sendStatus})');
+        '$localMessageId → ${serverMessage.messageId}');
     return true;
   }
 
-  // ─── Cari local echo yang cocok dengan pesan dari server ──────────────────
-  //
-  // Dipakai sebagai fallback saat:
-  //   - _currentUserId belum ter-set (race condition saat startup)
-  //   - Backend tidak mengirim localId di payload FCM
-  //
-  // Kriteria match:
-  //   - roomId sama
-  //   - messageId diawali "local-" (masih local echo)
-  //   - sendStatus "pending" atau "sent" (belum di-replace server)
-  //   - message content sama
-  //   - sentAt dalam toleransi 60 detik
-
   Future<ChatMessageEntity?> _findMatchingLocalEcho(ChatModel chatModel) async {
-    return _isar.findLocalEchoByContent(
+    // Cari normal dulu (by roomId + content)
+    final result = await _isar.findLocalEchoByContent(
       roomId: chatModel.roomId,
       message: chatModel.message,
       sentAt: chatModel.sentAt,
     );
+    if (result != null) return result;
+ 
+    // ✅ FIX: Fallback untuk pesan pertama
+    // Local echo disimpan dengan roomId='', FCM echo datang dengan roomId asli.
+    // findLocalEchoByContent filter by roomId → tidak match.
+    // Fallback: cari tanpa filter roomId.
+    if (chatModel.roomId.isNotEmpty && chatModel.senderId == _currentUserId) {
+      return await _isar.findLocalEchoByContentNoRoom(
+        message: chatModel.message,
+        sentAt: chatModel.sentAt,
+        senderId: chatModel.senderId,
+      );
+    }
+    return null;
   }
 
-  // ─── Handle pesan masuk dari orang lain ────────────────────────────────────
-
+  /// Handle pesan masuk dari orang lain (foreground).
+  ///
+  /// Jika room belum ada:
+  ///   1. Buat minimal room agar badge tampil segera
+  ///   2. Enqueue roomId → ChatProvider drain → fetch data lengkap dari API
   Future<bool> _handleIncoming(ChatModel chatModel) async {
     final exists = await _isar.messageExists(chatModel.messageId);
     if (exists) {
       await _isar.updateMessageStatus(
           chatModel.messageId, chatModel.sendStatus);
-      debugPrint(
-          '[ChatStorage] ⏭️ Incoming dup → status ${chatModel.sendStatus}: ${chatModel.messageId}');
+      debugPrint('[ChatStorage] ⏭️ Incoming dup → ${chatModel.sendStatus}');
       return false;
+    }
+
+    final roomExists = await _isar.getRoomById(chatModel.roomId);
+    final isNewRoom = roomExists == null;
+
+    // Jika room baru, buat minimal dulu agar _updateRoomLastMessage tidak skip
+    if (isNewRoom) {
+      final minimalRoom = RoomChatEntity()
+        ..roomId = chatModel.roomId
+        ..roomType = 'direct'
+        ..idLawan = chatModel.senderId
+        ..lastMessage = chatModel.message.isNotEmpty
+            ? chatModel.message
+            : _formatPreview(chatModel.jenisPesan ?? 'text')
+        ..lastMessageAt = chatModel.sentAt
+        ..unread = 0
+        ..countStatusReceived = 0
+        ..listIdMessageReceived = []
+        ..countStatusSent = 0
+        ..listIdMessageSent = []
+        ..userIds = [];
+      await _isar.saveRoom(minimalRoom);
     }
 
     await _isar.saveMessage(ChatMessageEntity.fromChatModel(chatModel));
     await _updateRoomLastMessage(chatModel);
     await _incrementRoomReceived(chatModel);
 
+    // Room baru → enqueue untuk fetch info lengkap dari API
+    if (isNewRoom) {
+      await _enqueuePendingRoomFetch(chatModel.roomId);
+      debugPrint(
+          '[ChatStorage] 🆕 New room (foreground) — queued: ${chatModel.roomId}');
+    }
+
     debugPrint('[ChatStorage] 💬 Incoming saved: ${chatModel.messageId}');
     return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PENDING ROOM FETCH
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static Future<void> _enqueuePendingRoomFetch(String roomId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existing = prefs.getStringList(_kPendingRoomFetchKey) ?? [];
+      if (!existing.contains(roomId)) {
+        existing.add(roomId);
+        await prefs.setStringList(_kPendingRoomFetchKey, existing);
+        debugPrint('[ChatStorage] 📋 Pending room enqueued: $roomId');
+      }
+    } catch (e) {
+      debugPrint('[ChatStorage] ⚠️ _enqueuePendingRoomFetch: $e');
+    }
+  }
+
+  static Future<List<String>> getPendingRoomFetchIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getStringList(_kPendingRoomFetchKey) ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> clearPendingRoomFetch() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kPendingRoomFetchKey);
+    } catch (_) {}
+  }
+
+  /// Drain pending room fetch — fetch room info + messages dari API.
+  ///
+  /// Endpoint (sama dengan ChatApiService customer):
+  ///   - fetchRooms: GET /chat/getRooms?user_id={userId}
+  ///   - fetchMessages: GET /chat/getAll?room_id={roomId}&status=aktif
+  Future<void> drainPendingRoomFetch({required String userId}) async {
+    try {
+      final pendingIds = await getPendingRoomFetchIds();
+      if (pendingIds.isEmpty) return;
+
+      debugPrint(
+          '[ChatStorage] 🔄 Draining ${pendingIds.length} pending rooms: $pendingIds');
+
+      // Step 1: Fetch semua rooms dari API
+      final rooms = await _fetchRoomsViaApiClient(userId: userId);
+
+      if (rooms.isEmpty) {
+        debugPrint(
+            '[ChatStorage] ⚠️ drainPendingRoomFetch: rooms empty, retry later');
+        return;
+      }
+
+      // Step 2: UPSERT rooms → update minimal room dengan data lengkap
+      await persistRoomsFromApi(rooms, replace: false);
+      debugPrint('[ChatStorage] ✅ Rooms upserted: ${rooms.length}');
+
+      // Step 3: Fetch messages untuk setiap room baru
+      for (final roomId in pendingIds) {
+        await _fetchAndSaveMessages(roomId: roomId);
+      }
+
+      // Step 4: Clear queue setelah berhasil
+      await clearPendingRoomFetch();
+
+      debugPrint(
+          '[ChatStorage] ✅ Pending room fetch complete (${pendingIds.length} rooms)');
+    } catch (e, st) {
+      debugPrint('[ChatStorage] ❌ drainPendingRoomFetch: $e\n$st');
+    }
+  }
+
+  /// Fetch rooms via apiClient.
+  /// Endpoint: GET /chat/getRooms?user_id={userId}
+  Future<List<RoomChatModel>> _fetchRoomsViaApiClient(
+      {required String userId}) async {
+    try {
+      final response = await apiClient.get(
+        '/chat/getRooms',
+        queryParameters: {'user_id': userId},
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint(
+            '[ChatStorage] ⚠️ _fetchRoomsViaApiClient: ${response.statusCode}');
+        return [];
+      }
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final raw = body['Data'] as List<dynamic>? ?? [];
+
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map((e) => RoomChatModel.fromJson(e))
+          .toList();
+    } catch (e) {
+      debugPrint('[ChatStorage] ⚠️ _fetchRoomsViaApiClient: $e');
+      return [];
+    }
+  }
+
+  /// Fetch messages untuk satu room via apiClient.
+  /// Endpoint: GET /chat/getAll?room_id={roomId}&status=aktif
+  Future<void> _fetchAndSaveMessages({required String roomId}) async {
+    try {
+      final response = await apiClient.get(
+        '/chat/getAll',
+        queryParameters: {
+          'room_id': roomId,
+          'status': 'aktif',
+          'orderBy': 'Sent_at',
+          'orderDir': 'desc',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint(
+            '[ChatStorage] ⚠️ _fetchAndSaveMessages $roomId: ${response.statusCode}');
+        return;
+      }
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final raw = body['Data'] as List<dynamic>? ?? [];
+
+      final messages = raw
+          .whereType<Map<String, dynamic>>()
+          .map((e) => ChatModel.fromJson(e))
+          .toList();
+
+      if (messages.isEmpty) {
+        debugPrint('[ChatStorage] ℹ️ No messages for room: $roomId');
+        return;
+      }
+
+      // UPSERT — tidak hapus local-xxx
+      await _isar.saveAllMessages(
+        messages.map((m) => ChatMessageEntity.fromChatModel(m)).toList(),
+      );
+
+      debugPrint(
+          '[ChatStorage] 💾 Messages saved for new room: $roomId (${messages.length})');
+    } catch (e) {
+      debugPrint('[ChatStorage] ⚠️ _fetchAndSaveMessages $roomId: $e');
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -264,15 +500,12 @@ class ChatStorageService {
 
       if (messageId.isEmpty || roomId.isEmpty) return false;
 
+      // Buat minimal room + enqueue pending fetch jika room baru
       await _incrementRoomUnreadCount(roomId, detail);
 
-      // ✅ Skip echo status update (received/read) di background.
-      // Echo received = partner sudah terima → tidak perlu notif untuk pengirim.
-      // Echo read = partner sudah baca → tidak perlu notif untuk pengirim.
-      // Hanya proses status 'sent' = pesan baru dari orang lain.
       if (sendStatus != 'sent') {
         debugPrint(
-            '[ChatStorage] ℹ️ Skip background enqueue (echo: $sendStatus): $messageId');
+            '[ChatStorage] ℹ️ Skip bg enqueue (echo: $sendStatus): $messageId');
         return false;
       }
 
@@ -291,7 +524,8 @@ class ChatStorageService {
 
       raw.add(jsonEncode(
           {...detail, '_queued_at': DateTime.now().toIso8601String()}));
-      final trimmed = raw.length > 100 ? raw.sublist(raw.length - 100) : raw;
+      final trimmed =
+          raw.length > 100 ? raw.sublist(raw.length - 100) : raw;
       await prefs.setStringList(_kBgQueueKey, trimmed);
 
       debugPrint('[ChatStorage] 📦 Enqueued: $messageId (${trimmed.length})');
@@ -305,33 +539,30 @@ class ChatStorageService {
     }
   }
 
+  /// Buat minimal room + enqueue pending fetch (background isolate).
   static Future<void> _incrementRoomUnreadCount(
     String roomId,
     Map<String, dynamic> detail,
   ) async {
     try {
       final isar = ChatIsarService.instance;
-      if (!isar.isInitialized) {
-        await isar.initialize();
-      }
-      final existing = await isar.getRoomById(roomId);
+      if (!isar.isInitialized) await isar.initialize();
 
       final messageId = detail['message_id']?.toString() ?? '';
       final messageText = detail['message']?.toString() ?? '';
       final jenisPesan = detail['jenis_pesan']?.toString() ?? 'text';
-      final sentAt = DateTime.tryParse(
-            detail['sent_at']?.toString() ?? '',
-          ) ??
-          DateTime.now();
+      final sentAt =
+          DateTime.tryParse(detail['sent_at']?.toString() ?? '') ??
+              DateTime.now();
       final preview =
           messageText.isNotEmpty ? messageText : _formatPreview(jenisPesan);
 
+      final existing = await isar.getRoomById(roomId);
+
       if (existing != null) {
-        // Jangan hitung duplikat — cek dulu apakah messageId sudah ada di list
         if (messageId.isNotEmpty &&
             existing.listIdMessageReceived.contains(messageId)) {
-          debugPrint(
-              '[ChatStorageService] ⏭️ _incrementRoomUnreadCount: duplicate $messageId');
+          debugPrint('[ChatStorage] ⏭️ Duplicate: $messageId');
           return;
         }
 
@@ -339,7 +570,6 @@ class ChatStorageService {
             ? [...existing.listIdMessageReceived, messageId]
             : existing.listIdMessageReceived;
 
-        // copyWith hanya update field yang ada di RoomChatEntity
         final updated = existing.copyWith(
           lastMessage: preview,
           lastMessageAt: sentAt,
@@ -347,15 +577,13 @@ class ChatStorageService {
           listIdMessageReceived: newList,
         );
         await isar.saveRoom(updated);
-
-        debugPrint('[ChatStorageService] 🔴 BG unread +1: $roomId '
-            '(total: ${newList.length})');
+        debugPrint(
+            '[ChatStorage] 🔴 BG unread +1: $roomId (total: ${newList.length})');
       } else {
-        // Room belum ada di Isar — buat minimal agar badge muncul di RoomListPage.
-        // Field wajib (late) harus diisi agar tidak throw LateInitializationError.
+        // Room belum ada → buat minimal
         final newRoom = RoomChatEntity()
           ..roomId = roomId
-          ..roomType = 'direct'
+          ..roomType = detail['room_type']?.toString() ?? 'direct'
           ..idLawan = detail['sender_id']?.toString() ?? ''
           ..lastMessage = preview
           ..lastMessageAt = sentAt
@@ -365,16 +593,23 @@ class ChatStorageService {
           ..countStatusSent = 0
           ..listIdMessageSent = []
           ..userIds = [];
-        // usernameLawan sengaja tidak diisi — null,
-        // akan diisi saat drain (API sync)
 
         await isar.saveRoom(newRoom);
 
-        debugPrint(
-            '[ChatStorageService] 🔴 BG new room created with unread=1: $roomId');
+        // Enqueue untuk fetch info lengkap saat app resume
+        final prefs = await SharedPreferences.getInstance();
+        final pendingIds =
+            prefs.getStringList(_kPendingRoomFetchKey) ?? [];
+        if (!pendingIds.contains(roomId)) {
+          pendingIds.add(roomId);
+          await prefs.setStringList(_kPendingRoomFetchKey, pendingIds);
+          debugPrint('[ChatStorage] 📋 BG new room queued: $roomId');
+        }
+
+        debugPrint('[ChatStorage] 🔴 BG minimal room created: $roomId');
       }
     } catch (e) {
-      debugPrint('[ChatStorageService] ⚠️ _incrementRoomUnreadCount: $e');
+      debugPrint('[ChatStorage] ⚠️ _incrementRoomUnreadCount: $e');
     }
   }
 
@@ -387,7 +622,7 @@ class ChatStorageService {
       case 'penawaran':
         return '💼 Penawaran';
       case 'pesanan':
-        return '💼 Pesanan';
+        return '🧾 Pesanan';
       default:
         return 'Pesan baru';
     }
@@ -413,7 +648,7 @@ class ChatStorageService {
             listIdMessageReceived: [],
           ));
           debugPrint(
-              '[ChatStorageService] 🧹 Unread cleared for active room: $activeRoomId');
+              '[ChatStorage] 🧹 Unread cleared: $activeRoomId');
         }
       }
 
@@ -423,73 +658,110 @@ class ChatStorageService {
       for (final item in raw) {
         try {
           final detail = jsonDecode(item) as Map<String, dynamic>;
-          final chatModel = ChatModel.fromJson(_normalizeDetailKeys(detail));
+          final chatModel =
+              ChatModel.fromJson(_normalizeDetailKeys(detail));
           if (chatModel.messageId.isEmpty) continue;
 
           final isActiveRoom = effectiveActiveRoom != null &&
               chatModel.roomId == effectiveActiveRoom;
           final targetStatus = isActiveRoom ? 'read' : 'received';
 
-          // ── Step 1: messageId sudah ada → hanya update status ─────────────
           final existsByMessageId =
               await _isar.messageExists(chatModel.messageId);
           if (existsByMessageId) {
-            await _isar.updateMessageStatus(chatModel.messageId, targetStatus);
+            await _isar.updateMessageStatus(
+                chatModel.messageId, targetStatus);
             if (isActiveRoom) {
               unawaited(_updateStatusViaHttp(
-                  messageId: chatModel.messageId, newStatus: targetStatus));
+                messageId: chatModel.messageId,
+                newStatus: targetStatus,
+              ));
             }
             debugPrint(
                 '[ChatStorage] ⏭️ Drain exists → $targetStatus: ${chatModel.messageId}');
             continue;
           }
 
-          // ── Step 2: Cek apakah ada local echo (own echo via localId) ──────
           bool isOwnEcho = false;
 
           if (chatModel.localId != null &&
               chatModel.localId!.isNotEmpty &&
               chatModel.localId!.startsWith('local-')) {
-            final hasLocal = await _isar.localEchoExists(chatModel.localId!);
+            final hasLocal =
+                await _isar.localEchoExists(chatModel.localId!);
             if (hasLocal) {
               isOwnEcho = true;
-              await _isar.replaceLocalMessage(
-                localId: chatModel.localId!,
-                serverEntity: ChatMessageEntity.fromChatModel(
-                    _withStatus(chatModel, targetStatus)),
-              );
+ 
+              // ✅ FIX BUG 2: Cek apakah ini first message echo
+              final localEntity =
+                  await _isar.getMessageByLocalId(chatModel.localId!);
+              if (localEntity != null && localEntity.roomId.isEmpty) {
+                // First message echo — buat room + notify RoomChatProvider
+                await _handleFirstMessageEcho(
+                  localEntity: localEntity,
+                  serverMessage: _withStatus(chatModel, targetStatus),
+                );
+              } else {
+                await _isar.replaceLocalMessage(
+                  localId: chatModel.localId!,
+                  serverEntity: ChatMessageEntity.fromChatModel(
+                    _withStatus(chatModel, targetStatus),
+                  ),
+                );
+              }
               debugPrint('[ChatStorage] ✅ Drain own echo (localId): '
                   '${chatModel.localId} → ${chatModel.messageId}');
             }
           }
 
-          // ── Step 3: Cek own echo via content match (fallback) ─────────────
           if (!isOwnEcho) {
-            final echoByContent = await _isar.findLocalEchoByContent(
+            // ✅ FIX: Cari dengan roomId normal dulu, lalu fallback roomId=''
+            ChatMessageEntity? echoByContent =
+                await _isar.findLocalEchoByContent(
               roomId: chatModel.roomId,
               message: chatModel.message,
               sentAt: chatModel.sentAt,
             );
+ 
+            // Fallback untuk pesan pertama (local echo roomId='')
+            echoByContent ??= await _isar.findLocalEchoByContentNoRoom(
+              message: chatModel.message,
+              sentAt: chatModel.sentAt,
+              senderId: chatModel.senderId,
+            );
+ 
             if (echoByContent != null) {
               isOwnEcho = true;
-              await _isar.replaceLocalMessage(
-                localId: echoByContent.messageId,
-                serverEntity: ChatMessageEntity.fromChatModel(
-                    _withStatus(chatModel, targetStatus)),
-              );
+ 
+              // ✅ FIX: Cek first message echo
+              if (echoByContent.roomId.isEmpty) {
+                await _handleFirstMessageEcho(
+                  localEntity: echoByContent,
+                  serverMessage: _withStatus(chatModel, targetStatus),
+                );
+              } else {
+                await _isar.replaceLocalMessage(
+                  localId: echoByContent.messageId,
+                  serverEntity: ChatMessageEntity.fromChatModel(
+                    _withStatus(chatModel, targetStatus),
+                  ),
+                );
+              }
               debugPrint('[ChatStorage] ✅ Drain own echo (content): '
                   '${echoByContent.messageId} → ${chatModel.messageId}');
             }
           }
 
-          // ── Step 4: Benar-benar incoming baru ────────────────────────────
           if (!isOwnEcho) {
+            // _handleIncoming sudah handle new room detection + enqueue
             await _handleIncoming(_withStatus(chatModel, targetStatus));
           }
 
           if (isActiveRoom) {
             unawaited(_updateStatusViaHttp(
-                messageId: chatModel.messageId, newStatus: 'read'));
+              messageId: chatModel.messageId,
+              newStatus: 'read',
+            ));
             readCount++;
           } else {
             receivedCount++;
@@ -509,9 +781,7 @@ class ChatStorageService {
       }
 
       debugPrint('[ChatStorage] ✅ Drained $processed '
-          '($readCount read, $receivedCount received)'
-          '${failed.isNotEmpty ? ", ${failed.length} failed" : ""}');
-
+          '($readCount read, $receivedCount received)');
       return processed;
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ drainBackgroundQueue: $e\n$st');
@@ -520,7 +790,8 @@ class ChatStorageService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HTTP STATUS UPDATE
+  // HTTP STATUS UPDATE — untuk background isolate
+  // Endpoint: PUT /chat/update-send-status?message_id=&send_status=
   // ═══════════════════════════════════════════════════════════════════════════
 
   static Future<void> _updateStatusViaHttp({
@@ -547,7 +818,7 @@ class ChatStorageService {
       ).timeout(const Duration(seconds: 10));
 
       debugPrint('[ChatStorage] ${response.statusCode == 200 ? "✅" : "⚠️"} '
-          'HTTP status: $messageId → $newStatus (${response.statusCode})');
+          'HTTP: $messageId → $newStatus (${response.statusCode})');
     } catch (e) {
       debugPrint('[ChatStorage] ⚠️ _updateStatusViaHttp: $e');
     }
@@ -558,12 +829,13 @@ class ChatStorageService {
     required String newStatus,
   }) async {
     if (messageIds.isEmpty) return;
-    final futures = messageIds.map(
-      (id) => _updateStatusViaHttp(messageId: id, newStatus: newStatus),
+    await Future.wait(
+      messageIds.map((id) =>
+          _updateStatusViaHttp(messageId: id, newStatus: newStatus)),
+      eagerError: false,
     );
-    await Future.wait(futures, eagerError: false);
     debugPrint(
-        '[ChatStorage] ✅ Bulk HTTP update done ($newStatus, ${messageIds.length} msgs)');
+        '[ChatStorage] ✅ Bulk HTTP update ($newStatus, ${messageIds.length} msgs)');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -595,39 +867,66 @@ class ChatStorageService {
     }
   }
 
-  Future<void> persistRoomsFromApi(List<RoomChatModel> rooms) async {
+  Future<void> persistRoomsFromApi(
+    List<RoomChatModel> rooms, {
+    bool replace = false,
+  }) async {
     if (rooms.isEmpty) return;
-    try {
-      for (final room in rooms) {
-        final existing = await _isar.getRoomById(room.roomId);
 
-        if (existing != null) {
-          // ✅ Room sudah ada — pertahankan unread count lokal
-          // API tidak tahu pesan mana yang sudah dibaca di device ini
-          // Hanya update metadata: nama partner, avatar, last message
-          final updated = existing.copyWith(
-            lastMessage: room.lastMessage.isNotEmpty
-                ? room.lastMessage
-                : existing.lastMessage,
-            lastMessageAt: room.lastMessageAt.isAfter(existing.lastMessageAt)
-                ? room.lastMessageAt
-                : existing.lastMessageAt,
-            // countStatusReceived & listIdMessageReceived TIDAK di-pass
-            // → pakai nilai existing (lokal yang benar)
-          );
-          await _isar.saveRoom(updated);
-        } else {
-          // Room baru — simpan dari API tapi reset unread
-          // (kita belum tahu pesan mana yang belum dibaca secara lokal)
-          final entity = RoomChatEntity.fromRoomChatModel(room)
+    try {
+      if (replace) {
+        final entities = rooms.map((room) {
+          return RoomChatEntity.fromRoomChatModel(room)
             ..countStatusReceived = 0
             ..listIdMessageReceived = [];
-          await _isar.saveRoom(entity);
-        }
-      }
+        }).toList();
 
-      debugPrint(
-          '[ChatStorage] 💾 API: ${rooms.length} rooms (unread preserved)');
+        await _isar.replaceAllRooms(entities);
+        debugPrint('[ChatStorage] 🔄 Rooms replaced: ${rooms.length}');
+      } else {
+        // UPSERT — update semua field termasuk minimal room dari FCM
+        for (final room in rooms) {
+          final existing = await _isar.getRoomById(room.roomId);
+
+          if (existing != null) {
+            final updated = existing.copyWith(
+              lastMessage: room.lastMessage.isNotEmpty
+                  ? room.lastMessage
+                  : existing.lastMessage,
+              lastMessageAt:
+                  room.lastMessageAt.isAfter(existing.lastMessageAt)
+                      ? room.lastMessageAt
+                      : existing.lastMessageAt,
+              // Update field yang mungkin kosong di minimal room
+              usernameLawan: room.usernameLawan?.isNotEmpty == true
+                  ? room.usernameLawan
+                  : existing.usernameLawan,
+              idMediaLawan: room.idMediaLawan?.isNotEmpty == true
+                  ? room.idMediaLawan
+                  : existing.idMediaLawan,
+              userIds: room.userIds.isNotEmpty
+                  ? room.userIds
+                  : existing.userIds,
+              roomType: room.roomType.isNotEmpty
+                  ? room.roomType
+                  : existing.roomType,
+              idLawan: room.idLawan.isNotEmpty
+                  ? room.idLawan
+                  : existing.idLawan,
+              tipeUserLawan: room.tipeUserLawan?.isNotEmpty == true
+                  ? room.tipeUserLawan
+                  : existing.tipeUserLawan,
+            );
+            await _isar.saveRoom(updated);
+          } else {
+            final entity = RoomChatEntity.fromRoomChatModel(room)
+              ..countStatusReceived = 0
+              ..listIdMessageReceived = [];
+            await _isar.saveRoom(entity);
+          }
+        }
+        debugPrint('[ChatStorage] 💾 Rooms upserted: ${rooms.length}');
+      }
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ persistRoomsFromApi: $e\n$st');
     }
@@ -688,24 +987,23 @@ class ChatStorageService {
 
   Future<void> markRoomAsRead(String roomId) async {
     try {
-      // ✅ Filter: hanya pesan dari partner (bukan milik sendiri)
-      // currentUserId dipass agar getUnreadMessages bisa filter
-      final unreadMessages =
-          await _isar.getUnreadMessages(roomId, currentUserId: _currentUserId);
+      final unreadMessages = await _isar.getUnreadMessages(
+        roomId,
+        currentUserId: _currentUserId,
+      );
 
       final unreadIds = unreadMessages
           .map((e) => e.messageId)
           .where((id) => id.isNotEmpty && !id.startsWith('local-'))
           .toList();
 
-      // Update Isar lokal
-      await _isar.markAllMessagesAsRead(roomId, currentUserId: _currentUserId);
+      await _isar.markAllMessagesAsRead(roomId,
+          currentUserId: _currentUserId);
       await _isar.clearRoomUnread(roomId);
 
       debugPrint(
-          '[ChatStorage] 👁️ Room read: $roomId (${unreadIds.length} partner msgs)');
+          '[ChatStorage] 👁️ Room read: $roomId (${unreadIds.length} msgs)');
 
-      // Hit API — hanya untuk pesan dari partner
       if (unreadIds.isNotEmpty) {
         unawaited(_updateRoomStatusViaHttp(
           messageIds: unreadIds,
@@ -726,6 +1024,7 @@ class ChatStorageService {
     _currentUserId = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kBgQueueKey);
+    await prefs.remove(_kPendingRoomFetchKey);
     debugPrint('[ChatStorage] 🧹 All cleared');
   }
 
@@ -770,17 +1069,9 @@ class ChatStorageService {
 
   Future<void> _incrementRoomReceived(ChatModel message) async {
     try {
-      // ✅ Guard: jangan hitung pesan sendiri sebagai unread
-      if (_currentUserId != null && message.senderId == _currentUserId) {
-        debugPrint('[ChatStorage] ⏭️ Skip increment: own message');
-        return;
-      }
-
-      // ✅ Guard: jangan hitung local echo
-      if (message.messageId.startsWith('local-')) {
-        debugPrint('[ChatStorage] ⏭️ Skip increment: local echo');
-        return;
-      }
+      if (_currentUserId != null &&
+          message.senderId == _currentUserId) return;
+      if (message.messageId.startsWith('local-')) return;
 
       final room = await _isar.getRoomById(message.roomId);
       if (room == null) return;
@@ -794,18 +1085,15 @@ class ChatStorageService {
         countStatusSent: room.countStatusSent,
         listIdMessageSent: room.listIdMessageSent,
       );
-
-      debugPrint('[ChatStorage] 🔴 Unread +1: ${message.roomId} '
-          '(total: ${newList.length})');
+      debugPrint(
+          '[ChatStorage] 🔴 Unread +1: ${message.roomId} (total: ${newList.length})');
     } catch (e) {
       debugPrint('[ChatStorage] ⚠️ _incrementRoomReceived: $e');
     }
   }
 
   static ChatModel _withStatus(ChatModel model, String status) {
-    final json = model.toJson();
-    json['Send_Status'] = status;
-    return ChatModel.fromJson(json);
+    return model.copyWith(sendStatus: status);
   }
 
   static Map<String, dynamic> _parseDetail(dynamic raw) {
@@ -827,16 +1115,19 @@ class ChatStorageService {
       'Sender_Id': detail['sender_id'] ?? detail['Sender_Id'] ?? '',
       'Tipe_User': detail['tipe_user'] ?? detail['Tipe_User'] ?? '',
       'Message': detail['message'] ?? detail['Message'] ?? '',
-      'Jenis_Pesan': detail['jenis_pesan'] ?? detail['Jenis_Pesan'] ?? 'text',
+      'Jenis_Pesan':
+          detail['jenis_pesan'] ?? detail['Jenis_Pesan'] ?? 'text',
       'Id_Paket': detail['id_paket'] ?? detail['Id_Paket'],
       'No_Pesanan': detail['no_pesanan'] ?? detail['No_Pesanan'],
       'No_Penawaran': detail['no_penawaran'] ?? detail['No_Penawaran'],
       'Status': detail['status'] ?? 'aktif',
-      'Send_Status': detail['send_status'] ?? detail['Send_Status'] ?? 'sent',
+      'Send_Status':
+          detail['send_status'] ?? detail['Send_Status'] ?? 'sent',
       'Room_Type': detail['room_type'] ?? detail['Room_Type'] ?? 'direct',
       'Sent_At': detail['sent_at'] ?? detail['Sent_At'],
       'User_Ids': detail['user_ids'] ?? detail['User_Ids'] ?? [],
-      'Receiver_Ids': detail['receiver_ids'] ?? detail['Receiver_Ids'] ?? [],
+      'Receiver_Ids':
+          detail['receiver_ids'] ?? detail['Receiver_Ids'] ?? [],
       'Local_Id': detail['local_id'] ?? detail['Local_Id'],
     };
   }

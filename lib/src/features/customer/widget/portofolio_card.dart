@@ -167,11 +167,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
       onTap: () {
         context.read<PortofolioProvider>().setSelectedPortofolio(porto);
         nav.navigateToPage(
-          hrsLogin: true,
           context,
           const SinglePostPage(),
+          hrsLogin: true,
           targetTabIndex: 0,
           targetPage: 'SinglePostPage',
+          noIdPortofolio: porto.noId,
         );
       },
       child: Container(
@@ -353,10 +354,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isLikeInProgress,
                             onTap: state.isLikeInProgress
                                 ? null
-                                : () => provider.toggleLike(
+                                : () async {
+                                    await provider.toggleLike(
                                       context: context,
                                       porto: porto,
-                                    ),
+                                    );
+                                  },
                           ),
                           const SizedBox(width: 4),
                           _ActionButton(
@@ -368,10 +371,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isSaveInProgress,
                             onTap: state.isSaveInProgress
                                 ? null
-                                : () => provider.toggleSave(
+                                : () async {
+                                    await provider.toggleSave(
                                       context: context,
                                       porto: porto,
-                                    ),
+                                    );
+                                  },
                           ),
                         ],
                       ),

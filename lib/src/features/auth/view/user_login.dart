@@ -6,6 +6,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/view/account/legal_page.dart';
 import 'package:mpjnew/src/features/customer/view/chat/chat_list_page.dart';
 import 'package:mpjnew/src/features/customer/view/account/customer_account_page.dart';
@@ -101,6 +102,7 @@ class _UserLoginState extends State<UserLogin>
       final historyOrderProv = context.read<HistoryOrderProvider>();
       final pesananProv = context.read<PesananProvider>();
 
+
       // ✅ Login with Google
       final result = await provider.checkLoginGoogle(
         role: Constants.customer,
@@ -118,6 +120,10 @@ class _UserLoginState extends State<UserLogin>
       if (result.name == 'aktif') {
         debugPrint("✅ [UserLogin] Login successful!");
         debugPrint("   User: ${provider.customer?.namaDisplay}");
+
+        LocalStorageService.instance.setActiveCustomer(
+          provider.customer!.noId,
+        );
 
         // ==========================================
         // 1️⃣ REQUEST NOTIFICATION PERMISSION (Android 13+)
@@ -150,6 +156,8 @@ class _UserLoginState extends State<UserLogin>
         await _loadKotaList(context);
 
         if (!mounted) return;
+
+        await _loadLikedAndSaved(context, provider);
 
         debugPrint("✅ [UserLogin] All services initialized");
         debugPrint("═══════════════════════════════════════");
@@ -230,6 +238,35 @@ class _UserLoginState extends State<UserLogin>
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadLikedAndSaved(
+    BuildContext context,
+    UserProvider provider,
+  ) async {
+    try {
+      debugPrint("[UserLogin] 🔧 Loading liked & saved portofolio...");
+      final portoProvider = context.read<PortofolioProvider>();
+
+      // Jalankan paralel — tidak perlu tunggu satu per satu
+      await Future.wait([
+        portoProvider.loadLikedPortofolio(
+          context: context,
+          syncFromApi: true, // fetch dari API untuk data terbaru
+        ),
+        portoProvider.loadSavedPortofolio(
+          context: context,
+          syncFromApi: true,
+        ),
+      ]);
+
+      debugPrint(
+          "[UserLogin] ✅ Liked: ${portoProvider.portofolioLikelist.length}"
+          " | Saved: ${portoProvider.portofolioSaveList.length}");
+    } catch (e) {
+      debugPrint("[UserLogin] ⚠️ Load liked/saved error: $e");
+      // Tidak throw — lanjut tanpa data liked/saved
     }
   }
 
@@ -658,15 +695,46 @@ class _UserLoginState extends State<UserLogin>
     String? noIdVendor,
   }) {
     debugPrint("[UserLogin] 🎯 Target page: $targetPage");
+    debugPrint("[UserLogin]    noIdPortofolio: $noIdPortofolio");
 
     switch (targetPage) {
       case 'SinglePostPage':
         final portoProvider = context.read<PortofolioProvider>();
-        final porto = portoProvider.portofolioList
-            .firstWhereOrNull((porto) => porto.noId == noIdPortofolio);
-        portoProvider.setSelectedPortofolio(porto);
 
-        return SinglePostPage();
+        // ✅ FIX: Strategi restore porto dengan 3 fallback:
+        //
+        // 1. Cari dari portofolioList by noIdPortofolio (dari arguments)
+        //    → paling akurat, data sudah ada di list
+        //
+        // 2. Pakai selectedPortofolio yang sudah di-set sebelum redirect login
+        //    → fallback jika noIdPortofolio tidak ada di arguments
+        //    → ini yang terjadi saat user tap porto lalu di-redirect login
+        //    → setSelectedPortofolio() sudah dipanggil sebelum navigateToPage()
+        //
+        // 3. Null → SinglePostPage tampilkan _buildEmptyScaffold()
+        //    (sudah ada handler-nya)
+
+        if (noIdPortofolio != null && noIdPortofolio.isNotEmpty) {
+          // Strategi 1: lookup dari list
+          final porto = portoProvider.portofolioList
+              .firstWhereOrNull((p) => p.noId == noIdPortofolio);
+
+          if (porto != null) {
+            // Ditemukan di list → update selectedPortofolio
+            portoProvider.setSelectedPortofolio(porto);
+            debugPrint("[UserLogin] ✅ Porto found by id: $noIdPortofolio");
+          } else {
+            // Tidak ditemukan di list — jangan overwrite selectedPortofolio
+            // yang sudah di-set sebelum redirect (strategi 2)
+            debugPrint(
+                "[UserLogin] ⚠️ Porto not in list, keeping existing selected");
+          }
+        }
+        // else: noIdPortofolio null → pakai selectedPortofolio yang sudah ada (strategi 2)
+
+        // selectedPortofolio sekarang berisi porto yang benar (atau tetap dari sebelum redirect)
+        return const SinglePostPage();
+
       case 'VendorBioPage':
         return VendorBioPage(
           idVendor: noIdVendor ?? 'ven_2',
@@ -678,7 +746,7 @@ class _UserLoginState extends State<UserLogin>
       case 'Tab3':
         return const CustomerAccountPage();
       default:
-        return SinglePostPage();
+        return const SinglePostPage();
     }
   }
 }

@@ -212,6 +212,45 @@ class PortofolioProvider with ChangeNotifier {
     }
   }
 
+  Future<void> silentRefreshSelected({String? userId}) async {
+    final current = _selectedPortofolio;
+    if (current == null) return;
+
+    try {
+      final result = await portofolioService.getAll(
+        noId: current.noId,
+        id_customer: userId,
+        status: 'aktif',
+        untuk_keperluan: 'home',
+      );
+
+      if (result.isNotEmpty) {
+        final fresh = result.first;
+
+        // ✅ Hanya update field yang berubah (likes, saves),
+        // mediaUrls TIDAK diganti → ImagePost tidak rebuild ulang
+        _selectedPortofolio = current.copyWith(
+          likes: fresh.likes,
+          saves: fresh.saves, // sesuaikan nama field di PortofolioModel
+        );
+
+        // Update portofolioList juga hanya field yang berubah
+        final idx = _portofolioList.indexWhere((p) => p.noId == current.noId);
+        if (idx != -1) {
+          final updated = _portofolioList[idx].copyWith(
+            likes: fresh.likes,
+            saves: fresh.saves,
+          );
+          _portofolioList = List.of(_portofolioList)..[idx] = updated;
+        }
+
+        safeNotify();
+      }
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ⚠️ silentRefreshSelected error: $e');
+    }
+  }
+
   // ═══════════════════════════════════════════════════
   // LIKE — optimistic UI + rollback
   // ═══════════════════════════════════════════════════
@@ -219,6 +258,7 @@ class PortofolioProvider with ChangeNotifier {
   Future<void> toggleLike({
     required BuildContext context,
     required PortofolioModel porto,
+    bool navigateToPost = true, // ✅ tambah parameter ini
   }) async {
     final userId = context.read<UserProvider>().userId;
     if (userId == null) {
@@ -237,23 +277,20 @@ class PortofolioProvider with ChangeNotifier {
     safeNotify();
 
     try {
-      debugPrint(
-          '[PortofolioProvider] ${nowLiked ? '❤️' : '💔'} toggleLike: $noId');
-
       if (nowLiked) {
         await portofolioService.likePorto(userId, noId);
-
-        // ✅ saveLiked aman: sudah ada guard hasActiveCustomer di service
         await localService.saveLiked(porto);
 
-        setSelectedPortofolio(porto);
-        if (context.mounted) {
+        // ✅ Hanya navigate jika diminta (dari card, bukan dari single post)
+        if (navigateToPost && context.mounted) {
+          setSelectedPortofolio(porto);
           context.read<NavigationProvider>().navigateToPage(
                 context,
                 const SinglePostPage(),
                 hrsLogin: true,
                 targetTabIndex: 0,
                 targetPage: 'SinglePostPage',
+                noIdPortofolio: porto.noId,
               );
         }
       } else {
@@ -289,6 +326,7 @@ class PortofolioProvider with ChangeNotifier {
   Future<void> toggleSave({
     required BuildContext context,
     required PortofolioModel porto,
+    bool navigateToPost = true, // ✅ tambah parameter ini
   }) async {
     final userId = context.read<UserProvider>().userId;
     if (userId == null) {
@@ -307,23 +345,20 @@ class PortofolioProvider with ChangeNotifier {
     safeNotify();
 
     try {
-      debugPrint(
-          '[PortofolioProvider] ${nowSaved ? '🔖' : '🗑️'} toggleSave: $noId');
-
       if (nowSaved) {
         await portofolioService.savePorto(userId, noId);
-
-        // ✅ saveSaved aman: sudah ada guard hasActiveCustomer di service
         await localService.saveSaved(porto);
 
-        setSelectedPortofolio(porto);
-        if (context.mounted) {
+        // ✅ Hanya navigate jika diminta
+        if (navigateToPost && context.mounted) {
+          setSelectedPortofolio(porto);
           context.read<NavigationProvider>().navigateToPage(
                 context,
                 const SinglePostPage(),
                 hrsLogin: true,
                 targetTabIndex: 0,
                 targetPage: 'SinglePostPage',
+                noIdPortofolio: porto.noId,
               );
         }
       } else {
@@ -485,13 +520,29 @@ class PortofolioProvider with ChangeNotifier {
 
   Future<void> clearCustomerData() async {
     try {
+      // Clear progress sets
       _likeInProgress.clear();
       _saveInProgress.clear();
+
+      // ✅ FIX: Clear SEMUA in-memory state yang user-specific
+      _portofolioLikelist = []; // ← ini yang menyebabkan bug
+      _portofolioSaveList = []; // ← ini juga
+      _selectedPortofolio =
+          null; // ← agar SinglePostPage tidak tampilkan data lama
+      _paketPortofolio = [];
+
+      // ✅ Tidak perlu clear _portofolioList karena itu data publik
+      // (feed home — sama untuk semua user, tidak user-specific)
+
+      // Baru clear Hive box (async) setelah in-memory sudah clear
+      // Ini memastikan UI langsung tampil kosong tanpa tunggu Hive
       await localService.clearAll();
-      _portofolioLikelist = [];
-      _portofolioSaveList = [];
-      notifyListeners();
-    } catch (_) {}
+
+      safeNotify(); // notify SETELAH semua clear
+      debugPrint('[PortofolioProvider] 🧹 Customer data cleared');
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ❌ clearCustomerData: $e');
+    }
   }
 
   void setSelectedPaket(List<PaketModel> p) {

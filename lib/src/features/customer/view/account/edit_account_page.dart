@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
+import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/dropdown_search_config.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/data/models/kota_model.dart';
@@ -34,47 +35,47 @@ class _EditAccountPageState extends State<EditAccountPage> {
   String? emailError;
 
   Future<void> update(BuildContext context) async {
-    final userProvider = context.read<UserProvider>();
+  final userProvider = context.read<UserProvider>();
+  final customer = userProvider.customer;
+  if (customer == null) {
+    CustomSnackbar.showErrorSnackbar(context, "Sesi tidak ditemukan, coba login ulang");
+    return;
+  }
 
-    // ✅ Guard: customer bisa null jika session belum siap
-    final customer = userProvider.customer;
-    if (customer == null) {
-      CustomSnackbar.showErrorSnackbar(
-          context, "Sesi tidak ditemukan, coba login ulang");
-      return;
-    }
+  final kotaId = selectedKota?.noId;
+  try {
+    final updatedCustomer = customer.copyWith(
+      namaDisplay: nameController.text.trim().isNotEmpty
+          ? nameController.text.trim()
+          : customer.namaDisplay,
+      userName: usernameController.text.trim().isNotEmpty
+          ? usernameController.text.trim()
+          : customer.userName,
+      email: emailController.text.trim().isNotEmpty
+          ? emailController.text.trim()
+          : customer.email,
+      kota: kotaId,
+    );
 
-    final kotaId = selectedKota?.noId;
-    try {
-      final updatedCustomer = customer.copyWith(
-        namaDisplay: nameController.text.trim().isNotEmpty
-            ? nameController.text.trim()
-            : customer.namaDisplay,
-        userName: usernameController.text.trim().isNotEmpty
-            ? usernameController.text.trim()
-            : customer.userName,
-        email: emailController.text.trim().isNotEmpty
-            ? emailController.text.trim()
-            : customer.email,
-        kota: kotaId,
-      );
+    await customerService.update(updatedCustomer);
 
-      final result = await customerService.update(updatedCustomer);
+    if (!context.mounted) return;
 
-      debugPrint('[EditAccountPage] update result: $result');
-      if (!context.mounted) return;
+    // ✅ Update local state langsung tanpa nunggu backend
+    userProvider.updateCustomerLocally(updatedCustomer);
 
-      context
-          .read<UserProvider>()
-          .checkLoginGoogle(role: 'customer', silent: true);
-      CustomSnackbar.showSuccessSnackbar(context, "Berhasil memperbarui data");
-      Navigator.of(context).pop();
-    } catch (e) {
-      debugPrint('[EditAccountPage] Error updating customer: $e');
-      if (!context.mounted) return;
+    // ✅ Sync ke backend di background (tidak di-await)
+    userProvider.refreshUserData();
+
+    CustomSnackbar.showSuccessSnackbar(context, "Berhasil memperbarui data");
+  } catch (e) {
+    debugPrint('Error updating customer: $e');
+    if (context.mounted) {
       CustomSnackbar.showErrorSnackbar(context, "Gagal memperbarui data");
     }
+    rethrow;
   }
+}
 
   void loadData(CustomerModel customer) {
     setState(() {
@@ -252,9 +253,22 @@ class _EditAccountPageState extends State<EditAccountPage> {
                       ),
                     ),
                     onPressed: () async {
-                      final isValid = validateForm();
+                      var isValid = validateForm();
                       if (!isValid) return;
-                      await update(context);
+
+                      try {
+                        await update(context);
+                        if (!context.mounted) return;
+                        // ✅ Hanya pop jika update berhasil
+                        context.read<NavigationProvider>().showBottomNav();
+                        context
+                            .read<NavigationProvider>()
+                            .navigatorKeys[3]
+                            .currentState
+                            ?.pop();
+                      } catch (e) {
+                        // Error sudah ditampilkan di dalam update(), tidak perlu pop
+                      }
                     },
                     child: const Text("Simpan", style: TextStyle(fontSize: 16)),
                   ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/account/legal_page.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
@@ -115,7 +116,7 @@ class SettingPage extends StatelessWidget {
           // ── App version ───────────────────────────────────
           Center(
             child: Text(
-              'Versi 1.0.0',
+              'Versi ${Constants.versionApp}',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
           ),

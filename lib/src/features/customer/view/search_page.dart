@@ -470,6 +470,7 @@ class _SearchPageState extends State<SearchPage>
                       const SinglePostPage(),
                       targetTabIndex: 0,
                       targetPage: 'SinglePostPage',
+                      noIdPortofolio: porto.noId,
                     );
               },
               onVendorTap: () {
