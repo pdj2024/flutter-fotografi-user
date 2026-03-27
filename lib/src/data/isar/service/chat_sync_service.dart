@@ -20,6 +20,22 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 const _kOfflineQueueKey = 'chat_offline_send_queue';
 
+/// Koordinator sync antara API, Isar, dan offline queue.
+///
+/// ─── Strategi Penyimpanan ────────────────────────────────────────────────
+///
+///   REPLACE rooms  → pull-to-refresh ChatListPage (forceRefresh=true)
+///                    Room yang tidak ada di API → dihapus dari Isar
+///                    Unread count lokal dipertahankan untuk room yang masih ada
+///
+///   UPSERT rooms   → initial load, background sync (forceRefresh=false)
+///                    Room lokal tetap ada meski tidak ada di response API
+///
+///   REPLACE msgs   → pull-to-refresh RoomChatPage (forceRefresh=true)
+///                    Timpa semua pesan lokal + hapus local-xxx obsolete
+///
+///   UPSERT msgs    → incremental sync (app resume), initial load tanpa cache
+///                    Local-xxx pending tidak terganggu
 class ChatSyncService {
   static final ChatSyncService instance = ChatSyncService._internal();
   factory ChatSyncService() => instance;
@@ -45,7 +61,8 @@ class ChatSyncService {
         .listen((List<ConnectivityResult> results) {
       final isConnected = results.any((r) => r != ConnectivityResult.none);
       if (isConnected) {
-        debugPrint('[ChatSync] 📶 Network restored — retrying queue...');
+        debugPrint(
+            '[ChatSync] 📶 Network restored — retrying offline queue...');
         retryOfflineQueue();
       }
     });
@@ -65,6 +82,7 @@ class ChatSyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getStringList(_kOfflineQueueKey) ?? [];
+
       final isDuplicate = raw.any((item) {
         try {
           return (jsonDecode(item) as Map<String, dynamic>)['Local_Id'] ==
@@ -74,11 +92,12 @@ class ChatSyncService {
         }
       });
       if (isDuplicate) return;
+
       raw.add(jsonEncode(message.toJsonQueue()));
       final trimmed = raw.length > 50 ? raw.sublist(raw.length - 50) : raw;
       await prefs.setStringList(_kOfflineQueueKey, trimmed);
       debugPrint(
-          '[ChatSync] 📦 Enqueued: ${message.localId} (${trimmed.length})');
+          '[ChatSync] 📦 Offline queued: ${message.localId} (${trimmed.length})');
     } catch (e) {
       debugPrint('[ChatSync] ❌ _enqueueOffline: $e');
     }
@@ -134,31 +153,39 @@ class ChatSyncService {
     if (_isRetrying) return;
     final messages = await _dequeueAll();
     if (messages.isEmpty) return;
+
     _isRetrying = true;
     await _clearOfflineQueue();
+
     for (final message in messages) {
       try {
         final serverMessage = await _api.sendMessage(message: message);
-        if (serverMessage != null) {
-          if (message.localId != null) {
-            await _storage.confirmOptimisticMessage(
-              localId: message.localId!,
-              serverMessage: serverMessage,
-            );
-          }
-        } else {
+        if (serverMessage != null && message.localId != null) {
+          await _storage.confirmOptimisticMessage(
+            localId: message.localId!,
+            serverMessage: serverMessage,
+          );
+        } else if (serverMessage == null) {
           await _enqueueOffline(message);
         }
       } catch (e) {
         await _enqueueOffline(message);
       }
     }
+
     _isRetrying = false;
-    debugPrint('[ChatSync] 🔁 Retry queue done');
+    debugPrint('[ChatSync] 🔁 Retry offline queue done');
   }
 
   // =========================================
   // ROOM SYNC
+  //
+  // forceRefresh=false → UPSERT (initial load, background sync)
+  //   Room lokal yang tidak ada di API tetap ada
+  //
+  // forceRefresh=true  → REPLACE (pull-to-refresh)
+  //   Room yang tidak ada di API → dihapus dari Isar
+  //   Unread count lokal dipertahankan untuk room yang masih ada
   // =========================================
 
   Future<List<RoomChatModel>> syncRooms({
@@ -166,20 +193,37 @@ class ChatSyncService {
     bool forceRefresh = false,
   }) async {
     try {
+      // Jika tidak forceRefresh dan ada cache, return cache langsung
       if (!forceRefresh) {
         final cached = await _isar.getAllRooms();
         if (cached.isNotEmpty) {
           return cached.map((e) => e.toRoomChatModel()).toList();
         }
       }
+
+      // Guard: jangan double sync
       if (_syncingAllRooms) {
         final cached = await _isar.getAllRooms();
         return cached.map((e) => e.toRoomChatModel()).toList();
       }
+
       _syncingAllRooms = true;
       try {
         final rooms = await _api.fetchRooms(userId: userId);
-        if (rooms.isNotEmpty) await _storage.persistRoomsFromApi(rooms);
+
+        if (rooms.isNotEmpty) {
+          // ✅ forceRefresh=true  → REPLACE (hapus room yang tidak ada di API)
+          // ✅ forceRefresh=false → UPSERT (pertahankan room lokal)
+          await _storage.persistRoomsFromApi(
+            rooms,
+            replace: forceRefresh,
+          );
+        } else if (forceRefresh) {
+          // API return kosong saat forceRefresh → hapus semua room lokal
+          // Ini terjadi jika user belum pernah chat atau semua room dihapus
+          await _storage.persistRoomsFromApi([], replace: true);
+        }
+
         final synced = await _isar.getAllRooms();
         return synced.map((e) => e.toRoomChatModel()).toList();
       } finally {
@@ -187,24 +231,17 @@ class ChatSyncService {
       }
     } catch (e, st) {
       debugPrint('[ChatSync] ❌ syncRooms: $e\n$st');
+      // Fallback ke cache
       final cached = await _isar.getAllRooms();
       return cached.map((e) => e.toRoomChatModel()).toList();
     }
   }
 
   // =========================================
-  // MESSAGE LOAD — Fresh strategy
+  // MESSAGE LOAD
   //
-  // Saat buka room:
-  //   1. Tampilkan cache Isar dulu (instant)
-  //   2. Fetch fresh dari API di background
-  //   3. Enrich embedded (paket/penawaran/pesanan) — selalu fresh
-  //   4. Save ke Isar → stream emit → UI update otomatis
-  //
-  // Kenapa selalu fresh untuk embedded:
-  //   - Penawaran bisa berubah jadi pesanan kapan saja
-  //   - Status pesanan berubah (menunggu bayar → persiapan → selesai)
-  //   - Paket bisa diupdate vendornya
+  // forceRefresh=false → tampilkan cache + background REPLACE sync
+  // forceRefresh=true  → fetch API + REPLACE data lokal
   // =========================================
 
   Future<(List<ChatModel>, bool)> loadMessages({
@@ -213,17 +250,18 @@ class ChatSyncService {
     required String roomType,
     required List<String> userIds,
     int limit = 30,
-    bool forceRefresh = false, // ✅ FIX: tambah parameter ini
+    bool forceRefresh = false,
   }) async {
     try {
-      // ✅ FIX: Jika forceRefresh, skip cache langsung ke API
       if (!forceRefresh) {
         final cached = await _isar.getMessagesByRoomPaged(
-            roomId: roomId, offset: 0, limit: limit);
+          roomId: roomId,
+          offset: 0,
+          limit: limit,
+        );
 
         if (cached.isNotEmpty) {
           debugPrint('[ChatSync] 📋 From cache: ${cached.length}');
-          // Background fresh sync agar embedded selalu up-to-date
           _backgroundFreshSync(
             roomId: roomId,
             tipeUser: tipeUser,
@@ -243,19 +281,59 @@ class ChatSyncService {
         }
       }
 
-      // forceRefresh=true ATAU tidak ada cache → fetch dari API
-      debugPrint(
-          '[ChatSync] 🔄 ${forceRefresh ? "Force refresh" : "No cache"} — fetching from API...');
-      final messages = await _fetchEnrichAndPersist(
-        roomId: roomId,
-        tipeUser: tipeUser,
-        roomType: roomType,
-        userIds: userIds,
+      debugPrint('[ChatSync] 🔄 ${forceRefresh ? "Force replace" : "No cache"} '
+          '— fetching from API...');
+
+      final messages = await _api.fetchMessages(roomId: roomId);
+
+      if (messages.isEmpty) {
+        if (forceRefresh) {
+          await _isar.replaceRoomMessages(
+            roomId: roomId,
+            newEntities: [],
+          );
+        }
+        return (<ChatModel>[], false);
+      }
+
+      final entities = await _buildEntitiesWithEmbedded(messages);
+
+      if (forceRefresh) {
+        // ✅ REPLACE — timpa semua data lokal
+        await _isar.replaceRoomMessages(
+          roomId: roomId,
+          newEntities: entities,
+        );
+        debugPrint('[ChatSync] ✅ Full replace: ${entities.length} for $roomId');
+      } else {
+        // ✅ UPSERT — initial load tanpa cache
+        await _isar.saveAllMessages(entities);
+      }
+
+      final saved = await _isar.getMessagesByRoom(roomId);
+      return (
+        saved
+            .map((e) => e.toChatModel(
+                  tipeUser: tipeUser,
+                  roomType: roomType,
+                  userIds: userIds,
+                ))
+            .toList(),
+        false,
       );
-      return (messages, false);
     } catch (e, st) {
       debugPrint('[ChatSync] ❌ loadMessages: $e\n$st');
-      return (<ChatModel>[], false);
+      final cached = await _isar.getMessagesByRoom(roomId);
+      return (
+        cached
+            .map((e) => e.toChatModel(
+                  tipeUser: tipeUser,
+                  roomType: roomType,
+                  userIds: userIds,
+                ))
+            .toList(),
+        true,
+      );
     }
   }
 
@@ -269,7 +347,10 @@ class ChatSyncService {
   }) async {
     try {
       final paged = await _isar.getMessagesByRoomPaged(
-          roomId: roomId, offset: offset, limit: limit);
+        roomId: roomId,
+        offset: offset,
+        limit: limit,
+      );
       return paged
           .map((e) => e.toChatModel(
                 tipeUser: tipeUser,
@@ -283,8 +364,8 @@ class ChatSyncService {
     }
   }
 
-  /// Incremental sync — hanya pesan baru (berdasarkan since)
-  /// Dipakai saat app resume, bukan saat buka room pertama kali
+  /// Incremental sync — hanya pesan baru (UPSERT).
+  /// Dipakai saat app resume. Local-xxx pending tidak terganggu.
   Future<int> incrementalSync({
     required String roomId,
     required String tipeUser,
@@ -294,9 +375,13 @@ class ChatSyncService {
     try {
       if (_syncingRooms[roomId] == true) return 0;
       _syncingRooms[roomId] = true;
+
       try {
         final lastMessages = await _isar.getMessagesByRoomPaged(
-            roomId: roomId, offset: 0, limit: 1);
+          roomId: roomId,
+          offset: 0,
+          limit: 1,
+        );
         final since =
             lastMessages.isNotEmpty ? lastMessages.first.sentAt : null;
 
@@ -304,11 +389,12 @@ class ChatSyncService {
             await _api.fetchMessages(roomId: roomId, since: since);
         if (newMessages.isEmpty) return 0;
 
-        // Enrich embedded untuk pesan baru
+        // UPSERT — jangan hapus local-xxx yang mungkin masih pending
         final entities = await _buildEntitiesWithEmbedded(newMessages);
         await _isar.saveAllMessages(entities);
+
         debugPrint(
-            '[ChatSync] ✅ ${entities.length} new synced+enriched: $roomId');
+            '[ChatSync] ✅ Incremental: ${entities.length} new for $roomId');
         return entities.length;
       } finally {
         _syncingRooms.remove(roomId);
@@ -351,7 +437,7 @@ class ChatSyncService {
   }
 
   // =========================================
-  // SEND MESSAGE
+  // SEND MESSAGE — Offline-first
   // =========================================
 
   Future<ChatModel?> sendMessage({required ChatModel message}) async {
@@ -361,6 +447,8 @@ class ChatSyncService {
     try {
       await _storage.persistOptimisticMessage(message);
       debugPrint('[ChatSync] ⏳ Local echo saved: ${message.localId}');
+
+      await _updateRoomOptimistic(message);
 
       final online = await _isOnline();
       if (!online) {
@@ -420,6 +508,21 @@ class ChatSyncService {
     }
   }
 
+  Future<void> _updateRoomOptimistic(ChatModel message) async {
+    try {
+      final room = await _isar.getRoomById(message.roomId);
+      if (room == null) return;
+      await _isar.updateRoomLastMessage(
+        roomId: message.roomId,
+        lastMessage:
+            message.message.isNotEmpty ? message.message : '⏳ Mengirim...',
+        lastMessageAt: message.sentAt,
+      );
+    } catch (e) {
+      debugPrint('[ChatSync] ⚠️ _updateRoomOptimistic: $e');
+    }
+  }
+
   Future<int> retryFailedMessages({
     required String roomId,
     required ChatModel Function(ChatMessageEntity) toMessage,
@@ -440,50 +543,9 @@ class ChatSyncService {
   }
 
   // =========================================
-  // CORE: FETCH + ENRICH + PERSIST
+  // BACKGROUND FRESH SYNC — REPLACE strategy
   // =========================================
 
-  /// Fetch semua pesan dari API + enrich embedded + save ke Isar.
-  ///
-  /// ✅ SELALU fresh untuk embedded data karena:
-  ///   - Penawaran bisa berubah status atau jadi pesanan
-  ///   - Pesanan statusnya bisa berubah
-  ///   - Paket bisa diupdate
-  Future<List<ChatModel>> _fetchEnrichAndPersist({
-    required String roomId,
-    required String tipeUser,
-    required String roomType,
-    required List<String> userIds,
-    DateTime? since,
-  }) async {
-    try {
-      final messages = await _api.fetchMessages(roomId: roomId, since: since);
-      if (messages.isEmpty) return [];
-
-      final entities = await _buildEntitiesWithEmbedded(messages);
-      await _isar.saveAllMessages(entities);
-
-      debugPrint(
-          '[ChatSync] 💾 ${entities.length} messages saved with fresh embedded');
-
-      final saved = await _isar.getMessagesByRoom(roomId);
-      return saved
-          .map((e) => e.toChatModel(
-                tipeUser: tipeUser,
-                roomType: roomType,
-                userIds: userIds,
-              ))
-          .toList();
-    } catch (e, st) {
-      debugPrint('[ChatSync] ❌ _fetchEnrichAndPersist: $e\n$st');
-      return [];
-    }
-  }
-
-  /// Background sync: fetch fresh + re-enrich semua embedded di room.
-  ///
-  /// Dipanggil setelah cache ditampilkan agar UI update tanpa loading.
-  /// Penting untuk kasus penawaran → pesanan (noInvoice berubah).
   void _backgroundFreshSync({
     required String roomId,
     required String tipeUser,
@@ -495,21 +557,24 @@ class ChatSyncService {
         if (_syncingRooms[roomId] == true) return;
         _syncingRooms[roomId] = true;
 
-        debugPrint('[ChatSync] 🔄 Background fresh sync: $roomId');
+        debugPrint('[ChatSync] 🔄 BG fresh sync (REPLACE): $roomId');
 
-        // Fetch semua pesan (tidak pakai since — fresh full)
         final messages = await _api.fetchMessages(roomId: roomId);
         if (messages.isEmpty) {
           _syncingRooms.remove(roomId);
           return;
         }
 
-        // Re-enrich semua embedded (paket/penawaran/pesanan selalu fresh)
         final entities = await _buildEntitiesWithEmbedded(messages);
-        await _isar.saveAllMessages(entities);
+
+        // ✅ REPLACE — hapus local-xxx yang sudah dikonfirmasi server
+        await _isar.replaceRoomMessages(
+          roomId: roomId,
+          newEntities: entities,
+        );
 
         debugPrint(
-            '[ChatSync] ✅ BG fresh sync done: ${entities.length} for $roomId');
+            '[ChatSync] ✅ BG replace done: ${entities.length} for $roomId');
       } catch (e) {
         debugPrint('[ChatSync] ⚠️ BG fresh sync error: $e');
       } finally {
@@ -519,46 +584,33 @@ class ChatSyncService {
   }
 
   // =========================================
-  // BATCH ENRICH — BUILD ENTITIES
+  // BATCH ENRICH
   // =========================================
 
-  /// Build entities dengan embedded data yang sudah di-fetch fresh.
-  ///
-  /// ✅ Parallel fetch: paket + penawaran + pesanan sekaligus
-  /// ✅ Pesanan: satu per satu karena tidak ada batch endpoint
-  /// ✅ Penawaran: batch via idList
-  /// ✅ Paket: batch via idList
   Future<List<ChatMessageEntity>> _buildEntitiesWithEmbedded(
-      List<ChatModel> messages) async {
+    List<ChatModel> messages,
+  ) async {
     if (messages.isEmpty) return [];
 
-    // Kumpulkan ID unik per tipe — skip local echo (local-xxx)
     final paketIds = <String>{};
     final penawaranIds = <String>{};
     final pesananIds = <String>{};
 
     for (final m in messages) {
       if (m.messageId.startsWith('local-')) continue;
-
-      // ── Paket selalu di-fetch jika ada ──────────────────────────
       if (m.idPaket?.isNotEmpty == true) paketIds.add(m.idPaket!);
-
-      // ── Prioritas: noInvoice (pesanan) > noPenawaran ────────────
-      // Jika pesan sudah jadi pesanan (noInvoice ada), skip penawaran.
-      // Jika belum ada pesanan, baru fetch penawaran.
       if (m.noInvoice?.isNotEmpty == true) {
         pesananIds.add(m.noInvoice!);
-        // intentionally skip noPenawaran — sudah dikonversi ke pesanan
       } else if (m.noPenawaran?.isNotEmpty == true) {
         penawaranIds.add(m.noPenawaran!);
       }
     }
+
     debugPrint('[ChatSync] 🔍 Batch enrich: '
         '${paketIds.length} paket, '
         '${penawaranIds.length} penawaran, '
         '${pesananIds.length} pesanan');
 
-    // ✅ Parallel fetch semua tipe sekaligus
     final results = await Future.wait([
       _batchFetchPaket(paketIds.toList()),
       _batchFetchPenawaran(penawaranIds.toList()),
@@ -569,18 +621,15 @@ class ChatSyncService {
     final penawaranMap = results[1] as Map<String, PenawaranModel>;
     final pesananMap = results[2] as Map<String, PesananModel>;
 
-    // Build entity dengan embedded
     return messages.map((m) {
       if (m.messageId.startsWith('local-')) {
         return ChatMessageEntity.fromChatModel(m);
       }
 
-      // ── Terapkan prioritas yang sama saat mapping ke entity ──────
       final hasPesanan = m.noInvoice?.isNotEmpty == true;
       return ChatMessageEntity.fromChatModelWithData(
         m,
         paket: m.idPaket != null ? paketMap[m.idPaket] : null,
-        // Jika sudah ada pesanan, penawaran tidak di-embed
         penawaran: (!hasPesanan && m.noPenawaran != null)
             ? penawaranMap[m.noPenawaran]
             : null,
@@ -589,11 +638,6 @@ class ChatSyncService {
     }).toList();
   }
 
-  // =========================================
-  // BATCH FETCH HELPERS
-  // =========================================
-
-  /// Paket: batch fetch via idList
   Future<Map<String, PaketModel>> _batchFetchPaket(List<String> ids) async {
     if (ids.isEmpty) return {};
     try {
@@ -605,8 +649,6 @@ class ChatSyncService {
     }
   }
 
-  /// Penawaran: batch fetch via idList
-  /// API format: /getAll?noidList=X&noidList=Y&noidList=Z
   Future<Map<String, PenawaranModel>> _batchFetchPenawaran(
       List<String> ids) async {
     if (ids.isEmpty) return {};
@@ -619,31 +661,22 @@ class ChatSyncService {
     }
   }
 
-  /// Pesanan: fetch satu per satu karena tidak ada batch endpoint.
-  /// Menggunakan Future.wait untuk parallel (tidak sequential).
   Future<Map<String, PesananModel>> _batchFetchPesanan(List<String> ids) async {
     if (ids.isEmpty) return {};
     try {
       final result = <String, PesananModel>{};
-
-      // ✅ Parallel fetch — semua request jalan bersamaan
       await Future.wait(
         ids.map((id) async {
           try {
             final list =
                 await PesananService().getAll(noBukti: id, status: 'aktif');
-            if (list.isNotEmpty) {
-              result[id] = list.first;
-              debugPrint('[ChatSync] ✅ Pesanan fetched: $id');
-            }
+            if (list.isNotEmpty) result[id] = list.first;
           } catch (e) {
-            // Satu gagal tidak menghentikan yang lain
             debugPrint('[ChatSync] ⚠️ Pesanan $id error: $e');
           }
         }),
-        eagerError: false, // Lanjut meski satu gagal
+        eagerError: false,
       );
-
       return result;
     } catch (e) {
       debugPrint('[ChatSync] ⚠️ _batchFetchPesanan: $e');

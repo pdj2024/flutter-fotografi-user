@@ -176,13 +176,12 @@ class _MainMenuState extends State<MainMenu> {
   ) async {
     try {
       debugPrint("═══════════════════════════════════════");
-      debugPrint("[MainMenu] 🚀 INITIALIZING (FCM Mode)");
+      debugPrint("[MainMenu] 🚀 INITIALIZING");
       debugPrint("═══════════════════════════════════════");
 
       // ✅ Request notification permission
       if (Platform.isAndroid) {
         final status = await Permission.notification.request();
-
         if (status.isDenied && mounted) {
           showDialog(
             context: context,
@@ -219,53 +218,28 @@ class _MainMenuState extends State<MainMenu> {
         }
       }
 
-      // ════════════════════════════════════════════════════════
-      // ✅ INITIALIZE CHAT PROVIDER (No SignalR)
-      // ════════════════════════════════════════════════════════
-      if (!_chatInitialized) {
-        debugPrint("[MainMenu] 🔧 Initializing ChatProvider...");
-
-        final chatProv = context.read<ChatProvider>();
-
-        // Initialize ChatProvider (loads rooms from API)
-        final success = await chatProv.initialize(
-          userId: userProvider.customer!.noId,
-          userType: Constants.customer,
-        );
-
-        if (success) {
-          _chatInitialized = true;
-          debugPrint("[MainMenu] ✅ ChatProvider initialized");
-          debugPrint("[MainMenu] ℹ️ Real-time updates via FCM");
-        } else {
-          debugPrint("[MainMenu] ⚠️ ChatProvider initialization failed");
-        }
-      }
-
-      // ════════════════════════════════════════════════════════
-      // ✅ SETUP FCM CALLBACKS
-      // ════════════════════════════════════════════════════════
-      debugPrint("[MainMenu] 🔧 Setting up FCM callbacks...");
+      // ✅ FIX: TIDAK perlu initialize() ChatProvider di sini
+      // Sudah dilakukan di SplashLogicHandler._loadInitialData()
+      // Memanggil ulang tidak akan error (idempotent) tapi tidak perlu
 
       final chatProv = context.read<ChatProvider>();
       final historyOrderProv = context.read<HistoryOrderProvider>();
       final pesananProv = context.read<PesananProvider>();
 
-      // 1. Get sender name for chat notifications
+      // ── Setup FCM callbacks ──────────────────────────────────────
+      debugPrint("[MainMenu] 🔧 Setting up FCM callbacks...");
+
       FCMService.instance.getSenderName = (roomId, senderId) {
         return chatProv.getSenderName(roomId, senderId);
       };
 
-      // 2. Handle chat message from FCM
       FCMService.instance.onChatMessageReceived = (chatMessage) {
         debugPrint("[MainMenu] 📨 Chat message from FCM");
         chatProv.handleMessageFromFCM(chatMessage);
       };
 
-      // 3. Handle order progress from FCM
       FCMService.instance.onProgressReceived = (progressData) {
         debugPrint("[MainMenu] 📊 Order progress from FCM");
-
         final noOrder = progressData.noOrder;
         if (noOrder != null) {
           historyOrderProv.handleProgressFromFCM(progressData);
@@ -274,49 +248,29 @@ class _MainMenuState extends State<MainMenu> {
         }
       };
 
-      // 4. Handle notification tap
       FCMService.instance.onNotificationTapped = (roomId) {
         debugPrint("[MainMenu] 👆 Notification tapped: $roomId");
-
-        // Navigate to chat
         chatProv.trackRoom(roomId);
         chatProv.setActiveRoom(roomId);
         FCMService.instance.setActiveRoom(roomId);
-
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return; // mounted dari _MainMenuState
+          if (!mounted) return;
           navigationProvider.onItemTapped(1, context);
         });
       };
 
       debugPrint("[MainMenu] ✅ FCM callbacks configured");
 
-      // ════════════════════════════════════════════════════════
-      // ✅ LOAD INITIAL DATA
-      // ════════════════════════════════════════════════════════
+      // ── Load initial data ────────────────────────────────────────
       debugPrint("[MainMenu] 📥 Loading initial data...");
-
       await Future.wait([
         context.read<PesananProvider>().loadOrder(context),
         context.read<PortofolioProvider>().loadPortofolio(context),
       ]);
 
-      debugPrint("[MainMenu] ✅ Initial data loaded");
-
-      debugPrint("═══════════════════════════════════════");
       debugPrint("[MainMenu] ✅ INITIALIZATION COMPLETE");
-      debugPrint("═══════════════════════════════════════");
-      debugPrint("[MainMenu] 📱 Chat: FCM-based");
-      debugPrint("[MainMenu] 📊 Order Progress: FCM-based");
-      debugPrint("[MainMenu] 🔔 Notifications: FCM");
-      debugPrint("═══════════════════════════════════════");
     } catch (e, st) {
-      debugPrint("═══════════════════════════════════════");
-      debugPrint("[MainMenu] ❌ INITIALIZATION ERROR");
-      debugPrint("═══════════════════════════════════════");
-      debugPrint("[MainMenu] Error: $e");
-      debugPrint("[MainMenu] Stack: $st");
-      debugPrint("═══════════════════════════════════════");
+      debugPrint("[MainMenu] ❌ INITIALIZATION ERROR: $e\n$st");
     }
   }
 
@@ -364,17 +318,29 @@ class _MainMenuState extends State<MainMenu> {
 
         case 3: // Profile
           final userProvider = context.read<UserProvider>();
-          userProvider.checkLoginGoogle(
-            role: Constants.customer,
-          );
-          LocalStorageService.instance.setActiveCustomer(
-            userProvider.customer!.noId,
-          );
-          if (!mounted) return;
-          final provider = context.read<PortofolioProvider>();
 
-          await provider.refreshLikePortofolio(context);
-          await provider.refreshSavePortofolio(context);
+          // ✅ FIX BUG 2: silent: true — hanya refresh token di background
+          // tanpa trigger Google Sign-In dialog
+          // silent: false (default) → meminta user pilih akun Google lagi!
+          await userProvider.checkLoginGoogle(
+            role: Constants.customer,
+            silent: true, // ← KUNCI: tidak minta pilih akun
+          );
+
+          // Pastikan active customer masih ter-set setelah refresh
+          if (userProvider.customer != null) {
+            LocalStorageService.instance.setActiveCustomer(
+              userProvider.customer!.noId,
+            );
+          }
+
+          if (!mounted) return;
+
+          final portoProvider = context.read<PortofolioProvider>();
+          await Future.wait([
+            portoProvider.refreshLikePortofolio(context),
+            portoProvider.refreshSavePortofolio(context),
+          ]);
           break;
       }
 

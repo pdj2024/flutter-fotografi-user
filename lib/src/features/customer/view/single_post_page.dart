@@ -3,14 +3,17 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/image_post.dart';
 import 'package:mpjnew/src/features/customer/widget/offer_card.dart';
 import 'package:mpjnew/src/features/customer/widget/post_header.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
+import 'package:mpjnew/src/features/customer/widget/shimmer/offer_card_shimmer.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SinglePostPage extends StatefulWidget {
@@ -98,6 +101,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
   // ═══════════════════════════════════════════════════════════
 
   @override
+
   Widget build(BuildContext context) {
     return Consumer2<PortofolioProvider, PaketProvider>(
       builder: (context, portofolioProvider, paketProvider, _) {
@@ -151,16 +155,34 @@ class _SinglePostPageState extends State<SinglePostPage> {
                         likeCount: selectedPortfolio.likes,
                         onLike: isLikeInProgress
                             ? null
-                            : () => portofolioProvider.toggleLike(
+                            : () async {
+                                await portofolioProvider.toggleLike(
                                   context: context,
                                   porto: selectedPortfolio,
-                                ),
+                                  navigateToPost: false,
+                                );
+                                if (context.mounted) {
+                                  final userId =
+                                      context.read<UserProvider>().userId;
+                                  await portofolioProvider
+                                      .silentRefreshSelected(userId: userId);
+                                }
+                              },
                         onSave: isSaveInProgress
                             ? null
-                            : () => portofolioProvider.toggleSave(
+                            : () async {
+                                await portofolioProvider.toggleSave(
                                   context: context,
                                   porto: selectedPortfolio,
-                                ),
+                                  navigateToPost: false,
+                                );
+                                if (context.mounted) {
+                                  final userId =
+                                      context.read<UserProvider>().userId;
+                                  await portofolioProvider
+                                      .silentRefreshSelected(userId: userId);
+                                }
+                              },
                       ),
                       if (selectedPortfolio.caption != null &&
                           selectedPortfolio.caption!.isNotEmpty) ...[
@@ -176,10 +198,7 @@ class _SinglePostPageState extends State<SinglePostPage> {
                 // ── Paket section ─────────────────────────────
                 // ✅ Loading spinner HANYA di sini, bukan seluruh halaman
                 if (_isPaketLoading || paketProvider.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 30),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                  const PaketLoadingShimmer(count: 2)
                 else
                   _buildPaketSection(paketProvider, selectedPortfolio),
 
@@ -438,6 +457,23 @@ class _ExpandableCaptionState extends State<_ExpandableCaption> {
           ],
           const SizedBox(height: 10),
         ],
+      ),
+    );
+  }
+}
+
+class PaketLoadingShimmer extends StatelessWidget {
+  final int count;
+  const PaketLoadingShimmer({super.key, this.count = 2});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      // ✅ SizedBox.expand memberi constraint width ke Shimmer
+      child: Column(
+        children: List.generate(count, (_) => const OfferCardShimmer()),
       ),
     );
   }

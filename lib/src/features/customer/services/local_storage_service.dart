@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
 import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart';
-import 'package:mpjnew/src/data/repositories/hive_chat_repository.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
 /// ═══════════════════════════════════════════════════════════════
@@ -37,8 +36,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 
 class LocalStorageService {
   // ── Singleton ─────────────────────────────────────────────────
-  static final LocalStorageService instance =
-      LocalStorageService._internal();
+  static final LocalStorageService instance = LocalStorageService._internal();
   LocalStorageService._internal();
 
   // ── State ─────────────────────────────────────────────────────
@@ -74,7 +72,8 @@ class LocalStorageService {
   /// Hanya clear active customer ID — data Hive TETAP tersimpan.
   /// Dipanggil dari clearOnLogout() setelah semua data di-clear.
   void clearActiveCustomer() {
-    debugPrint('[CustomerStorage] 🚪 Active customer cleared: $_activeCustomerId');
+    debugPrint(
+        '[CustomerStorage] 🚪 Active customer cleared: $_activeCustomerId');
     _activeCustomerId = null;
   }
 
@@ -116,7 +115,8 @@ class LocalStorageService {
       //    Data chat TETAP di disk untuk referensi history
       //    (berbeda dengan portofolio/pesanan yang di-clear)
       await chatProvider.closeAndClearInMemory();
-      debugPrint('[CustomerStorage]    ✅ Chat boxes closed (data on disk intact)');
+      debugPrint(
+          '[CustomerStorage]    ✅ Chat boxes closed (data on disk intact)');
 
       // 4. Clear active customer
       clearActiveCustomer();
@@ -156,10 +156,6 @@ class LocalStorageService {
     // 2. Pesanan + histories
     await pesananService.clearAll();
     debugPrint('[CustomerStorage]    ✅ Pesanan deleted');
-
-    // 3. Chat: hapus semua box dari disk
-    await HiveChatRepository.deleteAllBoxes();
-    debugPrint('[CustomerStorage]    ✅ Chat boxes deleted from disk');
 
     if (targetId == _activeCustomerId) {
       clearActiveCustomer();

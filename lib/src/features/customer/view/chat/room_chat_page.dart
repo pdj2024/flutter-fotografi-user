@@ -162,10 +162,6 @@ class _RoomChatPageState extends State<RoomChatPage>
     setState(() => _isInitializing = true);
 
     try {
-      debugPrint(
-          '[RoomChat] 🚀 initChat — room: ${widget.roomId}, partner: ${widget.partnerId}');
-
-      // ✅ initChat: set activeRoomPref + trackRoom + markRoomAsRead + loadMessages
       await _roomChatProvider.initChat(
         roomId: widget.roomId,
         partnerId: widget.partnerId,
@@ -173,19 +169,21 @@ class _RoomChatPageState extends State<RoomChatPage>
 
       if (!mounted) return;
 
-      if (_roomChatProvider.activeRoomId == null) {
-        debugPrint('[RoomChat] ⚠️ activeRoomId null setelah initChat');
-        // Tidak throw — mungkin room baru (belum punya roomId)
-      }
-
-      // ✅ Set active room di ChatProvider + FCMService
       if (_roomChatProvider.activeRoomId != null) {
         _chatProvider.setActiveRoom(_roomChatProvider.activeRoomId);
         FCMService.instance.setActiveRoom(_roomChatProvider.activeRoomId);
       }
 
-      // ✅ Ambil stream SEKALI dari RoomChatProvider
-      // roomChatProv.messagesStream sudah di-cache di dalam provider
+      // ✅ FIX: Selalu ambil stream dari provider — termasuk kasus room baru
+      // dengan partnerId. Provider sudah return merged stream (room + pending)
+      // sehingga local echo langsung tampil walau roomId masih kosong.
+      //
+      // SEBELUMNYA: _messagesStream = _roomChatProvider.messagesStream
+      //   → jika activeRoomId null, messagesStream return Stream.empty()
+      //   → UI stuck di empty state sampai FCM datang
+      //
+      // SEKARANG: getter messagesStream sudah handle kasus roomId null/kosong
+      //   dengan mengembalikan pendingStream (watch roomId='')
       _messagesStream = _roomChatProvider.messagesStream;
 
       if (mounted) {
@@ -258,12 +256,31 @@ class _RoomChatPageState extends State<RoomChatPage>
     final chatProv = context.watch<ChatProvider>();
     final roomChatProv = context.watch<RoomChatProvider>();
 
+    if (_hasInitialized && roomChatProv.activeRoomId != null) {
+      // Cek apakah stream perlu di-refresh karena room baru resolved
+      // (dari pending-only stream ke merged stream dengan roomId asli)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Selalu sync stream dari provider — provider sudah handle merge
+        final latestStream = roomChatProv.messagesStream;
+        if (latestStream != _messagesStream) {
+          setState(() {
+            _messagesStream = latestStream;
+          });
+          _chatProvider.setActiveRoom(roomChatProv.activeRoomId);
+          FCMService.instance.setActiveRoom(roomChatProv.activeRoomId);
+          debugPrint('[RoomChat] 🔄 Stream refreshed after room resolved: '
+              '${roomChatProv.activeRoomId}');
+        }
+      });
+    }
+
     // Loading scaffold — hanya untuk case cari/buat room baru
     if (_isInitializing && widget.roomId == null) {
       return _buildLoadingScaffold();
     }
 
-    // No room
+    // No room — keduanya null (bukan case pesan pertama dengan partnerId)
     if (roomChatProv.activeRoomId == null &&
         widget.partnerId == null &&
         widget.roomId == null) {
@@ -388,6 +405,21 @@ class _RoomChatPageState extends State<RoomChatPage>
                     );
                   }
 
+                  // ✅ FIX: _messagesStream null = belum ada room (pesan pertama)
+                  // Terjadi saat: buka dengan partnerId, belum pernah chat,
+                  // stream belum di-assign karena FCM echo belum datang.
+                  // Tampilkan empty state agar user tahu bisa ketik pesan.
+                  if (_messagesStream == null) {
+                    return _buildEmptyState();
+                  }
+
+                  // Stream belum emit (initial state) → skeleton
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return _buildLoadingMessages();
+                  }
+
+                  // Stream emit tapi kosong → empty state (room ada tapi belum ada pesan)
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return _buildEmptyState();
                   }
@@ -408,6 +440,29 @@ class _RoomChatPageState extends State<RoomChatPage>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLoadingMessages() {
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      itemBuilder: (_, index) {
+        // Alternating kiri-kanan seperti chat sungguhan
+        final isMe = index % 2 == 0;
+        return Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ShimmerPlaceholder(
+              width: isMe ? 200 : 250,
+              height: 48,
+              radius: 12,
+            ),
+          ),
+        );
+      },
     );
   }
 

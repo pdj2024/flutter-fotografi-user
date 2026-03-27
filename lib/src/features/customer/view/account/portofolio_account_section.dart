@@ -6,6 +6,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
+import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,7 @@ class PortofolioAccountSection extends StatefulWidget {
 class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
     with AutomaticKeepAliveClientMixin {
   bool get _isLike => widget.data == 'like';
+  bool _hasLoaded = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -39,11 +41,45 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
 
   Future<void> _load() async {
     if (!mounted) return;
+    _hasLoaded = true;
     final provider = context.read<PortofolioProvider>();
+
+    // ✅ FIX: Reset list sebelum load agar tidak flash data lama
+    // Ini handle edge case jika clearCustomerData belum dipanggil
+    // (misal: app restart tanpa logout)
     if (_isLike) {
       await provider.loadLikedPortofolio(context: context, syncFromApi: true);
     } else {
       await provider.loadSavedPortofolio(context: context, syncFromApi: true);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Cek apakah perlu load ulang — hanya jika:
+    // 1. Sudah pernah mount (bukan first build)
+    // 2. List masih kosong (data belum ada)
+    // 3. User sudah login (userId tidak null)
+    if (_hasLoaded) {
+      final userProvider = context.read<UserProvider>();
+      if (userProvider.userId == null) return;
+
+      final portoProvider = context.read<PortofolioProvider>();
+      final isEmpty = _isLike
+          ? portoProvider.portofolioLikelist.isEmpty
+          : portoProvider.portofolioSaveList.isEmpty;
+
+      // Jika kosong dan tidak sedang loading, trigger load
+      final isLoading =
+          _isLike ? portoProvider.isLoadingLike : portoProvider.isLoadingSave;
+
+      if (isEmpty && !isLoading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _load();
+        });
+      }
     }
   }
 
@@ -162,6 +198,7 @@ class _PortoGridItem extends StatelessWidget {
               const SinglePostPage(),
               hrsLogin: true,
               targetTabIndex: 3,
+              noIdPortofolio: porto.noId,
             );
       },
       child: ClipRRect(

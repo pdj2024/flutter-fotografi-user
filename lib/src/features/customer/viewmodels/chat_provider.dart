@@ -12,8 +12,6 @@ import 'package:mpjnew/src/features/customer/view/chat/data/service/chat_api_ser
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ─── Embedded model helpers ─────────────────────────────────────
-// Import sesuai path project customer
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart'
     show EmbeddedPaket, EmbeddedPenawaran, EmbeddedPesanan;
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
@@ -23,22 +21,18 @@ import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 
-/// ✅ ChatProvider — Customer Edition (Isar)
+/// ChatProvider — Customer Edition (Isar Offline-First)
 ///
-/// Migrasi dari Hive/in-memory ke Isar:
-///   - Stream pesan & room: Isar native (broadcast, reactive)
-///   - Penyimpanan: ChatStorageService (satu jalur untuk FCM + API)
-///   - Sync: ChatSyncService (incremental, background)
-///   - Tidak ada in-memory list pesan — Isar yang jadi source of truth
-///   - Pagination via _displayedCount (sama dengan vendor)
+/// Arsitektur:
+///   UI → ChatProvider → ChatSyncService → ChatIsarService (source of truth)
+///                    ↗ ChatStorageService (FCM bridge)
+///   FCM → ChatStorageService → ChatIsarService → stream → UI (otomatis)
 ///
-/// Kompatibilitas dengan kode lama:
-///   - getMessagesStream(roomId) → Isar stream (bukan StreamController manual)
-///   - loadMessages() → tetap ada, delegasi ke _sync
-///   - sendMessage() → optimistic via ChatSyncService
-///   - markRoomAsRead() → via ChatStorageService
-///   - rooms getter → dari Isar stream subscription
-///   - totalUnreadCount → dari rooms
+/// Key principles:
+///   - Isar stream = source of truth, UI tidak perlu notifyListeners manual
+///   - ChatProvider hanya expose stream + action methods
+///   - Semua write ke Isar lewat ChatStorageService atau ChatSyncService
+///   - notifyListeners() hanya untuk state non-Isar (isLoading, rooms list cache)
 class ChatProvider extends ChangeNotifier {
   final ChatApiService _apiService = ChatApiService();
   final ChatIsarService _isar = ChatIsarService.instance;
@@ -84,7 +78,6 @@ class ChatProvider extends ChangeNotifier {
   String? get userType => _userType;
   String? get error => _error;
   String? get activeRoomId => _activeRoomId;
-
   List<RoomChatModel> get rooms => _rooms;
 
   RoomChatModel? getRoom(String roomId) =>
@@ -103,11 +96,12 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // =========================================
-  // STREAMS
+  // STREAMS — Isar native (broadcast, reactive)
   // =========================================
 
-  /// ✅ Isar native stream — reactive, broadcast, tidak perlu StreamController.
-  /// WAJIB di-cache di caller (RoomChatPage.initState) — jangan buat ulang di build().
+  /// Stream pesan untuk room tertentu.
+  /// WAJIB di-cache di caller (initState) — jangan buat ulang di build().
+  /// Menggunakan pagination via _displayedCount.
   Stream<List<ChatMessageEntity>> getMessagesStream(String roomId) {
     _displayedCount.putIfAbsent(roomId, () => _initialDisplayCount);
 
@@ -118,7 +112,7 @@ class ChatProvider extends ChangeNotifier {
     });
   }
 
-  /// Stream room list dari Isar (untuk RoomListPage)
+  /// Stream room list (untuk ChatListPage).
   Stream<List<RoomChatEntity>> get roomsStream => _isar.watchAllRooms();
 
   // =========================================
@@ -145,14 +139,12 @@ class ChatProvider extends ChangeNotifier {
     _currentUserId = userId;
     _userType = userType;
 
-    // Simpan userId ke SharedPreferences (untuk background drain)
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_id', userId);
 
-    // Set current user di ChatStorageService
     _storage.setCurrentUser(userId);
 
-    // Inject ChatProvider ke FCMService agar handler bisa langsung panggil ini
+    // Inject ChatProvider ke FCMService
     FCMService.instance.setChatProvider(this);
 
     try {
@@ -167,7 +159,7 @@ class ChatProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // Load rooms dari API di background
+      // Sync rooms dari API di background
       _backgroundSyncRooms();
 
       return true;
@@ -178,6 +170,30 @@ class ChatProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  void _drainPendingRoomFetchIfNeeded() {
+    if (_currentUserId == null) return;
+
+    Future(() async {
+      try {
+        final pendingIds = await ChatStorageService.getPendingRoomFetchIds();
+        if (pendingIds.isEmpty) return;
+
+        debugPrint(
+            '[ChatProvider] 🔄 ${pendingIds.length} pending room(s) to fetch...');
+
+        await ChatStorageService.instance.drainPendingRoomFetch(
+          userId: _currentUserId!,
+        );
+
+        // Isar stream otomatis emit setelah rooms + messages di-save
+        // ChatListPage akan rebuild dengan data lengkap (nama, avatar vendor)
+        debugPrint('[ChatProvider] ✅ Pending room fetch done');
+      } catch (e) {
+        debugPrint('[ChatProvider] ⚠️ _drainPendingRoomFetchIfNeeded: $e');
+      }
+    });
   }
 
   void _subscribeToRoomStream() {
@@ -216,14 +232,13 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_id');
 
-    // Bersihkan Isar data saat logout
     await _storage.clearAll();
     _sync.stopConnectivityListener();
+
     debugPrint('[ChatProvider] ✅ Cleared');
     notifyListeners();
   }
 
-  /// Alias untuk kompatibilitas dengan kode lama
   Future<void> closeAndClearInMemory() => clearAll();
   Future<void> clearInMemory() => clearAll();
 
@@ -232,52 +247,41 @@ class ChatProvider extends ChangeNotifier {
   // =========================================
 
   /// Entry point untuk pesan dari FCM (foreground).
-  /// Dipanggil dari FCMService.instance._chatHandler.onMessageReceived.
+  /// Dipanggil dari FCMService via ChatNotificationHandler.
   ///
-  /// ✅ Delegasi ke ChatStorageService — satu jalur untuk semua pesan.
-  /// ✅ Isar stream otomatis notify UI — tidak perlu notifyListeners manual.
+  /// Delegasi ke ChatStorageService → satu jalur untuk semua pesan.
+  /// Isar stream otomatis notify UI → tidak perlu notifyListeners manual.
   Future<void> handleMessageFromFCM(ChatModel message) async {
-    if (!_isInitialized || _currentUserId == null) {
-      debugPrint('[ChatProvider] ⚠️ Not initialized, skip FCM');
-      return;
-    }
-
-    debugPrint('[ChatProvider] 📨 FCM: ${message.messageId} | '
-        'sender: ${message.senderId}');
-
+    debugPrint(
+        '[ChatProvider] 📨 FCM: ${message.messageId} | sender: ${message.senderId}');
+ 
     try {
       final saved = await _storage.persistForegroundMessage(message);
-
-      // Notify untuk pesan dari orang lain
-      if (message.senderId != _currentUserId) {
-        onNewMessageFromOther?.call(message);
-      }
-
-      // ✅ FIX: Trigger enrich jika punya embedded data
-      // Dipanggil regardless saved status karena:
-      // - saved=true: pesan baru, embedded belum ada di Isar
-      // - saved=false: own echo confirmed, embedded mungkin belum ada
-      //   (confirmOptimistic hanya replace messageId, tidak fetch embedded)
-      final hasEmbedded = (message.idPaket?.isNotEmpty == true) ||
-          (message.noPenawaran?.isNotEmpty == true) ||
-          (message.noInvoice?.isNotEmpty == true);
-
-      if (hasEmbedded) {
-        // Kecil kemungkinan messageId masih local- di sini, tapi guard saja
-        if (!message.messageId.startsWith('local-')) {
-          _triggerEmbeddedEnrichForMessage(message);
+ 
+      if (saved) {
+        if (message.senderId != _currentUserId) {
+          onNewMessageFromOther?.call(message);
+        }
+ 
+        final hasEmbedded = (message.idPaket?.isNotEmpty == true) ||
+            (message.noPenawaran?.isNotEmpty == true) ||
+            (message.noInvoice?.isNotEmpty == true);
+ 
+        if (hasEmbedded) {
+          _triggerEmbeddedEnrich(message);
         }
       }
+ 
+      // ✅ Cek pending room fetch setiap kali FCM masuk
+      // Kasus: pesan dari vendor baru → _handleIncoming buat minimal room
+      // → enqueue roomId → drain di sini → fetch data lengkap → Isar update
+      _drainPendingRoomFetchIfNeeded();
     } catch (e, st) {
       debugPrint('[ChatProvider] ❌ handleMessageFromFCM: $e\n$st');
     }
   }
 
-  void triggerEmbeddedEnrichForMessage(ChatModel message) {
-    _triggerEmbeddedEnrichForMessage(message);
-  }
-
-  void _triggerEmbeddedEnrichForMessage(ChatModel message) {
+  void _triggerEmbeddedEnrich(ChatModel message) {
     Future(() async {
       try {
         final entity = await _isar.getMessageById(message.messageId);
@@ -287,8 +291,6 @@ class ChatProvider extends ChangeNotifier {
             ? await _loadPaketModel(message.idPaket!)
             : null;
 
-        // ── Prioritas: noInvoice (pesanan) > noPenawaran ────────────
-        // Jika sudah ada noInvoice, skip fetch penawaran.
         final hasPesanan = message.noInvoice?.isNotEmpty == true;
         final pesanan =
             hasPesanan ? await _loadPesananModel(message.noInvoice!) : null;
@@ -305,7 +307,6 @@ class ChatProvider extends ChangeNotifier {
           await _isar.saveMessage(entity.copyWith(
             paket:
                 paket != null ? EmbeddedPaket.fromModel(paket) : entity.paket,
-            // Jika hasPesanan, clear embedded penawaran agar tidak tampil dobel
             penawaran: hasPesanan
                 ? null
                 : (penawaran != null
@@ -319,7 +320,7 @@ class ChatProvider extends ChangeNotifier {
               '[ChatProvider] ✅ FCM message enriched: ${message.messageId}');
         }
       } catch (e) {
-        debugPrint('[ChatProvider] ⚠️ _triggerEmbeddedEnrichForMessage: $e');
+        debugPrint('[ChatProvider] ⚠️ _triggerEmbeddedEnrich: $e');
       }
     });
   }
@@ -330,10 +331,7 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> updateMessageStatus(String messageId, String status) async {
     try {
-      await _sync.updateMessageStatus(
-        messageId: messageId,
-        newStatus: status,
-      );
+      await _sync.updateMessageStatus(messageId: messageId, newStatus: status);
     } catch (e) {
       debugPrint('[ChatProvider] ❌ updateMessageStatus: $e');
     }
@@ -407,6 +405,10 @@ class ChatProvider extends ChangeNotifier {
   // MESSAGES MANAGEMENT
   // =========================================
 
+  /// Load messages untuk room.
+  ///
+  /// forceRefresh=false (default): tampilkan cache dulu + background sync
+  /// forceRefresh=true: fetch dari API dan REPLACE data lokal
   Future<List<ChatModel>> loadMessages(
     String roomId, {
     bool forceRefresh = false,
@@ -424,9 +426,10 @@ class ChatProvider extends ChangeNotifier {
         roomType: roomInfo?.roomType ?? 'direct',
         userIds: roomInfo?.userIds ?? [],
         limit: _initialDisplayCount,
-        forceRefresh: forceRefresh, // ✅ FIX: teruskan ke sync service
+        forceRefresh: forceRefresh,
       );
 
+      // Mark room sebagai read setelah load
       await markRoomAsRead(roomId);
       return messages;
     } catch (e) {
@@ -437,7 +440,6 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Pagination — tambah jumlah pesan yang ditampilkan
   bool loadMoreDisplayedMessages(String roomId) {
     final current = _displayedCount[roomId] ?? _initialDisplayCount;
     _displayedCount[roomId] = current + _loadMoreIncrement;
@@ -448,9 +450,9 @@ class ChatProvider extends ChangeNotifier {
   int getTotalMessagesCount(String roomId) => _displayedCount[roomId] ?? 0;
   int getDisplayedMessagesCount(String roomId) =>
       _displayedCount[roomId] ?? _initialDisplayCount;
-  bool hasMoreToDisplay(String roomId) => true; // Isar stream handle ini
+  bool hasMoreToDisplay(String roomId) => true;
 
-  /// Incremental sync dari API — dipanggil saat app resume
+  /// Incremental sync (app resume) — UPSERT, jangan REPLACE
   Future<void> syncRoomFromHiveAndNotify(String roomId) async {
     if (_currentUserId == null) return;
     final roomInfo = getRoom(roomId);
@@ -490,6 +492,9 @@ class ChatProvider extends ChangeNotifier {
       jenisPesan = 'penawaran';
     }
 
+    // Local echo dengan status "sent"
+    // Status ini benar: user sudah "mengirim" dari sisi UI
+    // Akan di-replace dengan messageId dari server saat FCM echo diterima
     final localMessage = ChatModel(
       messageId: localId,
       roomId: roomId,
@@ -500,7 +505,7 @@ class ChatProvider extends ChangeNotifier {
       idPaket: idPaket,
       noPenawaran: noPenawaran,
       status: 'aktif',
-      sendStatus: 'sent', // ✅ Langsung sent — tidak perlu update status lagi
+      sendStatus: 'sent',
       roomType: 'direct',
       sentAt: now,
       userIds: userIds,
@@ -512,8 +517,6 @@ class ChatProvider extends ChangeNotifier {
       readAt: null,
     );
 
-    // ChatSyncService handle: optimistic save → API → replace echo
-    // Isar stream otomatis update UI di setiap langkah
     final result = await _sync.sendMessage(message: localMessage);
     return result != null;
   }
@@ -527,7 +530,7 @@ class ChatProvider extends ChangeNotifier {
       message: entity.message,
       idPaket: entity.paket?.noId,
       noPenawaran: entity.penawaran?.noId,
-      userIds: entity.receiverIds ?? [],
+      userIds: entity.receiverIds,
     );
   }
 
@@ -544,7 +547,6 @@ class ChatProvider extends ChangeNotifier {
     if (_currentUserId == null) return;
     try {
       await _storage.markRoomAsRead(roomId);
-      // Isar stream otomatis update UI
     } catch (e) {
       debugPrint('[ChatProvider] ❌ markRoomAsRead: $e');
     }
@@ -619,161 +621,14 @@ class ChatProvider extends ChangeNotifier {
     }).catchError((e) => debugPrint('[ChatProvider] ⚠️ Sync: $e'));
   }
 
-  void _backgroundEnrichMessage(ChatModel message) {
-    Future(() async {
-      try {
-        final entity = await _isar.getMessageById(message.messageId);
-        if (entity == null) return;
+  // =========================================
+  // UTILITIES
+  // =========================================
 
-        bool changed = false;
-        EmbeddedPaket? paket = entity.paket;
-        EmbeddedPenawaran? penawaran = entity.penawaran;
-        EmbeddedPesanan? pesanan = entity.pesanan;
-
-        if (message.idPaket?.isNotEmpty == true && entity.paket == null) {
-          final p = await _loadPaketModel(message.idPaket!);
-          if (p != null) {
-            paket = EmbeddedPaket.fromModel(p);
-            changed = true;
-          }
-        }
-        if (message.noPenawaran?.isNotEmpty == true &&
-            entity.penawaran == null) {
-          final p = await _loadPenawaranModel(message.noPenawaran!);
-          if (p != null) {
-            penawaran = EmbeddedPenawaran.fromModel(p);
-            changed = true;
-          }
-        }
-        if (message.noInvoice?.isNotEmpty == true && entity.pesanan == null) {
-          final p = await _loadPesananModel(message.noInvoice!);
-          if (p != null) {
-            pesanan = EmbeddedPesanan.fromModel(p);
-            changed = true;
-          }
-        }
-
-        if (changed) {
-          await _isar.saveMessage(entity.copyWith(
-              paket: paket, penawaran: penawaran, pesanan: pesanan));
-        }
-      } catch (e) {
-        debugPrint('[ChatProvider] ⚠️ Enrich error: $e');
-      }
-    });
-  }
-
-  void _backgroundEnrichMessages(List<ChatModel> messages) {
-    if (messages.isEmpty) return;
-    Future(() async {
-      try {
-        final needsEnrich = messages
-            .where((m) =>
-                m.idPaket?.isNotEmpty == true ||
-                m.noPenawaran?.isNotEmpty == true ||
-                m.noInvoice?.isNotEmpty == true)
-            .toList();
-        if (needsEnrich.isEmpty) return;
-
-        final paketIds = needsEnrich
-            .where((m) => m.idPaket?.isNotEmpty == true)
-            .map((m) => m.idPaket!)
-            .toSet()
-            .toList();
-
-        // ── Prioritas: noInvoice (pesanan) > noPenawaran ────────────
-        // Hanya fetch penawaran untuk pesan yang BELUM jadi pesanan.
-        final penawaranIds = needsEnrich
-            .where((m) =>
-                m.noInvoice?.isEmpty != false && // tidak punya noInvoice
-                m.noPenawaran?.isNotEmpty == true)
-            .map((m) => m.noPenawaran!)
-            .toSet()
-            .toList();
-        final pesananIds = needsEnrich
-            .where((m) => m.noInvoice?.isNotEmpty == true)
-            .map((m) => m.noInvoice!)
-            .toSet()
-            .toList();
-
-        final paketMap = await _batchFetchPaket(paketIds);
-        final penawaranMap = await _batchFetchPenawaran(penawaranIds);
-        final pesananMap = await _batchFetchPesanan(pesananIds);
-
-        for (final m in needsEnrich) {
-          final entity = await _isar.getMessageById(m.messageId);
-          if (entity == null) continue;
-
-          final hasPesanan = m.noInvoice?.isNotEmpty == true;
-          final paket = paketMap[m.idPaket];
-          // Jika sudah ada pesanan, skip penawaran
-          final penawaran = (!hasPesanan) ? penawaranMap[m.noPenawaran] : null;
-          final pesanan = pesananMap[m.noInvoice];
-
-          final needsUpdate = (paket != null && entity.paket == null) ||
-              (penawaran != null && entity.penawaran == null) ||
-              (pesanan != null && entity.pesanan == null);
-
-          if (needsUpdate) {
-            await _isar.saveMessage(entity.copyWith(
-              paket:
-                  paket != null ? EmbeddedPaket.fromModel(paket) : entity.paket,
-              // Jika hasPesanan, clear embedded penawaran agar tidak tampil dobel
-              penawaran: hasPesanan
-                  ? null
-                  : (penawaran != null
-                      ? EmbeddedPenawaran.fromModel(penawaran)
-                      : entity.penawaran),
-              pesanan: pesanan != null
-                  ? EmbeddedPesanan.fromModel(pesanan)
-                  : entity.pesanan,
-            ));
-          }
-        }
-        debugPrint('[ChatProvider] ✅ Batch enrich done');
-      } catch (e) {
-        debugPrint('[ChatProvider] ⚠️ Batch enrich: $e');
-      }
-    });
-  }
-
-  // ── Fetch helpers ─────────────────────────────────────────────
-
-  Future<Map<String, PaketModel>> _batchFetchPaket(List<String> ids) async {
-    if (ids.isEmpty) return {};
-    try {
-      final list = await PaketService().getAll(idList: ids);
-      return {for (var p in list) p.no_id: p};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<Map<String, PenawaranModel>> _batchFetchPenawaran(
-      List<String> ids) async {
-    if (ids.isEmpty) return {};
-    try {
-      final list = await PenawaranService().getAll(idList: ids);
-      return {for (var p in list) p.noId: p};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<Map<String, PesananModel>> _batchFetchPesanan(List<String> ids) async {
-    if (ids.isEmpty) return {};
-    try {
-      final result = <String, PesananModel>{};
-      await Future.wait(ids.map((id) async {
-        try {
-          final list =
-              await PesananService().getAll(noBukti: id, status: 'aktif');
-          if (list.isNotEmpty) result[id] = list.first;
-        } catch (_) {}
-      }));
-      return result;
-    } catch (_) {
-      return {};
+  void _setLoading(bool value) {
+    if (_isLoading != value) {
+      _isLoading = value;
+      notifyListeners();
     }
   }
 
@@ -800,17 +655,6 @@ class ChatProvider extends ChangeNotifier {
       return list.isNotEmpty ? list.first : null;
     } catch (_) {
       return null;
-    }
-  }
-
-  // =========================================
-  // UTILITIES
-  // =========================================
-
-  void _setLoading(bool value) {
-    if (_isLoading != value) {
-      _isLoading = value;
-      notifyListeners();
     }
   }
 

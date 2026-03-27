@@ -1,45 +1,28 @@
 import 'package:isar/isar.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
-// Jalankan: dart run build_runner build
 part 'room_chat_entity.g.dart';
 
-/// Isar collection untuk room chat.
-///
-/// Migrasi dari Hive (typeId: 7) ke Isar.
-/// Perubahan utama:
-/// - `id` (int, auto-increment) sebagai primary key Isar
-/// - `roomId` (String) sebagai unique business key
-/// - `tipeUserLawan` ditambahkan (ada di RoomChatModel tapi tidak di Hive entity sebelumnya)
 @collection
 class RoomChatEntity {
-  /// Primary key Isar (auto-increment). Tidak perlu di-set manual.
   Id id = Isar.autoIncrement;
 
-  /// Business key unik — gunakan ini untuk lookup by room ID.
   @Index(unique: true, replace: true)
   late String roomId;
 
-  late String roomType; // direct | group
+  late String roomType;
 
   String? usernameLawan;
-
   late String idLawan;
-
   String? idMediaLawan;
-
-  /// ✅ Field ini ada di RoomChatModel tapi hilang di Hive entity lama — ditambahkan kembali
   String? tipeUserLawan;
 
   late DateTime lastMessageAt;
-
   late String lastMessage;
 
   int unread = 0;
-
   List<String> userIds = [];
 
-  // ✅ Tracking message status (sama seperti Hive entity lama)
   int countStatusSent = 0;
   List<String> listIdMessageSent = [];
   int countStatusReceived = 0;
@@ -61,9 +44,7 @@ class RoomChatEntity {
   @ignore
   String get previewMessage {
     if (lastMessage.isEmpty) return 'Belum ada pesan';
-    if (lastMessage.length > 50) {
-      return '${lastMessage.substring(0, 50)}...';
-    }
+    if (lastMessage.length > 50) return '${lastMessage.substring(0, 50)}...';
     return lastMessage;
   }
 
@@ -82,7 +63,6 @@ class RoomChatEntity {
 
   RoomChatEntity();
 
-  /// Buat dari RoomChatModel
   factory RoomChatEntity.fromRoomChatModel(RoomChatModel model) {
     return RoomChatEntity()
       ..roomId = model.roomId
@@ -105,7 +85,6 @@ class RoomChatEntity {
   // CONVERTERS
   // =========================================
 
-  /// Convert ke RoomChatModel untuk kompatibilitas UI/BLoC
   RoomChatModel toRoomChatModel() {
     return RoomChatModel(
       roomId: roomId,
@@ -126,8 +105,24 @@ class RoomChatEntity {
     );
   }
 
-  /// Copy with
+  /// ✅ FIX: copyWith support semua field.
+  ///
+  /// Field yang ditambahkan vs versi lama:
+  ///   - usernameLawan, idMediaLawan: untuk update nama/avatar dari API
+  ///   - userIds, idLawan, roomType, tipeUserLawan: data lengkap dari API
+  ///
+  /// Diperlukan saat drainPendingRoomFetch update minimal room
+  /// (yang hanya punya roomId + idLawan + preview dari FCM)
+  /// dengan data lengkap dari API response.
   RoomChatEntity copyWith({
+    // Field dari API (sebelumnya tidak ada di copyWith)
+    String? roomType,
+    String? usernameLawan,
+    String? idLawan,
+    String? idMediaLawan,
+    String? tipeUserLawan,
+    List<String>? userIds,
+    // Field yang sudah ada sebelumnya
     String? lastMessage,
     DateTime? lastMessageAt,
     int? unread,
@@ -139,15 +134,15 @@ class RoomChatEntity {
     return RoomChatEntity()
       ..id = id
       ..roomId = roomId
-      ..roomType = roomType
-      ..usernameLawan = usernameLawan
-      ..idLawan = idLawan
-      ..idMediaLawan = idMediaLawan
-      ..tipeUserLawan = tipeUserLawan
+      ..roomType = roomType ?? this.roomType
+      ..usernameLawan = usernameLawan ?? this.usernameLawan
+      ..idLawan = idLawan ?? this.idLawan
+      ..idMediaLawan = idMediaLawan ?? this.idMediaLawan
+      ..tipeUserLawan = tipeUserLawan ?? this.tipeUserLawan
       ..lastMessageAt = lastMessageAt ?? this.lastMessageAt
       ..lastMessage = lastMessage ?? this.lastMessage
       ..unread = unread ?? this.unread
-      ..userIds = List<String>.from(userIds)
+      ..userIds = userIds ?? List<String>.from(this.userIds)
       ..countStatusSent = countStatusSent ?? this.countStatusSent
       ..listIdMessageSent =
           listIdMessageSent ?? List<String>.from(this.listIdMessageSent)

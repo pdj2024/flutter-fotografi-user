@@ -8,6 +8,7 @@ import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -151,6 +152,10 @@ class NavigationProvider with ChangeNotifier {
       final userProv = context.read<UserProvider>();
       final chatProvider = context.read<ChatProvider>();
 
+      final portoProvider = context.read<PortofolioProvider>();
+      portoProvider.clearCustomerData(); // sync, langsung clear in-memory
+      debugPrint("[handleLogout] ✅ PortofolioProvider cleared");
+
       // ✅ 1. Clear semua local storage customer
       //    - Portofolio liked + saved: Hive di-clear + file media dihapus
       //    - Pesanan + history: Hive di-clear
@@ -239,8 +244,10 @@ class NavigationProvider with ChangeNotifier {
     String targetPage = 'Home',
     String searchPageArg = '',
     PageTransitionType transitionType = PageTransitionType.slideRight,
+    // ✅ TAMBAH: pass identifiers agar UserLogin bisa restore halaman yang benar
+    String? noIdPortofolio,
+    String? noIdVendor,
   }) async {
-    // ✅ Halaman public — skip auth check sepenuhnya
     const publicPages = {'SearchPage'};
     final isPublic = publicPages.contains(targetPage) || !hrsLogin;
 
@@ -256,6 +263,10 @@ class NavigationProvider with ChangeNotifier {
                 'targetPage': targetPage,
                 'tabIndex': targetTabIndex,
                 'searchPageArg': searchPageArg,
+                // ✅ FIX: pass noIdPortofolio dan noIdVendor
+                // agar UserLogin bisa restore halaman yang benar setelah login
+                if (noIdPortofolio != null) 'noIdPortofolio': noIdPortofolio,
+                if (noIdVendor != null) 'noIdVendor': noIdVendor,
               }),
             ),
           );

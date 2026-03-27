@@ -25,7 +25,6 @@ class Constants {
 
   // ── URL ───────────────────────────────────────────────────────
   static const String baseUrl = 'https://fotoapi1.padajaya.biz.id';
-  static const String baseUrlHub = 'https://fotoapi2.padajaya.biz.id';
 
   // ── Play Store ────────────────────────────────────────────────
   /// URL Play Store untuk halaman update app customer
