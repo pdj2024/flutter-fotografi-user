@@ -55,11 +55,11 @@ import 'src/core/routing/navigation_provider.dart';
 var companyNameGlobal = 'PT. ABC';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BACKGROUND HANDLER — TOP-LEVEL (wajib, bukan method class)
+// BACKGROUND HANDLER — TOP-LEVEL (wajib public, bukan method class)
 //
-// ✅ Nama fungsi diperbarui dari firebaseMessagingBackgroundHandler
-//    Hanya boleh akses: SharedPreferences, http, Isar (dengan init manual)
-//    TIDAK BOLEH akses: Provider, BuildContext, widget tree
+// ⚠️  Berjalan di background isolate terpisah.
+//     BOLEH akses  : SharedPreferences, http (via ChatStorageService.enqueue*)
+//     TIDAK BOLEH  : Provider, BuildContext, Isar (main isolate only)
 // ═══════════════════════════════════════════════════════════════════════════
 
 @pragma('vm:entry-point')
@@ -73,10 +73,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final type = NotificationType.fromString(message.data['type']);
 
     if (type == NotificationType.chat) {
-      // ✅ Enqueue ke SharedPreferences + HTTP update status → "received"
-      // Isar diinisialisasi otomatis di dalam ChatStorageService.enqueueBackgroundMessage
-      final success =
-          await ChatStorageService.enqueueBackgroundMessage(message);
+      // Enqueue ke SharedPreferences + kirim status "received" ke API
+      final success = await ChatStorageService.enqueueBackgroundMessage(message);
 
       debugPrint(success
           ? '[BGHandler] ✅ Chat enqueued + received status sent'
@@ -115,7 +113,6 @@ void main() async {
     debugPrint('✅ Background message handler registered');
 
     // ── 2. Isar ────────────────────────────────────────────────────────────
-    // Harus sebelum Hive dan sebelum runApp
     await ChatIsarService.instance.initialize();
     debugPrint('✅ Isar initialized');
 
@@ -123,19 +120,12 @@ void main() async {
     await Hive.initFlutter();
     debugPrint('✅ Hive initialized');
 
-    // typeId 0 (ChatMessage) dan 7 (RoomChat) sudah pindah ke Isar
-    // Adapter Hive yang tersisa: media, paket, penawaran, pesanan, portofolio
-    if (!Hive.isAdapterRegistered(1))
-      Hive.registerAdapter(MediaCacheStatusAdapter());
-    if (!Hive.isAdapterRegistered(2))
-      Hive.registerAdapter(MediaUrlModelAdapter());
+    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MediaCacheStatusAdapter());
+    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(MediaUrlModelAdapter());
     if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(PaketModelAdapter());
-    if (!Hive.isAdapterRegistered(4))
-      Hive.registerAdapter(PenawaranModelAdapter());
-    if (!Hive.isAdapterRegistered(5))
-      Hive.registerAdapter(PesananModelAdapter());
-    if (!Hive.isAdapterRegistered(6))
-      Hive.registerAdapter(PortofolioModelAdapter());
+    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(PenawaranModelAdapter());
+    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(PesananModelAdapter());
+    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(PortofolioModelAdapter());
     debugPrint('✅ Hive adapters registered');
 
     // ── 4. Local services ──────────────────────────────────────────────────
@@ -147,16 +137,15 @@ void main() async {
     await authService.initialize();
     final userId = authService.userId;
     if (userId != null) {
-      // Set current user agar ChatStorageService bisa bedakan
-      // pesan sendiri (echo) vs pesan masuk (incoming)
       ChatStorageService.instance.setCurrentUser(userId);
       debugPrint('✅ ChatStorageService user set: $userId');
     }
     debugPrint('✅ AuthService initialized');
 
-    // ── 6. FCM ─────────────────────────────────────────────────────────────
-    // ✅ TIDAK perlu FcmChatProvider lagi
-    // FCMService akan di-inject ChatProvider setelah initialize() via setChatProvider()
+    // ── 6. FCM — init permission + local notifications + listeners ─────────
+    // ✅ TIDAK inject provider di sini.
+    //    Provider di-inject setelah widget tree siap via MyApp._setupFCMCallbacks()
+    //    yang dipanggil lewat addPostFrameCallback — satu titik, terjamin.
     await FCMService.instance.initialize();
     debugPrint('✅ FCM Service initialized');
 
@@ -167,9 +156,6 @@ void main() async {
     runApp(
       MultiProvider(
         providers: [
-          // ✅ HAPUS: ChangeNotifierProvider.value(value: fcmChatProvider)
-          // FcmChatProvider sudah tidak dipakai
-
           ChangeNotifierProvider(
             create: (_) {
               final provider = UserProvider(
@@ -182,9 +168,7 @@ void main() async {
           ),
           ChangeNotifierProvider(create: (_) => NavigationProvider()),
           ChangeNotifierProvider(
-            create: (_) => PortofolioProvider(
-              portofolioService: PortofolioService(),
-            ),
+            create: (_) => PortofolioProvider(portofolioService: PortofolioService()),
           ),
           ChangeNotifierProvider(
             create: (_) => KategoriProvider(KategoriService()),
@@ -197,9 +181,7 @@ void main() async {
             create: (_) => VendorProvider(service: VendorService()),
           ),
           ChangeNotifierProvider(
-            create: (_) => PenawaranProvider(
-              penawaranService: PenawaranService(),
-            ),
+            create: (_) => PenawaranProvider(penawaranService: PenawaranService()),
           ),
           ChangeNotifierProvider(
             create: (_) => PesananProvider(
@@ -208,12 +190,10 @@ void main() async {
             ),
           ),
 
-          // ✅ ChatProvider — Isar offline-first edition
-          // FCMService.setChatProvider() dipanggil otomatis di ChatProvider.initialize()
+          // ✅ ChatProvider — Isar offline-first
           ChangeNotifierProvider(create: (_) => ChatProvider()),
 
-          // ✅ RoomChatProvider — hanya butuh ChatProvider sekarang
-          // FcmChatProvider sudah dihapus dari dependency
+          // ✅ RoomChatProvider — hanya depends on ChatProvider
           ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
             create: (context) => RoomChatProvider(
               chatProv: context.read<ChatProvider>(),
@@ -254,6 +234,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     _setupSessionExpiredHandler();
 
+    // ✅ SATU-SATUNYA titik inject provider ke FCMService.
+    //    addPostFrameCallback menjamin widget tree + Provider sudah ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupFCMCallbacks(context);
     });
@@ -291,50 +273,43 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // ─── FCM Callbacks ────────────────────────────────────────────────────────
+  // ─── FCM Callbacks — SATU titik inject, dipanggil sekali setelah build ──
 
   void _setupFCMCallbacks(BuildContext context) {
     debugPrint('[Main] 🔧 Setting up FCM callbacks...');
 
     try {
-      // FCMService.instance.setAppContext(context);
-
       final chatProvider = context.read<ChatProvider>();
       final historyOrderProvider = context.read<HistoryOrderProvider>();
       final pesananProvider = context.read<PesananProvider>();
       final navigationProvider = context.read<NavigationProvider>();
 
-      // ── Inject providers ke FCMService ──────────────────────────────────
-      //
-      // ✅ setChatProvider() akan rebuild ChatNotificationHandler agar
-      //    onMessageReceived → ChatProvider.handleMessageFromFCM (Isar path)
-      //    onUpdateMessageStatus → ChatProvider.updateMessageStatus (API + Isar)
+      // ── Inject semua provider ke FCMService ─────────────────────────────
+      // Urutan: inject DULU, baru callbacks
       FCMService.instance.setChatProvider(chatProvider);
       FCMService.instance.setHistoryOrderProvider(historyOrderProvider);
       FCMService.instance.setPesananProvider(pesananProvider);
 
-      // ✅ getSenderName — nama pengirim untuk notifikasi
+      // ── getSenderName ────────────────────────────────────────────────────
       FCMService.instance.getSenderName = (roomId, senderId) {
         try {
           return chatProvider.getSenderName(roomId, senderId);
-        } catch (e) {
+        } catch (_) {
           return 'Pesan baru';
         }
       };
 
-      // ✅ onChatMessageReceived — callback fallback jika ChatProvider belum diinjeksi
-      // Biasanya tidak dipanggil karena setChatProvider() sudah di atas,
-      // tapi tetap disediakan sebagai safety net
+      // ── Chat message (fallback jika _chatProvider null di FCMService) ────
       FCMService.instance.onChatMessageReceived = (message) {
         debugPrint('[Main] 💬 FCM chat fallback: ${message.roomId}');
         try {
           chatProvider.handleMessageFromFCM(message);
         } catch (e, st) {
-          debugPrint('[Main] ❌ handleMessageFromFCM fallback error: $e\n$st');
+          debugPrint('[Main] ❌ handleMessageFromFCM error: $e\n$st');
         }
       };
 
-      // ✅ onNotificationTapped — navigasi ke RoomChatPage saat notif di-tap
+      // ── Tap notifikasi chat → navigasi ke RoomChatPage ───────────────────
       FCMService.instance.onNotificationTapped = (roomId) {
         debugPrint('[Main] 👆 Chat notification tapped: $roomId');
         try {
@@ -357,8 +332,7 @@ class MyApp extends StatelessWidget {
         }
       };
 
-      // ── Progress ────────────────────────────────────────────────────────
-
+      // ── Progress ─────────────────────────────────────────────────────────
       FCMService.instance.onProgressReceived = (HistoryOrderModel progress) {
         debugPrint('[Main] 📊 FCM progress: ${progress.noOrder}');
         try {
@@ -380,6 +354,7 @@ class MyApp extends StatelessWidget {
         }
       };
 
+      // ── Tap notifikasi order → navigasi ke DetailOrderPage ───────────────
       FCMService.instance.onOrderNotificationTapped = (String orderId) {
         debugPrint('[Main] 👆 Order notification tapped: $orderId');
         try {
@@ -440,7 +415,6 @@ class MyApp extends StatelessWidget {
       chatProvider.setActiveRoom(null);
       FCMService.instance.setActiveRoom(null);
 
-      // Clear Isar chat data saat session expired
       await chatProvider.clearAll();
       await ChatStorageService.instance.clearAll();
 
@@ -464,7 +438,7 @@ class MyApp extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SPLASH LOGIC HANDLER - Customer
+// SPLASH LOGIC HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
 
 class SplashLogicHandler extends StatefulWidget {
@@ -505,8 +479,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
 
       if (!versionResult.isCompatible) {
         debugPrint('⚠️ Version incompatible — showing update dialog');
-        await VersionCheckService.showUpdateDialogIfNeeded(
-            context, versionResult);
+        await VersionCheckService.showUpdateDialogIfNeeded(context, versionResult);
         return;
       }
       debugPrint('✅ Version check passed');
@@ -517,6 +490,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
       final sessionRestored = await userProvider.restoreSession();
       debugPrint('   Session restored: $sessionRestored');
 
+      // ✅ SATU blok if — tidak ada duplikasi
       if (sessionRestored && userProvider.customer != null) {
         debugPrint('✅ Session restored: ${userProvider.customer!.namaDisplay}');
 
@@ -527,13 +501,13 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
           userProvider.customer!.noId,
         );
 
-        // Set current user di ChatStorageService
-        // Penting: harus sebelum initialize ChatProvider
-        // agar persistForegroundMessage bisa bedakan own message vs incoming
+        // ✅ Set current user agar ChatStorageService bisa bedakan
+        //    pesan sendiri vs pesan masuk
         ChatStorageService.instance.setCurrentUser(userProvider.customer!.noId);
 
         // ✅ Initialize ChatProvider (Isar offline-first)
-        // Di dalam initialize(), FCMService.setChatProvider(this) dipanggil otomatis
+        //    CATATAN: di dalam initialize() TIDAK ada FCMService.setChatProvider()
+        //    Inject dilakukan oleh MyApp._setupFCMCallbacks() — satu titik saja
         final chatProvider = context.read<ChatProvider>();
         await chatProvider.initialize(
           userId: userProvider.customer!.noId,
@@ -541,38 +515,31 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
         );
         debugPrint('✅ ChatProvider initialized');
 
-        // Register FCM token ke backend
+        // ✅ Register token SETELAH ChatProvider ready
+        //    Provider sudah di-inject oleh _setupFCMCallbacks (addPostFrameCallback)
+        //    yang dipanggil SEBELUM _loadInitialData karena MyApp.build() lebih dulu
         await FCMService.instance.registerToken(userProvider.customer!.noId);
         debugPrint('✅ FCM token registered');
 
-        Future.microtask(() async {
-          try {} catch (e) {
-            debugPrint('⚠️ Load liked/saved on restore error: $e');
-          }
-        });
-
-        // Load master data di background (tidak blocking splash)
+        // ── Load master data di background (tidak blocking splash) ─────────
         Future.microtask(() async {
           try {
             final portoProvider = context.read<PortofolioProvider>();
             final kotaProvider = context.read<KotaProvider>();
             final kategoriProvider = context.read<KategoriProvider>();
 
-            await Future.wait(
-              [
-                portoProvider.loadLikedPortofolio(
-                  context: context,
-                  syncFromApi: true,
-                ),
-                portoProvider.loadSavedPortofolio(
-                  context: context,
-                  syncFromApi: true,
-                ),
-                kotaProvider.getAllKotaList(),
-                kategoriProvider.loadKategori(),
-              ],
-            );
-            debugPrint('✅ Liked & saved portofolio loaded on restore');
+            await Future.wait([
+              portoProvider.loadLikedPortofolio(
+                context: context,
+                syncFromApi: true,
+              ),
+              portoProvider.loadSavedPortofolio(
+                context: context,
+                syncFromApi: true,
+              ),
+              kotaProvider.getAllKotaList(),
+              kategoriProvider.loadKategori(),
+            ]);
             debugPrint('✅ Master data loaded');
           } catch (e) {
             debugPrint('⚠️ Master data error: $e');
@@ -611,8 +578,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
               const SizedBox(height: 16),
               Text(
                 _errorMessage ?? 'Terjadi kesalahan',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -651,8 +617,7 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(Constants.primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(Constants.primaryColor),
               ),
               SizedBox(height: 16),
               Text(
@@ -692,7 +657,7 @@ Future<void> _showBackgroundChatNotification(RemoteMessage message) async {
     final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';
     final sendStatus = detail['send_status'] as String? ?? 'sent';
 
-    // Hanya tampilkan notif untuk pesan baru dari orang lain (status sent)
+    // Hanya tampilkan untuk pesan baru dari pengirim (bukan echo sendiri)
     if (sendStatus != 'sent') return;
     if (messageId.isEmpty || roomId.isEmpty) return;
 

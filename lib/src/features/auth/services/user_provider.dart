@@ -7,6 +7,7 @@ import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 
 class UserProvider with ChangeNotifier {
@@ -269,7 +270,6 @@ class UserProvider with ChangeNotifier {
 
       await loadUserData();
 
-      // Jika tidak ada data lokal, fetch dari backend
       if (_customer == null) {
         print("⚠️ No local customer data, fetching from backend...");
         final fetched = await _refreshCustomerFromBackend();
@@ -280,7 +280,6 @@ class UserProvider with ChangeNotifier {
         }
       }
 
-      // Refresh jika data sudah lebih dari 24 jam
       final lastSync = _userBox?.get(_keyLastSync);
       if (lastSync != null) {
         try {
@@ -293,6 +292,21 @@ class UserProvider with ChangeNotifier {
           }
         } catch (e) {
           print("⚠️ Last sync parse error: $e");
+        }
+      }
+
+      // ── Refresh device token saat session restore ──────────────────────
+      // FCM token bisa berubah setelah app restart atau reinstall
+      // addDeviceToken sudah handle duplikat (status 400 "sudah ada" = success)
+      final userId = _customer?.noId;
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          final deviceTokenService = DeviceTokenService();
+          await deviceTokenService.addDeviceToken(userId, null);
+          print("✅ [UserProvider] Device token refreshed for: $userId");
+        } catch (e) {
+          // Non-fatal — notifikasi mungkin tidak jalan tapi app tetap bisa dipakai
+          print("⚠️ [UserProvider] Device token refresh failed: $e");
         }
       }
 

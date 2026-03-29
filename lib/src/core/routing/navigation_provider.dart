@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
+import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
 import 'package:mpjnew/src/data/hive_service.dart/portofolio_local_service.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/auth/view/user_login.dart';
+import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
@@ -130,6 +132,24 @@ class NavigationProvider with ChangeNotifier {
       await saveStatusUser(_statusUser!);
       await saveRole(role);
 
+      // ── Daftarkan device token setelah login berhasil ──────────────────
+      // Dilakukan di sini karena userId sudah tersedia dari userProv
+      // dan auth token sudah valid untuk hit backend
+      final userId = userProv.userId;
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          final deviceTokenService = DeviceTokenService();
+          await deviceTokenService.addDeviceToken(userId, null);
+          // null → DeviceTokenService._getDeviceToken() fetch FCM token sendiri
+          debugPrint("[checkLogin] ✅ Device token registered for: $userId");
+        } catch (e) {
+          // Jangan block login meski gagal daftarkan token
+          debugPrint("[checkLogin] ⚠️ Add device token failed (non-fatal): $e");
+        }
+      } else {
+        debugPrint("[checkLogin] ⚠️ userId null — skip add device token");
+      }
+
       debugPrint("✅ [checkLogin] Status: $_statusUser");
       notifyListeners();
     } catch (e) {
@@ -152,15 +172,23 @@ class NavigationProvider with ChangeNotifier {
       final userProv = context.read<UserProvider>();
       final chatProvider = context.read<ChatProvider>();
 
-      final portoProvider = context.read<PortofolioProvider>();
-      portoProvider.clearCustomerData(); // sync, langsung clear in-memory
-      debugPrint("[handleLogout] ✅ PortofolioProvider cleared");
+      // ── 1. Unregister device token via FCMService ──────────────────────
+      // Lebih baik lewat FCMService karena dia pegang _fcmToken terbaru
+      final userId = userProv.userId;
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          await FCMService.instance.unregisterToken(userId);
+          debugPrint("[handleLogout] ✅ FCM token unregistered");
+        } catch (e) {
+          debugPrint(
+              "[handleLogout] ⚠️ Unregister token failed (non-fatal): $e");
+        }
+      }
 
-      // ✅ 1. Clear semua local storage customer
-      //    - Portofolio liked + saved: Hive di-clear + file media dihapus
-      //    - Pesanan + history: Hive di-clear
-      //    - Chat: stream di-close, Hive box di-tutup (data tetap di disk)
-      //    - activeCustomerId di-clear
+      // ── 2. Clear providers FCMService ─────────────────────────────────
+      FCMService.instance.clearProviders();
+
+      // ── 3. Clear local storage ─────────────────────────────────────────
       await LocalStorageService.instance.clearOnLogout(
         portofolioService: PortofolioLocalService(),
         pesananService: PesananLocalService(),
@@ -168,11 +196,11 @@ class NavigationProvider with ChangeNotifier {
       );
       debugPrint("[handleLogout] ✅ Local storage cleared");
 
-      // ✅ 2. Hapus token + disconnect Google
+      // ── 4. Sign out ────────────────────────────────────────────────────
       await authService.signOut();
       debugPrint("[handleLogout] ✅ AuthService sign-out complete");
 
-      // ✅ 3. Clear sisa state
+      // ── 5. Clear state ─────────────────────────────────────────────────
       await clearStatusUser();
       await clearRole();
       clearSelectedIndex();
@@ -183,7 +211,6 @@ class NavigationProvider with ChangeNotifier {
       debugPrint("[handleLogout] ✅ Logout complete");
     } catch (e) {
       debugPrint("❌ [handleLogout] Error: $e");
-      // Tetap clear meskipun error
       if (context.mounted) popAllToRoot();
     }
   }

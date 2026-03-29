@@ -1,320 +1,289 @@
+import 'dart:convert';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
+
 import '../utils/notification_channel_manager.dart';
 import '../utils/notification_helper.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CHAT NOTIFICATION HANDLER
+// ─────────────────────────────────────────────────────────────────
+// ChatNotificationHandler
 //
-// Tanggung jawab handler ini:
-//   1. Parse ChatModel dari RemoteMessage payload
-//   2. Panggil onMessageReceived → FCMService → ChatProvider → ChatStorageService
-//   3. Tampilkan notif lokal (hanya jika bukan active room & bukan pesan sendiri)
+// Bertanggung jawab untuk:
+//   1. Parse payload FCM → ChatModel
+//   2. ✅ Tentukan targetStatus (read/received) berdasarkan activeRoomId
+//   3. Panggil onMessageReceived → ChatProvider.handleMessageFromFCM
+//   4. Panggil onUpdateMessageStatus → ChatProvider.updateMessageStatus
+//   5. Tampilkan notifikasi lokal HANYA jika bukan room aktif
 //
-// ✅ FIX BUG 1: currentUserId dan activeRoomId sekarang dibaca live via getter
-//    callback (getCurrentUserId / getActiveRoomId), bukan di-pass saat konstruksi.
-//    Ini memastikan nilai selalu up-to-date setelah login / room change.
-//
-// ✅ TIDAK menyimpan pesan ke storage secara langsung.
-//    Penyimpanan dihandle oleh ChatStorageService via onMessageReceived callback.
-// ═══════════════════════════════════════════════════════════════════════════
-
+// Aturan status:
+//   - User sedang di room YANG SAMA dengan pesan → status "read", NO notif lokal
+//   - User tidak di room ini (atau di halaman lain) → status "received", tampilkan notif lokal
+// ─────────────────────────────────────────────────────────────────
 class ChatNotificationHandler {
   final FlutterLocalNotificationsPlugin notificationsPlugin;
 
-  // ✅ FIX: Gunakan getter callback, bukan nilai final yang di-set saat konstruksi.
-  // Nilai dibaca SAAT pesan datang, bukan saat handler dibuat.
-  // Ini mencegah bug di mana currentUserId null karena user belum login
-  // saat handler pertama kali dibuat.
+  /// Getter live — selalu baca nilai terbaru dari FCMService
   final String? Function() getCurrentUserId;
   final String? Function() getActiveRoomId;
 
-  final Function(ChatModel)? onMessageReceived;
-  final String Function(String roomId, String senderId)? getSenderName;
+  /// Dipanggil setelah status ditentukan, membawa ChatModel + targetStatus
+  final void Function(ChatModel message, String targetStatus) onMessageReceived;
 
-  // ✅ Null di Isar edition — ChatStorageService yang handle status update
-  final Future<void> Function(
-      String messageId, String roomId, String newStatus)? onUpdateMessageStatus;
+  /// Dipanggil untuk update status pesan ke API + Isar
+  final Future<void> Function(String messageId, String roomId, String newStatus)
+      onUpdateMessageStatus;
 
-  // Track messages by sender for grouped notification (inbox style)
-  final Map<String, List<String>> _messagesBySender = {};
+  /// Untuk mendapatkan nama pengirim (dipakai di judul notifikasi)
+  final String Function(String roomId, String senderId) getSenderName;
+
+  // ── Notif grouping (per sender) ─────────────────────────────────
+  final Map<String, List<String>> _messageGroups = {};
 
   ChatNotificationHandler({
     required this.notificationsPlugin,
-    // ✅ FIX: Parameter lama (currentUserId, activeRoomId) diganti dengan getter
     required this.getCurrentUserId,
     required this.getActiveRoomId,
-    this.onMessageReceived,
-    this.getSenderName,
-    this.onUpdateMessageStatus,
+    required this.onMessageReceived,
+    required this.onUpdateMessageStatus,
+    required this.getSenderName,
   });
 
   // =========================================
-  // FOREGROUND HANDLER
+  // ENTRY POINT — dipanggil dari FCMService._handleForegroundMessage
   // =========================================
 
   Future<void> handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[ChatHandler] 💬 Handling foreground message...');
+    debugPrint(
+        '[ChatHandler] 📨 handleForegroundMessage: ${message.messageId}');
 
     try {
-      final type = message.data['type'] as String? ?? '';
-      debugPrint('[ChatHandler] type: $type');
-
-      // ── Chat message ─────────────────────────────────────────────────────
       final detail = NotificationHelper.parseDetail(message.data['detail']);
-      final chatMessage = ChatModel.fromFCM(detail, getCurrentUserId() ?? '');
+      if (detail.isEmpty) {
+        debugPrint('[ChatHandler] ⚠️ detail kosong, skip');
+        return;
+      }
+
+      final messageId = detail['message_id']?.toString() ?? '';
+      final roomId = detail['room_id']?.toString() ?? '';
+      final senderId = detail['sender_id']?.toString() ?? '';
+      final messageText = detail['message']?.toString() ?? '';
+      final jenisPesan = detail['jenis_pesan']?.toString() ?? 'text';
+      final sendStatus = detail['send_status']?.toString() ?? 'sent';
+      final localId = detail['local_id']?.toString();
+
+      if (messageId.isEmpty) {
+        debugPrint('[ChatHandler] ⚠️ messageId kosong, skip');
+        return;
+      }
 
       final currentUserId = getCurrentUserId();
       final activeRoomId = getActiveRoomId();
 
-      debugPrint('[ChatHandler] ✅ Parsed: ${chatMessage.messageId}');
-      debugPrint('[ChatHandler]   Room: ${chatMessage.roomId}');
-      debugPrint('[ChatHandler]   Sender: ${chatMessage.senderId}');
-      debugPrint('[ChatHandler]   Status: ${chatMessage.sendStatus}');
-      debugPrint('[ChatHandler]   CurrentUser: $currentUserId');
-      debugPrint('[ChatHandler]   ActiveRoom: $activeRoomId');
+      // ── 1. Filter echo sendiri ──────────────────────────────────────────
+      // Own echo: sender = diri sendiri DAN sendStatus bukan 'sent'
+      // (sendStatus 'sent' dari server = konfirmasi bahwa pesan terkirim,
+      //  masih perlu diproses untuk replace local echo)
+      final isOwnMessage = senderId == currentUserId;
 
-      final isStatusEcho = chatMessage.sendStatus == 'received' ||
-          chatMessage.sendStatus == 'read';
-      final isOwnSender =
-          currentUserId != null && chatMessage.senderId == currentUserId;
-      final hasLocalId = chatMessage.localId != null &&
-          chatMessage.localId!.startsWith('local-');
-      final isFromMe = isOwnSender || isStatusEcho || hasLocalId;
-      final isActiveRoom =
-          activeRoomId != null && activeRoomId == chatMessage.roomId;
-
-      debugPrint('[ChatHandler]   isOwnSender=$isOwnSender'
-          ' isStatusEcho=$isStatusEcho'
-          ' hasLocalId=$hasLocalId'
-          ' isActiveRoom=$isActiveRoom'
-          ' isFromMe=$isFromMe');
-
-      // ── Step 1: Persist ke Isar ──────────────────────────────────────────
-      await ChatStorageService.instance.persistForegroundMessage(chatMessage);
-
-      if (!isFromMe) {
-        // ── Step 2: Update status ke server ─────────────────────────────────
-        // ✅ FIX: lakukan ini SEBELUM notif dan SEBELUM onMessageReceived
-        // agar tidak ada kondisi race yang menyebabkan step ini terlewat
-        final targetStatus = isActiveRoom ? 'read' : 'received';
-
-        debugPrint('[ChatHandler] 🔄 Attempting status update: '
-            '${chatMessage.messageId} → $targetStatus');
-        debugPrint('[ChatHandler]   onUpdateMessageStatus is null: '
-            '${onUpdateMessageStatus == null}');
-
-        if (chatMessage.sendStatus != targetStatus) {
-          if (onUpdateMessageStatus != null) {
-            await onUpdateMessageStatus!.call(
-              chatMessage.messageId,
-              chatMessage.roomId,
-              targetStatus,
-            );
-            debugPrint('[ChatHandler] ✅ Status update called: $targetStatus');
-          } else {
-            debugPrint('[ChatHandler] ❌ onUpdateMessageStatus is NULL — '
-                'status tidak dikirim ke server!');
-          }
-        } else {
-          debugPrint(
-              '[ChatHandler] ℹ️ Status sudah $targetStatus, skip update');
-        }
-
-        // ── Step 3: Callback ke provider (untuk UI update) ──────────────────
-        onMessageReceived?.call(chatMessage);
-
-        // ── Step 4: Tampilkan notif lokal ────────────────────────────────────
-        if (!isActiveRoom) {
-          await showNotification(message);
-        } else {
-          debugPrint('[ChatHandler] 🔕 Skip notif (active room)');
-        }
-      } else {
-        // Own echo — hanya callback ke provider
-        onMessageReceived?.call(chatMessage);
-        debugPrint('[ChatHandler] 🔕 Skip notif — isFromMe=$isFromMe');
-      }
-    } catch (e, st) {
-      debugPrint('[ChatHandler] ❌ Error: $e\n$st');
-    }
-  }
-
-  // =========================================
-  // SHOW NOTIFICATION
-  // =========================================
-
-  /// Tampilkan notif lokal dengan grouping per sender (inbox style).
-  Future<void> showNotification(RemoteMessage message) async {
-    try {
-      final detail = NotificationHelper.parseDetail(message.data['detail']);
-
-      final sendStatus = detail['send_status'] as String? ?? '';
-
-      // ✅ FIX: Guard tambahan — hanya tampil untuk status 'sent'
-      // Status received/read adalah echo konfirmasi, bukan pesan baru
-      if (sendStatus != 'sent') {
-        debugPrint('[ChatHandler] 🔕 Skip notif (status: $sendStatus)');
+      // ✅ Own echo dengan sendStatus apapun — jangan update status ke API
+      // Yang boleh update status adalah PENERIMA, bukan pengirim
+      if (isOwnMessage) {
+        // if (sendStatus != 'sent') {
+        //   debugPrint('[ChatHandler] ⏭️ Own echo (status: $sendStatus), skip');
+        //   return;
+        // }
+        final chatModel = _parseChatModel(detail, message);
+        if (chatModel == null) return;
+        onMessageReceived(chatModel, 'sent'); // hanya persist ke Isar
+        // ✅ Tidak ada onUpdateMessageStatus di sini
         return;
       }
 
-      final roomId = detail['room_id'] as String? ?? '';
-      final senderId = detail['sender_id'] as String? ?? '';
-      final messageText = detail['message'] as String? ?? '';
-      final messageId = detail['message_id'] as String? ?? '';
-      final jenisPesan = detail['jenis_pesan'] as String? ?? 'text';
-
-      // ✅ FIX: Baca live saat akan tampil notif
-      final currentUserId = getCurrentUserId();
-      final activeRoomId = getActiveRoomId();
-
-      // Guard: pesan sendiri
-      if (senderId == currentUserId) {
-        debugPrint(
-            '[ChatHandler] 🔕 Skip notif (own message): sender=$senderId');
+      // ── 2. Parse ChatModel ──────────────────────────────────────────────
+      final chatModel = _parseChatModel(detail, message);
+      if (chatModel == null) {
+        debugPrint('[ChatHandler] ⚠️ gagal parse ChatModel, skip');
         return;
       }
 
-      // Guard: room aktif
-      if (activeRoomId != null && activeRoomId == roomId) {
-        debugPrint('[ChatHandler] 🔕 Skip (active room)');
-        return;
-      }
+      // ── 3. ✅ Tentukan targetStatus berdasarkan posisi user ───────────────
+      //
+      // Logika:
+      //   - User SEDANG di room yang SAMA → "read" (sudah lihat pesannya)
+      //   - User di room LAIN atau tidak di room manapun → "received"
+      //
+      // activeRoomId:
+      //   - Diset oleh FCMService.setActiveRoom() saat user buka RoomChatPage
+      //   - Di-clear (null) saat user keluar dari RoomChatPage
+      final bool isUserInSameRoom = activeRoomId != null &&
+          activeRoomId.isNotEmpty &&
+          activeRoomId == roomId;
 
-      if (messageId.isEmpty || roomId.isEmpty) {
-        debugPrint('[ChatHandler] ⚠️ Missing messageId/roomId');
-        return;
-      }
+      final String targetStatus = isUserInSameRoom ? 'read' : 'received';
 
-      // Resolve sender name
-      String senderName = 'Pesan baru';
-      if (getSenderName != null) {
-        try {
-          senderName = getSenderName!(roomId, senderId);
-        } catch (e) {
-          debugPrint('[ChatHandler] ⚠️ getSenderName error: $e');
-        }
-      }
+      debugPrint('[ChatHandler] 🏠 activeRoom=$activeRoomId | msgRoom=$roomId '
+          '| inSameRoom=$isUserInSameRoom → targetStatus=$targetStatus');
 
-      final content = _formatMessageContent(messageText, jenisPesan);
+      // ── 4. Inject targetStatus ke ChatModel ────────────────────────────
+      // ChatProvider.handleMessageFromFCM akan menyimpan dengan status ini
+      final chatModelWithStatus = chatModel.copyWith(sendStatus: targetStatus);
 
-      // Accumulate messages per sender untuk inbox style
-      _messagesBySender.putIfAbsent(senderId, () => []);
-      _messagesBySender[senderId]!.add(content);
+      // ── 5. Kirim ke ChatProvider (simpan ke Isar + update stream) ────────
+      onMessageReceived(chatModelWithStatus, targetStatus);
 
-      // Batasi 5 pesan terakhir per sender
-      if (_messagesBySender[senderId]!.length > 5) {
-        _messagesBySender[senderId] = _messagesBySender[senderId]!.sublist(
-          _messagesBySender[senderId]!.length - 5,
+      // ── 6. Update status ke API ────────────────────────────────────────
+      // Fire-and-forget: tidak await agar UI tidak terblokir
+      onUpdateMessageStatus(messageId, roomId, targetStatus);
+
+      // ── 7. Tampilkan notifikasi lokal HANYA jika bukan room aktif ────────
+      if (!isUserInSameRoom && !isOwnMessage) {
+        await _showLocalNotification(
+          messageId: messageId,
+          roomId: roomId,
+          senderId: senderId,
+          messageText: messageText,
+          jenisPesan: jenisPesan,
         );
+      } else {
+        debugPrint('[ChatHandler] 🔕 No notif — user is in same room');
       }
-
-      await _showGroupedNotification(
-        senderId: senderId,
-        senderName: senderName,
-        groupKey: 'sender_$senderId',
-        messageId: messageId,
-        roomId: roomId,
-      );
-
-      debugPrint('[ChatHandler] ✅ Notification shown');
     } catch (e, st) {
-      debugPrint('[ChatHandler] ❌ showNotification error: $e\n$st');
+      debugPrint('[ChatHandler] ❌ handleForegroundMessage error: $e\n$st');
     }
   }
 
-  Future<void> _showGroupedNotification({
-    required String senderId,
-    required String senderName,
-    required String groupKey,
+  // =========================================
+  // PARSE CHAT MODEL
+  // =========================================
+
+  ChatModel? _parseChatModel(
+    Map<String, dynamic> detail,
+    RemoteMessage message,
+  ) {
+    try {
+      // Normalisasi key (FCM bisa kirim snake_case atau PascalCase)
+      final normalized = <String, dynamic>{
+        'Message_Id': detail['message_id'] ?? detail['Message_Id'] ?? '',
+        'Room_Id': detail['room_id'] ?? detail['Room_Id'] ?? '',
+        'Sender_Id': detail['sender_id'] ?? detail['Sender_Id'] ?? '',
+        'Tipe_User': detail['tipe_user'] ?? detail['Tipe_User'] ?? '',
+        'Message': detail['message'] ?? detail['Message'] ?? '',
+        'Jenis_Pesan': detail['jenis_pesan'] ?? detail['Jenis_Pesan'] ?? 'text',
+        'Id_Paket': detail['id_paket'] ?? detail['Id_Paket'],
+        'No_Pesanan': detail['no_pesanan'] ?? detail['No_Pesanan'],
+        'No_Penawaran': detail['no_penawaran'] ?? detail['No_Penawaran'],
+        'Status': detail['status'] ?? 'aktif',
+        'Send_Status': detail['send_status'] ?? detail['Send_Status'] ?? 'sent',
+        'Room_Type': detail['room_type'] ?? detail['Room_Type'] ?? 'direct',
+        'Sent_At': detail['sent_at'] ?? detail['Sent_At'],
+        'User_Ids': detail['user_ids'] ?? detail['User_Ids'] ?? [],
+        'Receiver_Ids': detail['receiver_ids'] ?? detail['Receiver_Ids'] ?? [],
+        'Local_Id': detail['local_id'] ?? detail['Local_Id'],
+      };
+
+      return ChatModel.fromJson(normalized);
+    } catch (e) {
+      debugPrint('[ChatHandler] ⚠️ _parseChatModel error: $e');
+      return null;
+    }
+  }
+
+  // =========================================
+  // LOCAL NOTIFICATION
+  // =========================================
+
+  Future<void> _showLocalNotification({
     required String messageId,
     required String roomId,
+    required String senderId,
+    required String messageText,
+    required String jenisPesan,
   }) async {
-    final messages = _messagesBySender[senderId] ?? [];
-    final count = messages.length;
+    try {
+      // Grouping pesan per sender (agar notif tidak flood)
+      _messageGroups[senderId] ??= [];
+      _messageGroups[senderId]!.add(messageId);
+      final count = _messageGroups[senderId]!.length;
 
-    final inboxStyle = InboxStyleInformation(
-      messages,
-      contentTitle: senderName,
-      summaryText: count == 1 ? 'Pesan baru' : '$count pesan baru',
-    );
+      final senderName = getSenderName(roomId, senderId);
+      final displayText = _formatContent(messageText, jenisPesan);
 
-    final androidDetails = AndroidNotificationDetails(
-      NotificationChannelManager.chatChannelId,
-      'Chat Messages',
-      channelDescription: 'Notifications for new chat messages',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-      icon: 'ic_stat_pacific_data_jaya',
-      enableVibration: true,
-      playSound: true,
-      groupKey: groupKey,
-      setAsGroupSummary: false,
-      styleInformation: inboxStyle,
-      color: Constants.primaryColor,
-      autoCancel: true,
-    );
+      // Body: "2 pesan baru" jika lebih dari satu, otherwise isi pesan
+      final body =
+          count > 1 ? '$count pesan baru dari $senderName' : displayText;
 
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
+      final androidDetails = AndroidNotificationDetails(
+        NotificationChannelManager.chatChannelId,
+        'Chat Messages',
+        channelDescription: 'Notifications for new chat messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        icon: 'ic_stat_pacific_data_jaya',
+        enableVibration: true,
+        playSound: true,
+        autoCancel: true,
+        groupKey: 'chat_$senderId',
+        setAsGroupSummary: count > 1,
+      );
 
-    final payload = NotificationHelper.createPayload({
-      'type': 'chat',
-      'roomId': roomId,
-      'messageId': messageId,
-      'senderId': senderId,
-    });
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
 
-    await notificationsPlugin.show(
-      NotificationHelper.generateNotificationId(senderId),
-      senderName,
-      count == 1 ? messages.first : '$count pesan baru',
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
-      payload: payload,
-    );
+      final payload = NotificationHelper.createPayload({
+        'type': 'chat',
+        'roomId': roomId,
+        'messageId': messageId,
+        'senderId': senderId,
+      });
+
+      await notificationsPlugin.show(
+        NotificationHelper.generateNotificationId(senderId),
+        senderName,
+        body,
+        NotificationDetails(android: androidDetails, iOS: iosDetails),
+        payload: payload,
+      );
+
+      debugPrint('[ChatHandler] 🔔 Notif shown: $senderName — $displayText');
+    } catch (e) {
+      debugPrint('[ChatHandler] ⚠️ _showLocalNotification: $e');
+    }
   }
 
   // =========================================
   // UTILITIES
   // =========================================
 
-  String _formatMessageContent(String message, String jenisPesan) {
-    if (message.isNotEmpty) {
-      return NotificationHelper.truncateText(message);
-    }
+  String _formatContent(String message, String jenisPesan) {
+    if (message.isNotEmpty) return message;
     switch (jenisPesan) {
       case 'paket':
         return '📦 Mengirim paket';
       case 'penawaran':
         return '💼 Mengirim penawaran';
       case 'pesanan':
-      case 'order':
         return '🧾 Mengirim pesanan';
       case 'image':
-      case 'gambar':
         return '🖼️ Mengirim gambar';
-      case 'file':
-        return '📎 Mengirim file';
       default:
         return 'Pesan baru';
     }
   }
 
   void clearMessagesForSender(String senderId) {
-    _messagesBySender.remove(senderId);
-    debugPrint('[ChatHandler] 🗑️ Cleared: $senderId');
+    _messageGroups.remove(senderId);
+    debugPrint('[ChatHandler] 🧹 Cleared notif group: $senderId');
   }
 
   void clearAllMessageGroups() {
-    _messagesBySender.clear();
-    debugPrint('[ChatHandler] 🗑️ Cleared all groups');
+    _messageGroups.clear();
+    debugPrint('[ChatHandler] 🧹 All notif groups cleared');
   }
 }

@@ -49,9 +49,7 @@ class RoomChatProvider extends ChangeNotifier {
   // Di-cache SEKALI setelah initChat() sukses.
   // Isar broadcast stream aman untuk multi-listener.
   // Tidak boleh dibuat ulang di build() atau setState().
-  Stream<List<ChatMessageEntity>>? _messagesStream;
   StreamSubscription<List<ChatMessageEntity>>? _messagesSub;
-  Stream<List<ChatMessageEntity>>? _pendingStream;
   Stream<List<ChatMessageEntity>>? _mergedStream;
   StreamSubscription<List<ChatMessageEntity>>? _pendingStreamSub;
 
@@ -64,6 +62,9 @@ class RoomChatProvider extends ChangeNotifier {
 
   /// Stream pesan dari Isar — di-cache, tidak dibuat ulang.
   /// Ambil setelah initChat() sukses.
+  ///
+  /// Jika room sudah ada: merged stream (room + pending sisa)
+  /// Jika belum ada room (pesan pertama): hanya pending stream (roomId='')
   Stream<List<ChatMessageEntity>> get messagesStream {
     if (_mergedStream != null) return _mergedStream!;
 
@@ -79,7 +80,7 @@ class RoomChatProvider extends ChangeNotifier {
       _mergedStream =
           _mergeMessageStreams(roomStream, pendingStream).asBroadcastStream();
     } else if (userId.isNotEmpty) {
-      // Room belum ada (pesan pertama) — hanya pending stream
+      // Room belum ada (pesan pertama) — hanya pending stream (roomId='')
       _mergedStream = ChatIsarService.instance
           .watchPendingMessages(userId)
           .asBroadcastStream();
@@ -114,7 +115,7 @@ class RoomChatProvider extends ChangeNotifier {
       tawaranPaket = null;
       _activeRoomId = null;
       roomInfo = null;
-      _messagesStream = null;
+      _mergedStream = null;
       await _messagesSub?.cancel();
       _messagesSub = null;
 
@@ -137,9 +138,8 @@ class RoomChatProvider extends ChangeNotifier {
           roomInfo = existingRoom;
           await _setupRoom(existingRoom.roomId);
         } else {
-          // ✅ Belum ada room — tampilkan empty state
-          // Stream TIDAK di-setup di sini
-          // Akan di-setup saat FCM echo datang (via _listenForRoomResolution)
+          // Belum ada room — stream pending akan menampilkan local echo
+          // saat user mengirim pesan pertama (roomId='')
           debugPrint('[RoomChatProv] ℹ️ Belum ada room dengan: $partnerId');
           debugPrint('[RoomChatProv]    Kirim pesan pertama untuk memulai');
         }
@@ -157,19 +157,13 @@ class RoomChatProvider extends ChangeNotifier {
   }
 
   Future<void> _setupRoom(String roomId) async {
-    // ── TAMBAHAN: reset merged stream agar dibuat ulang dengan roomId baru ──
+    // Reset merged stream cache agar dibuat ulang dengan roomId baru
     _mergedStream = null;
-    _pendingStream = null;
-    // ── END TAMBAHAN ──
 
     await ChatStorageService.setActiveRoomPref(roomId);
     await chatProv.trackRoom(roomId);
     chatProv.setActiveRoom(roomId);
     FCMService.instance.setActiveRoom(roomId);
-
-    // Stream akan dibuat ulang saat getter messagesStream dipanggil
-    // (dengan roomId yang sudah benar)
-    _messagesStream = null;
 
     unawaited(ChatStorageService.instance.markRoomAsRead(roomId));
     chatProv.loadMessages(roomId, silent: true, forceRefresh: false);
@@ -204,35 +198,23 @@ class RoomChatProvider extends ChangeNotifier {
   // =========================================
 
   /// Dipanggil dari RoomChatPage.didChangeAppLifecycleState saat app resume.
-  ///
-  /// Jika ada room aktif:
-  ///   1. Drain background queue → pesan room ini = "read", lain = "received"
-  ///   2. Mark semua pesan di room sebagai read
-  ///   3. Incremental sync dari API (UPSERT, bukan REPLACE)
-  ///
-  /// Jika tidak ada room aktif:
-  ///   1. Drain background queue → semua pesan = "received"
   Future<void> onAppResumed() async {
     final roomId = _activeRoomId;
     debugPrint('[RoomChatProv] 🔄 App resumed — activeRoom: $roomId');
 
     try {
       if (roomId != null) {
-        // Step 1: Drain queue
         final drained = await ChatStorageService.instance.drainBackgroundQueue(
           activeRoomId: roomId,
         );
         debugPrint('[RoomChatProv] 📬 Drained $drained messages');
 
-        // Step 2: Mark read
         await ChatStorageService.instance.markRoomAsRead(roomId);
         debugPrint('[RoomChatProv] 👁️ Room marked as read: $roomId');
 
-        // Step 3: Incremental sync (UPSERT)
         await chatProv.syncRoomFromHiveAndNotify(roomId);
         debugPrint('[RoomChatProv] ✅ Resume sync complete');
       } else {
-        // Tidak ada room aktif — semua pesan queue → received
         final drained = await ChatStorageService.instance.drainBackgroundQueue(
           activeRoomId: null,
         );
@@ -271,14 +253,17 @@ class RoomChatProvider extends ChangeNotifier {
         resolvedUserIds = roomInfo?.userIds ?? [currentUserId, vendorId!];
       } else {
         // ── Pesan pertama — room belum ada ───────────────────────────────
-        // ✅ Kirim dengan roomId='' — backend buat room baru
-        // FCM echo akan datang dengan roomId asli + semua data room
-        // → _handleFirstMessageEcho → onRoomResolved callback → setup stream
+        // Local echo disimpan ke Isar dengan roomId='' dan langsung
+        // muncul di UI via watchPendingMessages (pending stream).
+        // Backend membuat room baru dan mengirim FCM ke semua userIds.
+        // FCM own echo → _handleFirstMessageEcho → onRoomResolved → _setupRoom.
         debugPrint('[RoomChatProv] ✉️ Pesan pertama ke partner: $vendorId');
         resolvedRoomId = '';
         resolvedUserIds = [currentUserId, vendorId!];
 
-        // Daftarkan callback untuk menerima roomId saat FCM echo datang
+        // Daftarkan callback SEBELUM API call untuk cegah race condition:
+        // jika API response datang sebelum FCM, confirmOptimisticMessage
+        // juga akan memanggil onRoomResolved via _handleFirstMessageEcho.
         _listenForRoomResolution();
       }
 
@@ -294,10 +279,9 @@ class RoomChatProvider extends ChangeNotifier {
         messageController.clear();
         tawaranPaket = null;
         notifyListeners();
-        debugPrint('[RoomChatProv] ✅ Message sent (resolvedRoomId: '
-            '${resolvedRoomId.isEmpty ? "awaiting FCM echo" : resolvedRoomId})');
+        debugPrint('[RoomChatProv] ✅ Message sent '
+            '(${resolvedRoomId.isEmpty ? "awaiting room from FCM" : resolvedRoomId})');
       } else {
-        // Clear callback jika gagal
         ChatStorageService.instance.onRoomResolved = null;
         debugPrint('[RoomChatProv] ❌ Send failed');
       }
@@ -326,22 +310,6 @@ class RoomChatProvider extends ChangeNotifier {
   // HELPERS
   // =========================================
 
-  RoomChatModel? _findRoomByUserId({
-    required String currentUserId,
-    required String targetUserId,
-  }) {
-    if (currentUserId.isEmpty || targetUserId.isEmpty) return null;
-    try {
-      return chatProv.rooms.firstWhere(
-        (room) =>
-            room.userIds.contains(currentUserId) &&
-            room.userIds.contains(targetUserId),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
   Stream<List<ChatMessageEntity>> _mergeMessageStreams(
     Stream<List<ChatMessageEntity>> roomStream,
     Stream<List<ChatMessageEntity>> pendingStream,
@@ -349,7 +317,6 @@ class RoomChatProvider extends ChangeNotifier {
     List<ChatMessageEntity> latestRoom = [];
     List<ChatMessageEntity> latestPending = [];
 
-    // Controller untuk forward merged result
     final controller = StreamController<List<ChatMessageEntity>>.broadcast();
 
     void emit() {
@@ -362,7 +329,6 @@ class RoomChatProvider extends ChangeNotifier {
       }
       for (final e in latestPending) {
         // Hanya tambahkan pending jika belum ada di room stream
-        // (mencegah duplikat saat FCM echo baru datang)
         if (!allMessages.containsKey(e.messageId)) {
           allMessages[e.messageId] = e;
         }
@@ -390,12 +356,10 @@ class RoomChatProvider extends ChangeNotifier {
       onError: controller.addError,
     );
 
-    // Emit pertama kali segera
     emit();
 
     yield* controller.stream;
 
-    // Cleanup (tidak akan tercapai karena broadcast, tapi untuk kelengkapan)
     await roomSub.cancel();
     await pendingSub.cancel();
     await controller.close();
@@ -405,17 +369,15 @@ class RoomChatProvider extends ChangeNotifier {
     ChatStorageService.instance.onRoomResolved = (String newRoomId) async {
       debugPrint('[RoomChatProv] 📣 Room resolved: $newRoomId');
 
-      // Clear callback — hanya perlu sekali
       ChatStorageService.instance.onRoomResolved = null;
 
-      if (_disposed) return; // Provider sudah di-dispose
+      if (_disposed) return;
 
       _activeRoomId = newRoomId;
       roomInfo = chatProv.getRoom(newRoomId);
-      _messagesStream = null; // reset untuk dibuat ulang
 
+      // _mergedStream di-reset di dalam _setupRoom, tidak perlu di sini
       await _setupRoom(newRoomId);
-      notifyListeners();
 
       debugPrint('[RoomChatProv] ✅ Room setup selesai: $newRoomId');
     };
@@ -444,8 +406,6 @@ class RoomChatProvider extends ChangeNotifier {
   // REFRESH
   // =========================================
 
-  /// Pull-to-refresh: fetch dari API dan REPLACE data lokal.
-  /// Local-xxx yang sudah dikonfirmasi server ikut terhapus.
   Future<void> refreshRoom() async {
     if (_activeRoomId == null) return;
     await chatProv.loadMessages(
@@ -469,9 +429,7 @@ class RoomChatProvider extends ChangeNotifier {
     isLoading = false;
     isSending = false;
     isLoadingMoreDisplay = false;
-    _messagesStream = null;
-    _pendingStream = null; // ← TAMBAHAN
-    _mergedStream = null; // ← TAMBAHAN
+    _mergedStream = null;
     notifyListeners();
   }
 
@@ -484,21 +442,17 @@ class RoomChatProvider extends ChangeNotifier {
     isLoading = false;
     isSending = false;
     isLoadingMoreDisplay = false;
-    _messagesStream = null;
-    _pendingStream = null; // ← TAMBAHAN
-    _mergedStream = null; // ← TAMBAHAN
+    _mergedStream = null;
   }
 
   Future<void> disposeRoom() async {
     debugPrint('[RoomChatProv] 🧹 disposeRoom: $_activeRoomId');
 
     await _messagesSub?.cancel();
-    await _pendingStreamSub?.cancel(); // ← TAMBAHAN
+    await _pendingStreamSub?.cancel();
     _messagesSub = null;
-    _pendingStreamSub = null; // ← TAMBAHAN
-    _messagesStream = null;
-    _pendingStream = null; // ← TAMBAHAN
-    _mergedStream = null; // ← TAMBAHAN
+    _pendingStreamSub = null;
+    _mergedStream = null;
 
     if (_activeRoomId != null) {
       chatProv.setActiveRoom(null);
@@ -515,7 +469,6 @@ class RoomChatProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    // Clear stale callback
     ChatStorageService.instance.onRoomResolved = null;
     _messagesSub?.cancel();
     messageController.dispose();

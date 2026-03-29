@@ -5,7 +5,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/payment_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/progres_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
-import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
@@ -17,87 +16,6 @@ import 'utils/notification_channel_manager.dart';
 import 'utils/notification_helper.dart';
 import 'handlers/chat_notification_handler.dart';
 
-// ─────────────────────────────────────────────────────────────────
-// TOP-LEVEL BACKGROUND HANDLER
-//
-// Wajib top-level (bukan method) karena dijalankan di background isolate.
-// Daftarkan di main.dart:
-//   FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHandler);
-//
-// Background isolate TIDAK bisa akses Provider/Isar secara langsung.
-// Chat message → ChatStorageService.enqueueBackgroundMessage()
-//   → SharedPreferences queue → diproses saat app resume via drainBackgroundQueue()
-// ─────────────────────────────────────────────────────────────────
-@pragma('vm:entry-point')
-Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
-  debugPrint('[FCM] 🌙 Background: ${message.messageId}');
-
-  try {
-    final type = message.data['type']?.toString() ?? '';
-
-    if (type == 'chat') {
-      // Enqueue ke SharedPreferences — aman dari background isolate
-      await ChatStorageService.enqueueBackgroundMessage(message);
-
-      // Tampilkan notifikasi lokal (opsional, bisa juga pakai FCM notification payload)
-      await _showBackgroundChatNotification(message);
-    }
-
-    // Tipe lain (progress, payment) tidak dihandle di background
-    // karena butuh Provider yang tidak tersedia di isolate
-  } catch (e) {
-    debugPrint('[FCM] ❌ Background error: $e');
-  }
-}
-
-Future<void> _showBackgroundChatNotification(RemoteMessage message) async {
-  try {
-    final detail = NotificationHelper.parseDetail(message.data['detail']);
-    if (detail.isEmpty) return;
-
-    final senderId = detail['sender_id']?.toString() ?? '';
-    final messageText = detail['message']?.toString() ?? 'Pesan baru';
-    final senderName = detail['sender_name']?.toString() ?? 'Pesan baru';
-    final roomId = detail['room_id']?.toString() ?? '';
-
-    if (roomId.isEmpty || senderId.isEmpty) return;
-
-    final plugin = FlutterLocalNotificationsPlugin();
-    await NotificationChannelManager.createAllChannels(plugin);
-
-    const androidDetails = AndroidNotificationDetails(
-      'chat_channel',
-      'Chat',
-      channelDescription: 'Notifikasi pesan chat',
-      importance: Importance.high,
-      priority: Priority.high,
-      playSound: true,
-    );
-
-    const details = NotificationDetails(android: androidDetails);
-
-    await plugin.show(
-      roomId.hashCode,
-      senderName,
-      messageText,
-      details,
-      payload: jsonEncode({'type': 'chat', 'roomId': roomId}),
-    );
-  } catch (e) {
-    debugPrint('[FCM] ⚠️ _showBackgroundChatNotification: $e');
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// FCM SERVICE — Singleton Orchestrator
-//
-// Menghubungkan Firebase Messaging dengan:
-//   - ChatProvider (Isar-based, offline-first)
-//   - HistoryOrderProvider
-//   - PesananProvider
-//
-//    Semua chat message lewat ChatNotificationHandler → ChatProvider → Isar.
-// ─────────────────────────────────────────────────────────────────
 class FCMService {
   static final FCMService instance = FCMService._internal();
   factory FCMService() => instance;
@@ -116,12 +34,10 @@ class FCMService {
   String? _currentUserId;
   String? _activeRoomId;
 
-  // ── Provider references ───────────────────────────────────────
   ChatProvider? _chatProvider;
   HistoryOrderProvider? _historyOrderProvider;
   PesananProvider? _pesananProvider;
 
-  // ── Callbacks untuk navigasi ──────────────────────────────────
   Function(ChatModel)? onChatMessageReceived;
   Function(HistoryOrderModel)? onProgressReceived;
   Function(String roomId)? onNotificationTapped;
@@ -191,9 +107,10 @@ class FCMService {
       debugPrint('[FCM] 🔑 Token: $_fcmToken');
 
       if (_fcmToken == null) {
-        debugPrint('[FCM] ⚠️ Token null, retrying...');
+        debugPrint('[FCM] ⚠️ Token null, retrying in 2s...');
         await Future.delayed(const Duration(seconds: 2));
         _fcmToken = await _firebaseMessaging.getToken();
+        debugPrint('[FCM] 🔄 Retry token: $_fcmToken');
       }
 
       _setupMessageListeners();
@@ -228,45 +145,27 @@ class FCMService {
     await _notificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: _onLocalNotificationTapped,
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped,
     );
+
+    final androidPlugin = _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      final granted = await androidPlugin.requestNotificationsPermission();
+      debugPrint('[FCM] 📱 Android notif permission granted: $granted');
+    }
 
     debugPrint('[FCM] ✅ Local notifications ready');
   }
 
+  @pragma('vm:entry-point')
+  static void _onBackgroundNotificationTapped(NotificationResponse response) {
+    debugPrint('[FCM] 👆 Background local notif tapped: ${response.payload}');
+  }
+
   void _initializeHandlers() {
-    _chatHandler = ChatNotificationHandler(
-      notificationsPlugin: _notificationsPlugin,
-      getCurrentUserId: () => _currentUserId,
-      getActiveRoomId: () => _activeRoomId,
-      onMessageReceived: (message) {
-        // ✅ SATU JALUR: selalu lewat ChatProvider → ChatStorageService → Isar
-        // Tidak ada FcmChatProvider lagi
-        if (_chatProvider != null) {
-          _chatProvider!.handleMessageFromFCM(message);
-          debugPrint('[FCM] ✅ Chat → ChatProvider.handleMessageFromFCM');
-        } else {
-          // Fallback jika ChatProvider belum diinjeksi
-          debugPrint('[FCM] ⚠️ ChatProvider belum diinjeksi, pakai callback');
-          onChatMessageReceived?.call(message);
-        }
-      },
-      getSenderName: (roomId, senderId) {
-        if (_chatProvider != null) {
-          return _chatProvider!.getSenderName(roomId, senderId);
-        }
-        return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
-      },
-      onUpdateMessageStatus: (messageId, roomId, newStatus) async {
-        // ✅ Update status pesan via ChatProvider → ChatSyncService
-        // Ini penting agar vendor bisa lihat status received/read
-        debugPrint('[FCM] 🔄 Update status: $messageId → $newStatus');
-        if (_chatProvider != null) {
-          await _chatProvider!.updateMessageStatus(messageId, newStatus);
-        } else {
-          debugPrint('[FCM] ⚠️ ChatProvider null, skip status update');
-        }
-      },
-    );
+    _chatHandler = _buildChatHandler();
 
     _progressHandler = ProgressNotificationHandler(
       notificationsPlugin: _notificationsPlugin,
@@ -288,30 +187,51 @@ class FCMService {
     debugPrint('[FCM] ✅ Handlers initialized');
   }
 
-  void _rebuildChatHandler() {
-    _chatHandler = ChatNotificationHandler(
+  // ✅ Factory method — hindari duplikasi kode antara _initializeHandlers dan _rebuildChatHandler
+  ChatNotificationHandler _buildChatHandler() {
+    return ChatNotificationHandler(
       notificationsPlugin: _notificationsPlugin,
       getCurrentUserId: () => _currentUserId,
       getActiveRoomId: () => _activeRoomId,
-      onMessageReceived: (message) {
+
+      // ✅ Signature berubah: sekarang membawa (ChatModel message, String targetStatus)
+      //    targetStatus sudah ditentukan oleh ChatNotificationHandler berdasarkan
+      //    perbandingan activeRoomId vs message.roomId
+      onMessageReceived: (ChatModel message, String targetStatus) {
+        debugPrint('[FCM] 💬 onMessageReceived: ${message.messageId} '
+            'room=${message.roomId} status=$targetStatus');
+
         if (_chatProvider != null) {
+          // message sudah di-inject targetStatus oleh ChatNotificationHandler
+          // ChatProvider.handleMessageFromFCM menyimpan ke Isar dengan status ini
           _chatProvider!.handleMessageFromFCM(message);
+          debugPrint('[FCM] ✅ → ChatProvider ($targetStatus)');
         } else {
+          debugPrint('[FCM] ⚠️ ChatProvider null, pakai callback fallback');
           onChatMessageReceived?.call(message);
         }
       },
+
       getSenderName: (roomId, senderId) {
         if (_chatProvider != null) {
           return _chatProvider!.getSenderName(roomId, senderId);
         }
         return getSenderName?.call(roomId, senderId) ?? 'Pesan baru';
       },
+
       onUpdateMessageStatus: (messageId, roomId, newStatus) async {
+        debugPrint('[FCM] 🔄 updateMessageStatus: $messageId → $newStatus');
         if (_chatProvider != null) {
           await _chatProvider!.updateMessageStatus(messageId, newStatus);
+        } else {
+          debugPrint('[FCM] ⚠️ ChatProvider null — skip: $messageId');
         }
       },
     );
+  }
+
+  void _rebuildChatHandler() {
+    _chatHandler = _buildChatHandler();
     debugPrint('[FCM] 🔄 ChatHandler rebuilt');
   }
 
@@ -324,7 +244,10 @@ class FCMService {
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
     _firebaseMessaging.getInitialMessage().then((message) {
-      if (message != null) _handleMessageOpenedApp(message);
+      if (message != null) {
+        debugPrint('[FCM] 🚀 App launched from terminated via notification');
+        _handleMessageOpenedApp(message);
+      }
     });
     debugPrint('[FCM] ✅ Listeners ready');
   }
@@ -334,7 +257,7 @@ class FCMService {
   // =========================================
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM] ☀️ Foreground: ${message.messageId}');
+    debugPrint('[FCM] ☀️ Foreground: ${message.messageId} | activeRoom: $_activeRoomId');
 
     try {
       final type = NotificationType.fromString(message.data['type']);
@@ -342,9 +265,8 @@ class FCMService {
 
       switch (type) {
         case NotificationType.chat:
-          // ✅ Delegasi ke ChatNotificationHandler
-          // Handler akan parse payload → ChatModel → ChatProvider.handleMessageFromFCM
-          // → ChatStorageService → Isar → stream → UI (otomatis)
+          // ✅ ChatNotificationHandler menentukan read/received
+          //    berdasarkan _activeRoomId vs roomId di payload
           await _chatHandler.handleForegroundMessage(message);
           break;
         case NotificationType.payment:
@@ -370,7 +292,7 @@ class FCMService {
   // =========================================
 
   void _handleMessageOpenedApp(RemoteMessage message) {
-    debugPrint('[FCM] 👆 Notification tap (from background)');
+    debugPrint('[FCM] 👆 Notification tap (background/terminated)');
     final type = NotificationType.fromString(message.data['type']);
     final detail = NotificationHelper.parseDetail(message.data['detail']);
 
@@ -384,12 +306,12 @@ class FCMService {
         if (orderId != null) onOrderNotificationTapped?.call(orderId);
         break;
       default:
-        break;
+        debugPrint('[FCM] ℹ️ Tap ignored for type: $type');
     }
   }
 
   void _onLocalNotificationTapped(NotificationResponse response) {
-    debugPrint('[FCM] 👆 Local notification tapped');
+    debugPrint('[FCM] 👆 Local notification tapped: ${response.payload}');
     final payload = NotificationHelper.parsePayload(response.payload);
     if (payload == null) return;
 
@@ -419,6 +341,9 @@ class FCMService {
       _fcmToken ??= await _firebaseMessaging.getToken();
       if (_fcmToken != null) {
         await _sendTokenToBackend(_fcmToken!, userId);
+        debugPrint('[FCM] ✅ Token registered: ${_fcmToken!.substring(0, 20)}...');
+      } else {
+        debugPrint('[FCM] ⚠️ FCM token null saat registerToken');
       }
     } catch (e) {
       debugPrint('[FCM] ❌ registerToken error: $e');
@@ -435,15 +360,41 @@ class FCMService {
     }
   }
 
+  Future<void> unregisterToken(String userId) async {
+    try {
+      debugPrint('[FCM] 📤 Unregistering token for: $userId');
+      final token = _fcmToken ?? await _firebaseMessaging.getToken();
+      if (token != null) {
+        final deviceTokenService = DeviceTokenService();
+        await deviceTokenService.removeDeviceToken(userId, token);
+        debugPrint('[FCM] ✅ Token unregistered');
+      }
+      _currentUserId = null;
+      _fcmToken = null;
+    } catch (e) {
+      debugPrint('[FCM] ❌ unregisterToken error: $e');
+    }
+  }
+
   // =========================================
   // ACTIVE ROOM
+  // ✅ Kunci dari logika read/received
   // =========================================
 
+  /// Set room yang sedang aktif dibuka user.
+  ///
+  /// Dipanggil dari:
+  ///   - RoomChatPage._initializeChat()  → setActiveRoom(roomId)
+  ///   - RoomChatPage.dispose()          → setActiveRoom(null)
+  ///   - ChatListPage (via disposeRoom)  → setActiveRoom(null)
+  ///
+  /// Efek langsung pada FCM yang masuk:
+  ///   - roomId SAMA → targetStatus='read', tidak tampilkan notif lokal
+  ///   - roomId BEDA atau null → targetStatus='received', tampilkan notif lokal
   void setActiveRoom(String? roomId) {
     if (_activeRoomId == roomId) return;
     _activeRoomId = roomId;
-    debugPrint('[FCM] 🏠 Active room: $roomId');
-    // getCurrentUserId/getActiveRoomId adalah live getter → tidak perlu rebuild handler
+    debugPrint('[FCM] 🏠 Active room: ${roomId ?? "(none)"}');
   }
 
   // =========================================
