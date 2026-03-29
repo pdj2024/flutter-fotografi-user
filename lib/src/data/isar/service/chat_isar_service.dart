@@ -131,9 +131,10 @@ class ChatIsarService {
     required String senderId,
   }) async {
     try {
-      // ✅ FIX: Gunakan _db getter (bukan _isar.isar yang nullable)
-      // _db sudah include null check + assert initialized
-      final cutoff = sentAt.subtract(const Duration(seconds: 10));
+      // ✅ FIX: Perluas cutoff dari 10s ke 5 menit
+      // 10 detik terlalu ketat untuk kasus jaringan lambat atau FCM delay
+      final cutoffEarliest = sentAt.subtract(const Duration(minutes: 5));
+      final cutoffLatest = sentAt.add(const Duration(minutes: 5));
 
       final candidates = await _db.chatMessageEntitys
           .filter()
@@ -143,18 +144,23 @@ class ChatIsarService {
           .and()
           .messageEqualTo(message)
           .and()
-          .sentAtGreaterThan(cutoff)
+          .sentAtGreaterThan(cutoffEarliest)
+          .and()
+          .sentAtLessThan(cutoffLatest)
           .findAll();
 
       if (candidates.isEmpty) return null;
 
-      // Ambil yang paling dekat dengan sentAt
-      candidates.sort((a, b) => a.sentAt.difference(sentAt).abs().compareTo(
-            b.sentAt.difference(sentAt).abs(),
-          ));
+      // Ambil yang paling dekat sentAt
+      candidates.sort((a, b) => a.sentAt
+          .difference(sentAt)
+          .abs()
+          .compareTo(b.sentAt.difference(sentAt).abs()));
 
       debugPrint('[ChatIsarService] 🔍 findLocalEchoByContentNoRoom: '
-          'found ${candidates.first.messageId}');
+          'found ${candidates.first.messageId} '
+          'roomId="${candidates.first.roomId}" '
+          'Δt=${candidates.first.sentAt.difference(sentAt).abs().inSeconds}s');
       return candidates.first;
     } catch (e) {
       debugPrint('[ChatIsarService] ⚠️ findLocalEchoByContentNoRoom: $e');
@@ -513,26 +519,41 @@ class ChatIsarService {
     String? senderIdHint,
   }) async {
     try {
+      // ✅ FIX: Hapus filter sendStatusEqualTo('sent')
+      // Local echo bisa saja sudah berubah status sebelum FCM own-echo datang
+      // Cukup filter by roomId + message + startsWith('local-')
       final candidates = await _db.chatMessageEntitys
           .filter()
           .roomIdEqualTo(roomId)
+          .and()
           .messageEqualTo(message)
-          .sendStatusEqualTo('sent')
+          .and()
+          .messageIdStartsWith('local-')
           .findAll();
 
       if (candidates.isEmpty) return null;
 
-      const threshold = Duration(seconds: 60);
-      for (final entity in candidates) {
-        if (!entity.messageId.startsWith('local-')) continue;
-        final diff = entity.sentAt.difference(sentAt).abs();
-        if (diff > threshold) continue;
-        debugPrint(
-            '[ChatIsarService] 🔍 Local echo match: ${entity.messageId}');
-        return entity;
-      }
+      // ✅ FIX: Perluas threshold dari 60s ke 5 menit
+      // Jaringan lambat atau antrian FCM bisa menyebabkan delay panjang
+      const threshold = Duration(minutes: 5);
 
-      return null;
+      // Urutkan by kedekatan sentAt — ambil yang paling dekat
+      final matched = candidates.where((entity) {
+        final diff = entity.sentAt.difference(sentAt).abs();
+        return diff <= threshold;
+      }).toList();
+
+      if (matched.isEmpty) return null;
+
+      matched.sort((a, b) => a.sentAt
+          .difference(sentAt)
+          .abs()
+          .compareTo(b.sentAt.difference(sentAt).abs()));
+
+      debugPrint('[ChatIsarService] 🔍 findLocalEchoByContent: '
+          'found ${matched.first.messageId} '
+          'Δt=${matched.first.sentAt.difference(sentAt).abs().inSeconds}s');
+      return matched.first;
     } catch (e) {
       debugPrint('[ChatIsarService] ⚠️ findLocalEchoByContent: $e');
       return null;

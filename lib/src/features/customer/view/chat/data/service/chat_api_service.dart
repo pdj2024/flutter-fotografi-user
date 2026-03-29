@@ -108,9 +108,13 @@ class ChatApiService {
     required ChatModel message,
   }) async {
     try {
+      // Temp roomId (format 'temp-...') hanya dipakai lokal — kirim '' ke backend
+      final apiRoomId =
+          message.roomId.startsWith('temp-') ? '' : message.roomId;
+
       final payload = {
         'chat': message.toJson(),
-        'room_id': message.roomId,
+        'room_id': apiRoomId,
         'user_ids': message.userIds,
       };
 
@@ -149,7 +153,7 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      print("updaatteee statuss ${messageId} ${status}");
+      print("Customer updaatteee statuss ${messageId} ${status}");
       final response = await _client.put(
         '/$_controller/update-send-status?message_id=$messageId&send_status=$status',
         headers: {'Content-Type': 'application/json'},
@@ -167,7 +171,7 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      print("updaatteee statuss ${model.messageId} ${status}");
+      print("Customer updaatteee statuss ${model.messageId} ${status}");
       final response = await _client.put(
         '/$_controller/update?message_id=${model.messageId}',
         headers: {'Content-Type': 'application/json'},

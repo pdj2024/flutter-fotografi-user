@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/isar/data/room_chat_entity.dart';
 import 'package:mpjnew/src/data/isar/service/chat_isar_service.dart';
@@ -28,11 +27,9 @@ import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 ///                    ↗ ChatStorageService (FCM bridge)
 ///   FCM → ChatStorageService → ChatIsarService → stream → UI (otomatis)
 ///
-/// Key principles:
-///   - Isar stream = source of truth, UI tidak perlu notifyListeners manual
-///   - ChatProvider hanya expose stream + action methods
-///   - Semua write ke Isar lewat ChatStorageService atau ChatSyncService
-///   - notifyListeners() hanya untuk state non-Isar (isLoading, rooms list cache)
+/// ✅ PENTING: ChatProvider TIDAK memanggil FCMService.setChatProvider().
+///    Inject dilakukan oleh MyApp._setupFCMCallbacks() — satu titik saja.
+///    Ini mencegah race condition antara splash dan MyApp callback.
 class ChatProvider extends ChangeNotifier {
   final ChatApiService _apiService = ChatApiService();
   final ChatIsarService _isar = ChatIsarService.instance;
@@ -101,7 +98,6 @@ class ChatProvider extends ChangeNotifier {
 
   /// Stream pesan untuk room tertentu.
   /// WAJIB di-cache di caller (initState) — jangan buat ulang di build().
-  /// Menggunakan pagination via _displayedCount.
   Stream<List<ChatMessageEntity>> getMessagesStream(String roomId) {
     _displayedCount.putIfAbsent(roomId, () => _initialDisplayCount);
 
@@ -121,6 +117,11 @@ class ChatProvider extends ChangeNotifier {
 
   ChatProvider();
 
+  /// Initialize ChatProvider untuk userId tertentu.
+  ///
+  /// ✅ TIDAK memanggil FCMService.setChatProvider() di sini.
+  ///    FCMService provider injection dilakukan oleh MyApp._setupFCMCallbacks()
+  ///    yang dijamin dipanggil via addPostFrameCallback — setelah widget tree ready.
   Future<bool> initialize({
     required String userId,
     required String userType,
@@ -144,8 +145,9 @@ class ChatProvider extends ChangeNotifier {
 
     _storage.setCurrentUser(userId);
 
-    // Inject ChatProvider ke FCMService
-    FCMService.instance.setChatProvider(this);
+    // ✅ TIDAK ada FCMService.instance.setChatProvider(this) di sini
+    //    Ini adalah perubahan kunci dari versi sebelumnya yang menyebabkan
+    //    race condition dengan MyApp._setupFCMCallbacks()
 
     try {
       if (!_isar.isInitialized) {
@@ -187,8 +189,6 @@ class ChatProvider extends ChangeNotifier {
           userId: _currentUserId!,
         );
 
-        // Isar stream otomatis emit setelah rooms + messages di-save
-        // ChatListPage akan rebuild dengan data lengkap (nama, avatar vendor)
         debugPrint('[ChatProvider] ✅ Pending room fetch done');
       } catch (e) {
         debugPrint('[ChatProvider] ⚠️ _drainPendingRoomFetchIfNeeded: $e');
@@ -248,33 +248,28 @@ class ChatProvider extends ChangeNotifier {
 
   /// Entry point untuk pesan dari FCM (foreground).
   /// Dipanggil dari FCMService via ChatNotificationHandler.
-  ///
-  /// Delegasi ke ChatStorageService → satu jalur untuk semua pesan.
-  /// Isar stream otomatis notify UI → tidak perlu notifyListeners manual.
   Future<void> handleMessageFromFCM(ChatModel message) async {
     debugPrint(
         '[ChatProvider] 📨 FCM: ${message.messageId} | sender: ${message.senderId}');
- 
+
     try {
       final saved = await _storage.persistForegroundMessage(message);
- 
+
       if (saved) {
         if (message.senderId != _currentUserId) {
           onNewMessageFromOther?.call(message);
         }
- 
+
         final hasEmbedded = (message.idPaket?.isNotEmpty == true) ||
             (message.noPenawaran?.isNotEmpty == true) ||
             (message.noInvoice?.isNotEmpty == true);
- 
+
         if (hasEmbedded) {
           _triggerEmbeddedEnrich(message);
         }
       }
- 
-      // ✅ Cek pending room fetch setiap kali FCM masuk
-      // Kasus: pesan dari vendor baru → _handleIncoming buat minimal room
-      // → enqueue roomId → drain di sini → fetch data lengkap → Isar update
+
+      // Cek pending room fetch setiap kali FCM masuk
       _drainPendingRoomFetchIfNeeded();
     } catch (e, st) {
       debugPrint('[ChatProvider] ❌ handleMessageFromFCM: $e\n$st');
@@ -331,6 +326,15 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> updateMessageStatus(String messageId, String status) async {
     try {
+      // ✅ Guard: jangan update status untuk pesan milik sendiri
+      // Cek apakah messageId ini milik currentUser di Isar
+      final entity = await _isar.getMessageById(messageId);
+      if (entity != null && entity.senderId == _currentUserId) {
+        debugPrint(
+            '[ChatProvider] ⏭️ Skip updateStatus — own message: $messageId');
+        return;
+      }
+
       await _sync.updateMessageStatus(messageId: messageId, newStatus: status);
     } catch (e) {
       debugPrint('[ChatProvider] ❌ updateMessageStatus: $e');
@@ -405,10 +409,6 @@ class ChatProvider extends ChangeNotifier {
   // MESSAGES MANAGEMENT
   // =========================================
 
-  /// Load messages untuk room.
-  ///
-  /// forceRefresh=false (default): tampilkan cache dulu + background sync
-  /// forceRefresh=true: fetch dari API dan REPLACE data lokal
   Future<List<ChatModel>> loadMessages(
     String roomId, {
     bool forceRefresh = false,
@@ -429,7 +429,6 @@ class ChatProvider extends ChangeNotifier {
         forceRefresh: forceRefresh,
       );
 
-      // Mark room sebagai read setelah load
       await markRoomAsRead(roomId);
       return messages;
     } catch (e) {
@@ -452,7 +451,6 @@ class ChatProvider extends ChangeNotifier {
       _displayedCount[roomId] ?? _initialDisplayCount;
   bool hasMoreToDisplay(String roomId) => true;
 
-  /// Incremental sync (app resume) — UPSERT, jangan REPLACE
   Future<void> syncRoomFromHiveAndNotify(String roomId) async {
     if (_currentUserId == null) return;
     final roomInfo = getRoom(roomId);
@@ -462,7 +460,6 @@ class ChatProvider extends ChangeNotifier {
       roomType: roomInfo?.roomType ?? 'direct',
       userIds: roomInfo?.userIds ?? [],
     );
-    // Isar stream otomatis notify UI
   }
 
   // =========================================
@@ -492,9 +489,6 @@ class ChatProvider extends ChangeNotifier {
       jenisPesan = 'penawaran';
     }
 
-    // Local echo dengan status "sent"
-    // Status ini benar: user sudah "mengirim" dari sisi UI
-    // Akan di-replace dengan messageId dari server saat FCM echo diterima
     final localMessage = ChatModel(
       messageId: localId,
       roomId: roomId,
@@ -536,7 +530,6 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> removeFailedMessage(String roomId, String localId) async {
     await _isar.deleteMessage(localId);
-    // Isar stream otomatis update UI
   }
 
   // =========================================
@@ -572,7 +565,6 @@ class ChatProvider extends ChangeNotifier {
           pesanan: EmbeddedPesanan.fromModel(pesanan),
         );
         await _isar.saveMessage(updated);
-        // Isar stream otomatis update UI
       }
 
       return true;
@@ -608,6 +600,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _backgroundSyncMessages(String roomId) {
+    if (roomId.startsWith('temp-')) return;
     final roomInfo = getRoom(roomId);
     _sync
         .incrementalSync(
