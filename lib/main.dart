@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mpjnew/splash_logic_handler.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
@@ -74,7 +75,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
     if (type == NotificationType.chat) {
       // Enqueue ke SharedPreferences + kirim status "received" ke API
-      final success = await ChatStorageService.enqueueBackgroundMessage(message);
+      final success =
+          await ChatStorageService.enqueueBackgroundMessage(message);
 
       debugPrint(success
           ? '[BGHandler] ✅ Chat enqueued + received status sent'
@@ -100,58 +102,57 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('🚀 CUSTOMER APP INITIALIZATION START');
-    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('🚀 APP INIT START');
 
-    // ── 1. Firebase ────────────────────────────────────────────────────────
+    // ── 1. Firebase — wajib paling pertama ────────────────────────
     await Firebase.initializeApp();
-    debugPrint('✅ Firebase initialized');
-
-    // ✅ Daftarkan background handler SEBELUM runApp
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    debugPrint('✅ Background message handler registered');
+    debugPrint('✅ Firebase ready');
 
-    // ── 2. Isar ────────────────────────────────────────────────────────────
-    await ChatIsarService.instance.initialize();
-    debugPrint('✅ Isar initialized');
+    // ── 2. Isar + Hive — paralel ────────────────────────
+    await Future.wait([
+      ChatIsarService.instance.initialize(),
+      Hive.initFlutter().then((_) {
+        if (!Hive.isAdapterRegistered(1)) {
+          Hive.registerAdapter(MediaCacheStatusAdapter());
+        }
+        if (!Hive.isAdapterRegistered(2)) {
+          Hive.registerAdapter(MediaUrlModelAdapter());
+        }
+        if (!Hive.isAdapterRegistered(3)) {
+          Hive.registerAdapter(PaketModelAdapter());
+        }
+        if (!Hive.isAdapterRegistered(4)) {
+          Hive.registerAdapter(PenawaranModelAdapter());
+        }
+        if (!Hive.isAdapterRegistered(5)) {
+          Hive.registerAdapter(PesananModelAdapter());
+        }
+        if (!Hive.isAdapterRegistered(6)) {
+          Hive.registerAdapter(PortofolioModelAdapter());
+        }
+      }),
+    ]);
+    debugPrint('✅ Isar + Hive ready (paralel)');
 
-    // ── 3. Hive ────────────────────────────────────────────────────────────
-    await Hive.initFlutter();
-    debugPrint('✅ Hive initialized');
-
-    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(MediaCacheStatusAdapter());
-    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(MediaUrlModelAdapter());
-    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(PaketModelAdapter());
-    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(PenawaranModelAdapter());
-    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(PesananModelAdapter());
-    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(PortofolioModelAdapter());
-    debugPrint('✅ Hive adapters registered');
-
-    // ── 4. Local services ──────────────────────────────────────────────────
+    // ── 3. PesananLocalService — setelah Hive siap ────────
     final pesananLocalService = PesananLocalService();
     await pesananLocalService.initialize();
-    debugPrint('✅ PesananLocalService initialized');
+    debugPrint('✅ Isar + Hive + PesananLocalService ready (paralel)');
 
-    // ── 5. AuthService ─────────────────────────────────────────────────────
+    // ── 3. AuthService — butuh Hive sudah siap ────────────────────
     await authService.initialize();
     final userId = authService.userId;
     if (userId != null) {
       ChatStorageService.instance.setCurrentUser(userId);
-      debugPrint('✅ ChatStorageService user set: $userId');
     }
-    debugPrint('✅ AuthService initialized');
+    debugPrint('✅ AuthService ready');
 
-    // ── 6. FCM — init permission + local notifications + listeners ─────────
-    // ✅ TIDAK inject provider di sini.
-    //    Provider di-inject setelah widget tree siap via MyApp._setupFCMCallbacks()
-    //    yang dipanggil lewat addPostFrameCallback — satu titik, terjamin.
+    // ── 4. FCMService — butuh Auth sudah siap ─────────────────────
     await FCMService.instance.initialize();
-    debugPrint('✅ FCM Service initialized');
+    debugPrint('✅ FCM ready');
 
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('✅ INITIALIZATION COMPLETE');
-    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('✅ APP INIT COMPLETE');
 
     runApp(
       MultiProvider(
@@ -168,20 +169,19 @@ void main() async {
           ),
           ChangeNotifierProvider(create: (_) => NavigationProvider()),
           ChangeNotifierProvider(
-            create: (_) => PortofolioProvider(portofolioService: PortofolioService()),
+            create: (_) =>
+                PortofolioProvider(portofolioService: PortofolioService()),
           ),
           ChangeNotifierProvider(
-            create: (_) => KategoriProvider(KategoriService()),
-          ),
+              create: (_) => KategoriProvider(KategoriService())),
           ChangeNotifierProvider(create: (_) => KotaProvider(KotaService())),
           ChangeNotifierProvider(
-            create: (_) => PaketProvider(service: PaketService()),
-          ),
+              create: (_) => PaketProvider(service: PaketService())),
           ChangeNotifierProvider(
-            create: (_) => VendorProvider(service: VendorService()),
-          ),
+              create: (_) => VendorProvider(service: VendorService())),
           ChangeNotifierProvider(
-            create: (_) => PenawaranProvider(penawaranService: PenawaranService()),
+            create: (_) =>
+                PenawaranProvider(penawaranService: PenawaranService()),
           ),
           ChangeNotifierProvider(
             create: (_) => PesananProvider(
@@ -189,20 +189,13 @@ void main() async {
               historyService: HistoryOrderService(),
             ),
           ),
-
-          // ✅ ChatProvider — Isar offline-first
           ChangeNotifierProvider(create: (_) => ChatProvider()),
-
-          // ✅ RoomChatProvider — hanya depends on ChatProvider
           ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
-            create: (context) => RoomChatProvider(
-              chatProv: context.read<ChatProvider>(),
-            ),
-            update: (_, chatProvider, previous) {
-              return previous ?? RoomChatProvider(chatProv: chatProvider);
-            },
+            create: (context) =>
+                RoomChatProvider(chatProv: context.read<ChatProvider>()),
+            update: (_, chatProvider, previous) =>
+                previous ?? RoomChatProvider(chatProv: chatProvider),
           ),
-
           ChangeNotifierProvider(
             create: (_) => HistoryOrderProvider()..initialize(),
           ),
@@ -212,11 +205,7 @@ void main() async {
       ),
     );
   } catch (e, stackTrace) {
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('❌ FATAL INITIALIZATION ERROR');
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('Error: $e');
-    debugPrint('Stack: $stackTrace');
+    debugPrint('❌ FATAL INIT ERROR: $e\n$stackTrace');
   }
 }
 
@@ -441,198 +430,7 @@ class MyApp extends StatelessWidget {
 // SPLASH LOGIC HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
 
-class SplashLogicHandler extends StatefulWidget {
-  const SplashLogicHandler({super.key});
 
-  @override
-  State<SplashLogicHandler> createState() => _SplashLogicHandlerState();
-}
-
-class _SplashLogicHandlerState extends State<SplashLogicHandler> {
-  bool _isLoading = true;
-  Widget? _startPage;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitialData();
-    });
-  }
-
-  Future<void> _loadInitialData() async {
-    try {
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('🚀 LOADING INITIAL DATA');
-      debugPrint('═══════════════════════════════════════════════════');
-
-      apiClient.onSessionExpired = () {
-        debugPrint('🚪 [Splash] Session expired');
-        if (mounted) context.read<NavigationProvider>().handleLogout(context);
-      };
-
-      // ── Cek versi app ──────────────────────────────────────────────────
-      debugPrint('🔄 Checking app version...');
-      final versionResult = await VersionCheckService().checkVersion();
-      if (!mounted) return;
-
-      if (!versionResult.isCompatible) {
-        debugPrint('⚠️ Version incompatible — showing update dialog');
-        await VersionCheckService.showUpdateDialogIfNeeded(context, versionResult);
-        return;
-      }
-      debugPrint('✅ Version check passed');
-
-      // ── Restore session ────────────────────────────────────────────────
-      debugPrint('🔄 Restoring session...');
-      final userProvider = context.read<UserProvider>();
-      final sessionRestored = await userProvider.restoreSession();
-      debugPrint('   Session restored: $sessionRestored');
-
-      // ✅ SATU blok if — tidak ada duplikasi
-      if (sessionRestored && userProvider.customer != null) {
-        debugPrint('✅ Session restored: ${userProvider.customer!.namaDisplay}');
-
-        await context.read<NavigationProvider>().saveRole(Constants.customer);
-        apiClient.setRole(Constants.customer);
-
-        LocalStorageService.instance.setActiveCustomer(
-          userProvider.customer!.noId,
-        );
-
-        // ✅ Set current user agar ChatStorageService bisa bedakan
-        //    pesan sendiri vs pesan masuk
-        ChatStorageService.instance.setCurrentUser(userProvider.customer!.noId);
-
-        // ✅ Initialize ChatProvider (Isar offline-first)
-        //    CATATAN: di dalam initialize() TIDAK ada FCMService.setChatProvider()
-        //    Inject dilakukan oleh MyApp._setupFCMCallbacks() — satu titik saja
-        final chatProvider = context.read<ChatProvider>();
-        await chatProvider.initialize(
-          userId: userProvider.customer!.noId,
-          userType: Constants.customer,
-        );
-        debugPrint('✅ ChatProvider initialized');
-
-        // ✅ Register token SETELAH ChatProvider ready
-        //    Provider sudah di-inject oleh _setupFCMCallbacks (addPostFrameCallback)
-        //    yang dipanggil SEBELUM _loadInitialData karena MyApp.build() lebih dulu
-        await FCMService.instance.registerToken(userProvider.customer!.noId);
-        debugPrint('✅ FCM token registered');
-
-        // ── Load master data di background (tidak blocking splash) ─────────
-        Future.microtask(() async {
-          try {
-            final portoProvider = context.read<PortofolioProvider>();
-            final kotaProvider = context.read<KotaProvider>();
-            final kategoriProvider = context.read<KategoriProvider>();
-
-            await Future.wait([
-              portoProvider.loadLikedPortofolio(
-                context: context,
-                syncFromApi: true,
-              ),
-              portoProvider.loadSavedPortofolio(
-                context: context,
-                syncFromApi: true,
-              ),
-              kotaProvider.getAllKotaList(),
-              kategoriProvider.loadKategori(),
-            ]);
-            debugPrint('✅ Master data loaded');
-          } catch (e) {
-            debugPrint('⚠️ Master data error: $e');
-          }
-        });
-      } else {
-        debugPrint('ℹ️ No session — user not logged in');
-        await context.read<NavigationProvider>().saveRole(Constants.customer);
-        apiClient.setRole(Constants.customer);
-      }
-
-      _startPage = const MainMenu();
-
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('✅ INITIAL DATA LOAD COMPLETE');
-      debugPrint('═══════════════════════════════════════════════════');
-    } catch (e, stackTrace) {
-      debugPrint('❌ INITIALIZATION ERROR: $e');
-      debugPrint('Stack: $stackTrace');
-      _errorMessage = 'Terjadi kesalahan saat memuat aplikasi: $e';
-      _startPage = _buildErrorPage();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Widget _buildErrorPage() {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(
-                _errorMessage ?? 'Terjadi kesalahan',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _isLoading = true;
-                    _errorMessage = null;
-                  });
-                  _loadInitialData();
-                },
-                child: const Text('Coba Lagi'),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MainMenu()),
-                ),
-                child: const Text('Lanjut ke Aplikasi'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Constants.primaryColor),
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Memuat aplikasi...',
-                style: TextStyle(fontSize: 16, color: Colors.black87),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return _startPage ?? const MainMenu();
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BACKGROUND NOTIFICATION HELPERS

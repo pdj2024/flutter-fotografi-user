@@ -176,6 +176,7 @@ class PortofolioProvider with ChangeNotifier {
 
       if (!forceRefresh && _isInitialized) {
         try {
+          localService.clearAll();
           final cached = await localService.getCachedPortfolios();
           if (cached.isNotEmpty) {
             _cachedPortfolios = cached;

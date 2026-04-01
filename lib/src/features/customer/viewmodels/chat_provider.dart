@@ -373,6 +373,7 @@ class ChatProvider extends ChangeNotifier {
         _roomInfoCache[room.roomId] = room;
       }
       if (!silent) notifyListeners();
+      debugPrint('[ChatProvider] ✅ ${rooms.length} rooms loaded');
       return rooms;
     } catch (e) {
       debugPrint('[ChatProvider] ❌ loadRooms: $e');

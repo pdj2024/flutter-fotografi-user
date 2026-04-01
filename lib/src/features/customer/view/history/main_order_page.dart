@@ -339,22 +339,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   Widget _buildOrderList() {
     final provider = context.read<PesananProvider>();
-    final isLoading = provider.isLoadingOrder;
+    // final isLoading = provider.isLoadingOrder;
 
-    if (isLoading) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-        child: Column(
-          children: List.generate(
-            3,
-            (_) => const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: SkeletonCard(),
-            ),
-          ),
-        ),
-      );
-    }
+    // if (isLoading) {
+    //   return Padding(
+    //     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+    //     child: Column(
+    //       children: List.generate(
+    //         3,
+    //         (_) => const Padding(
+    //           padding: EdgeInsets.only(bottom: 12),
+    //           child: SkeletonCard(),
+    //         ),
+    //       ),
+    //     ),
+    //   );
+    // }
 
     final orders = _filteredOrders;
 

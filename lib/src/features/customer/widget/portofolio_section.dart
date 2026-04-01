@@ -76,33 +76,35 @@ class _PortofolioSectionState extends State<PortofolioSection> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ===== Header =====
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Jelajah",
-                  style: AppTextStyle.subtitle1,
-                ),
-                CustomButton.textButton(
-                    onTap: () {
-                      context.read<NavigationProvider>().navigateToPage(
-                            context,
-                            SearchPage(
-                              id_category: '',
-                              nama_category: '',
-                              search: "",
-                            ),
-                            targetTabIndex: 0,
-                            targetPage: "SearchPage",
-                            hrsLogin: false,
-                          );
-                    },
-                    text: "Lihat Semua"),
-              ],
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          //   child: Row(
+          //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //     children: [
+          //       const Text(
+          //         "Jelajah",
+          //         style: AppTextStyle.subtitle1,
+          //       ),
+          //       // CustomButton.textButton(
+          //       //     onTap: () {
+          //       //       context.read<NavigationProvider>().navigateToPage(
+          //       //             context,
+          //       //             SearchPage(
+          //       //               id_category: '',
+          //       //               nama_category: '',
+          //       //               search: "",
+          //       //             ),
+          //       //             targetTabIndex: 0,
+          //       //             targetPage: "SearchPage",
+          //       //             hrsLogin: false,
+          //       //           );
+          //       //     },
+          //       //     text: "Lihat Semua"),
+          //     ],
+          //   ),
+          // ),
+
+          const SizedBox(height: 15),
 
           // ===== Kondisi Loading =====
           if (isLoadingPorto)

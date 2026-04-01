@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
@@ -42,7 +43,7 @@ class ApiClient {
     return _executeWithRetry(
       () async {
         final headers = await _headers(requireAuth: requireAuth); // ← pass
-        print("📥 [GET] $uri");
+        debugPrint("📥 [GET] $uri");
         return http.get(uri, headers: headers);
       },
       method: 'GET',
@@ -70,7 +71,7 @@ class ApiClient {
           finalBody = jsonEncode(body);
           mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
         }
-        print("📤 [POST] $uri");
+        debugPrint("📤 [POST] $uri");
         return http.post(uri, headers: mergedHeaders, body: finalBody);
       },
       method: 'POST',
@@ -98,7 +99,7 @@ class ApiClient {
           mergedHeaders.putIfAbsent('Content-Type', () => 'application/json');
         }
 
-        print("📤 [PUT] $uri");
+        debugPrint("📤 [PUT] $uri");
         return http.put(uri, headers: mergedHeaders, body: finalBody);
       },
       method: 'PUT',
@@ -117,7 +118,7 @@ class ApiClient {
     return _executeWithRetry(
       () async {
         final mergedHeaders = await _mergedHeaders(headers);
-        print("❌ [DELETE] $uri");
+        debugPrint("❌ [DELETE] $uri");
         return http.delete(uri, headers: mergedHeaders);
       },
       method: 'DELETE',
@@ -139,28 +140,28 @@ class ApiClient {
   }) async {
     try {
       final response = await request();
-      print("📊 [$method $path] Status: ${response.statusCode}");
+      debugPrint("📊 [$method $path] Status: ${response.statusCode}");
 
       if (response.statusCode != 401) return response;
 
       // ✅ Jika public endpoint, jangan retry/logout — kembalikan response saja
       if (!requireAuth) {
-        print("⚠️ [$method $path] 401 on public endpoint, skip retry");
+        debugPrint("⚠️ [$method $path] 401 on public endpoint, skip retry");
         return response;
       }
 
       if (!_isTokenError(response)) {
-        print("⚠️ [$method $path] 401 but not token error");
+        debugPrint("⚠️ [$method $path] 401 but not token error");
         return response;
       }
 
       if (attempt >= maxAttempts) {
-        print("❌ [$method $path] Max attempts reached");
+        debugPrint("❌ [$method $path] Max attempts reached");
         _triggerSessionExpired();
         throw Exception('Session expired after $maxAttempts attempts');
       }
 
-      print(
+      debugPrint(
           "🔄 [$method $path] Refreshing token (attempt $attempt/$maxAttempts)...");
       final refreshed = await _refreshToken();
 
@@ -184,7 +185,7 @@ class ApiClient {
         requireAuth: requireAuth,
       );
     } catch (e) {
-      print("❌ [$method $path] Error: $e");
+      debugPrint("❌ [$method $path] Error: $e");
       rethrow;
     }
   }
@@ -195,22 +196,22 @@ class ApiClient {
 
   Future<bool> _refreshToken() async {
     try {
-      print("🔄 [ApiClient] Requesting token refresh...");
+      debugPrint("🔄 [ApiClient] Requesting token refresh...");
 
       // ✅ WAJIB forceRefresh: true → trigger _doRefreshAccessToken()
       // Tanpa ini, hanya baca dari storage → return token lama yang sudah 401
       final newToken = await authService.getIdToken(forceRefresh: true);
 
       if (newToken != null && newToken.isNotEmpty) {
-        print("✅ [ApiClient] Token refreshed successfully");
-        print("🔑 New token (first 30): ${newToken}");
+        debugPrint("✅ [ApiClient] Token refreshed successfully");
+        debugPrint("🔑 New token (first 30): $newToken");
         return true;
       }
 
-      print("❌ [ApiClient] Token refresh returned null");
+      debugPrint("❌ [ApiClient] Token refresh returned null");
       return false;
     } catch (e) {
-      print("❌ [ApiClient] Token refresh error: $e");
+      debugPrint("❌ [ApiClient] Token refresh error: $e");
       return false;
     }
   }
@@ -240,7 +241,7 @@ class ApiClient {
   /// Trigger session expired callback
   void _triggerSessionExpired() {
     if (onSessionExpired != null) {
-      print("🚪 [ApiClient] Triggering session expired callback");
+      debugPrint("🚪 [ApiClient] Triggering session expired callback");
       onSessionExpired!();
     }
   }

@@ -183,6 +183,51 @@ class PesananProvider with ChangeNotifier {
   // SMART LOAD - Optimized for Speed
   // ═══════════════════════════════════════════════════════════
 
+  Future<void> loadOrderOnly(
+    BuildContext context, {
+    bool forceRefresh = false,
+  }) async {
+    _isLoadingOrder = true;
+    _errorOrder = null;
+    notifyListeners();
+
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userId = userProvider.customer!.noId;
+
+      debugPrint('[PesananProvider] 📥 loadOrderOnly | force: $forceRefresh');
+
+      // Satu kali fetch semua status sekaligus, filter di client
+      final allOrders = await pesananService.getAll(
+        status: 'aktif',
+        idCustomer: userId,
+      );
+
+      // Simpan ke cache (tanpa histories)
+      if (allOrders.isNotEmpty) {
+        await localService.saveOrders(allOrders);
+      }
+
+      _allPesanan = allOrders;
+      _filterPesanan();
+
+      debugPrint('[PesananProvider] ✅ loadOrderOnly done: '
+          '${_allPesanan.length} total | '
+          '${_pesananUnpaid.length} unpaid | '
+          '${_pesananProgress.length} progress | '
+          '${_pesananSelesai.length} selesai');
+    } catch (e, st) {
+      debugPrint('[PesananProvider] ❌ loadOrderOnly: $e\n$st');
+      _errorOrder = "Error memuat pesanan";
+    } finally {
+      _isLoadingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
+      loadOrderOnly(context, forceRefresh: true);
+
   Future<void> loadOrderWithCache(
     BuildContext context, {
     String status = 'aktif',
@@ -207,7 +252,8 @@ class PesananProvider with ChangeNotifier {
       if (!forceRefresh && _selesaiOrdersLoaded) {
         // Sudah pernah load → pakai cache, tidak perlu ke API lagi
         selesaiOrders = await localService.getOrdersByStatus('selesai');
-        debugPrint('[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
+        debugPrint(
+            '[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
 
         for (final order in selesaiOrders) {
           final histories = await localService.getHistories(order.noBukti);
@@ -229,7 +275,8 @@ class PesananProvider with ChangeNotifier {
               historiesMap: allHistories);
         }
         _selesaiOrdersLoaded = true;
-        debugPrint('[PesananProvider] ✅ Selesai fetched: ${selesaiOrders.length}');
+        debugPrint(
+            '[PesananProvider] ✅ Selesai fetched: ${selesaiOrders.length}');
       }
 
       // ── STEP 2: Progress orders (selalu dari API) ─────────
@@ -246,7 +293,8 @@ class PesananProvider with ChangeNotifier {
         await localService.saveOrders(progressOrders,
             historiesMap: allHistories);
       }
-      debugPrint('[PesananProvider] ✅ Progress fetched: ${progressOrders.length}');
+      debugPrint(
+          '[PesananProvider] ✅ Progress fetched: ${progressOrders.length}');
 
       // ── STEP 3: Unpaid orders (selalu dari API) ───────────
       debugPrint('[PesananProvider] 🌐 Fetching unpaid from API...');
@@ -335,8 +383,8 @@ class PesananProvider with ChangeNotifier {
   }
 
   /// Legacy: redirect ke optimized version
-  Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
-      loadOrderWithCache(context, status: status, forceRefresh: true);
+  // Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
+  //     loadOrderWithCache(context, status: status, forceRefresh: true);
 
   // ═══════════════════════════════════════════════════════════
   // FCM INTEGRATION - Real-time Updates
@@ -542,14 +590,12 @@ class PesananProvider with ChangeNotifier {
         .toList();
 
     _pesananProgress = _allPesanan
-        .where((p) =>
-            ["persiapan", "proses", "review", "revisi"]
-                .contains(p.statusProgresPesanan))
+        .where((p) => ["persiapan", "proses", "review", "revisi"]
+            .contains(p.statusProgresPesanan))
         .toList();
 
-    _pesananSelesai = _allPesanan
-        .where((p) => p.statusProgresPesanan == "selesai")
-        .toList();
+    _pesananSelesai =
+        _allPesanan.where((p) => p.statusProgresPesanan == "selesai").toList();
   }
 
   // ═══════════════════════════════════════════════════════════

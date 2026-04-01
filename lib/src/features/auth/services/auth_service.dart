@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -13,6 +14,7 @@ class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
+
   Map<String, dynamic>? _lastLoginData;
   Function()? onSessionExpired;
 
@@ -28,10 +30,10 @@ class AuthService {
 
   GoogleSignInAccount? _currentUser;
 
-  /// ✅ Getter untuk data login terakhir (No_Id, Status, dll)
+  /// Getter untuk data login terakhir (No_Id, Status, dll)
   Map<String, dynamic>? get lastLoginData => _lastLoginData;
 
-  /// ✅ Clear setelah dipakai
+  /// Clear setelah dipakai
   void clearLastLoginData() => _lastLoginData = null;
 
   // Refresh lock
@@ -44,12 +46,12 @@ class AuthService {
 
   Future<void> initialize() async {
     try {
-      print("🔧 [AuthService] Initializing...");
+      debugPrint("🔧 [AuthService] Initializing...");
       if (Hive.isBoxOpen(_boxName)) await Hive.box(_boxName).close();
       _authBox = await Hive.openBox(_boxName);
-      print("✅ [AuthService] Initialized");
+      debugPrint("✅ [AuthService] Initialized");
     } catch (e) {
-      print("❌ [AuthService] Init failed: $e");
+      debugPrint("❌ [AuthService] Init failed: $e");
       rethrow;
     }
   }
@@ -60,30 +62,28 @@ class AuthService {
 
   Future<bool> restoreSession() async {
     try {
-      print("🔄 [AuthService] Restoring session...");
+      debugPrint("🔄 [AuthService] Restoring session...");
 
       final wasLoggedIn =
           _authBox?.get(_keyIsLoggedIn, defaultValue: false) ?? false;
       if (!wasLoggedIn) {
-        print("⚠️  No previous login found");
+        debugPrint("⚠️  No previous login found");
         return false;
       }
 
-      // Cek access token di storage
       final accessToken = await tokenStorage.getAccessToken();
       if (accessToken == null || accessToken.isEmpty) {
-        print("❌ No access token in storage");
+        debugPrint("❌ No access token in storage");
         await _clearLoginState();
         return false;
       }
 
-      // Restore Google user silently (untuk UI/display name dll)
       _currentUser = await _googleSignIn.signInSilently();
 
-      print("✅ Session restored");
+      debugPrint("✅ Session restored");
       return true;
     } catch (e) {
-      print("❌ Restore session error: $e");
+      debugPrint("❌ Restore session error: $e");
       await _clearLoginState();
       return false;
     }
@@ -93,21 +93,20 @@ class AuthService {
   // 🔑 SIGN IN
   // ═══════════════════════════════════════════════════════
 
-  /// Login Google → ambil ID token Google → kirim ke backend → simpan access+refresh token
   Future<String?> signIn() async {
     try {
-      print("🔑 [AuthService] Starting sign-in...");
+      debugPrint("🔑 [AuthService] Starting sign-in...");
 
       _currentUser = await _googleSignIn.signIn();
       if (_currentUser == null) {
-        print("⚠️  Sign-in cancelled");
+        debugPrint("⚠️  Sign-in cancelled");
         return null;
       }
 
       final googleAuth = await _currentUser!.authentication;
       final googleIdToken = googleAuth.idToken;
       if (googleIdToken == null) {
-        print("❌ Google ID token null");
+        debugPrint("❌ Google ID token null");
         return null;
       }
 
@@ -120,54 +119,49 @@ class AuthService {
 
       if (result == null) return null;
 
-      final accessToken = result['token'] as String;
-      final refreshToken = result['refreshToken'] as String;
-      final backendDeviceToken = result['deviceToken'] as String?;
+      final accessToken        = result['token']        as String;
+      final refreshToken       = result['refreshToken'] as String;
+      final backendDeviceToken = result['deviceToken']  as String?;
+      final idSession          = result['id_session']   as String?;
+      // No_Id tidak disimpan di storage — tersedia via CustomerModel / UserProvider
 
-      await tokenStorage.saveTokens(
-        accessToken: accessToken,
+      // ── Simpan sekaligus ke secure storage ────────────────────────────
+      await tokenStorage.saveLoginData(
+        accessToken:  accessToken,
         refreshToken: refreshToken,
+        deviceToken:  backendDeviceToken?.isNotEmpty == true
+            ? backendDeviceToken
+            : deviceToken,
+        idSession: idSession,
       );
 
-      if (backendDeviceToken != null && backendDeviceToken.isNotEmpty) {
-        await tokenStorage.saveDeviceToken(backendDeviceToken);
-      } else if (deviceToken != null) {
-        await tokenStorage.saveDeviceToken(deviceToken);
-      }
+      debugPrint("💾 [AuthService] Login data saved | id_session: $idSession");
 
-      // ✅ Simpan seluruh data response untuk diakses UserProvider
+      // ── Simpan seluruh data response untuk diakses UserProvider ───────
       _lastLoginData = result;
 
       await _saveLoginState();
 
-      print("✅ Sign-in complete");
+      debugPrint("✅ Sign-in complete");
       return accessToken;
     } catch (e) {
-      print("❌ Sign-in error: $e");
+      debugPrint("❌ Sign-in error: $e");
       return null;
     }
   }
 
   // ═══════════════════════════════════════════════════════
-  // 🎫 GET ACCESS TOKEN (untuk Authorization Bearer)
+  // 🎫 GET ACCESS TOKEN
   // ═══════════════════════════════════════════════════════
 
-  /// Return access_token dari storage.
-  /// Jika null/expired → coba refresh otomatis.
   Future<String?> getIdToken({bool forceRefresh = false}) async {
-    // Jika sedang refresh, tunggu
-    if (_isRefreshing) {
-      return await _waitForRefresh();
-    }
+    if (_isRefreshing) return await _waitForRefresh();
 
     if (!forceRefresh) {
       final stored = await tokenStorage.getAccessToken();
-      if (stored != null && stored.isNotEmpty) {
-        return stored;
-      }
+      if (stored != null && stored.isNotEmpty) return stored;
     }
 
-    // Access token kosong atau forceRefresh → refresh
     return await _doRefreshAccessToken();
   }
 
@@ -176,10 +170,8 @@ class AuthService {
     return token != null && token.isNotEmpty;
   }
 
-  /// Ambil token dari storage tanpa refresh
-  Future<String?> getStoredToken() async {
-    return await tokenStorage.getAccessToken();
-  }
+  Future<String?> getStoredToken() async => await tokenStorage.getAccessToken();
+
   // ═══════════════════════════════════════════════════════
   // 🔄 REFRESH ACCESS TOKEN
   // ═══════════════════════════════════════════════════════
@@ -190,17 +182,15 @@ class AuthService {
     _isRefreshing = true;
 
     try {
-      print("🔄 [AuthService] Refreshing access token...");
+      debugPrint("🔄 [AuthService] Refreshing access token...");
 
       final refreshToken = await tokenStorage.getRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) {
-        print("❌ No refresh token, force logout...");
+        debugPrint("❌ No refresh token, force logout...");
         _notifyRefreshQueue(null);
         await _forceLogout();
         return null;
       }
-
-      print("📊 [Refresh] refreshToken: $refreshToken");
 
       final uri = Uri.parse('$_baseUrl/auth/refresh');
       final response = await http.post(
@@ -212,16 +202,16 @@ class AuthService {
         body: jsonEncode({'refreshToken': refreshToken}),
       );
 
-      print("📊 [Refresh] Status: ${response.statusCode}");
-      print("📊 [Refresh] Body: ${response.body}");
+      debugPrint("📊 [Refresh] Status: ${response.statusCode}");
+      debugPrint("📊 [Refresh] Body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final newAccessToken = data['token'] as String?;
+        final newAccessToken  = data['token']        as String?;
         final newRefreshToken = data['refreshToken'] as String?;
 
         if (newAccessToken == null) {
-          print("❌ token null dari response refresh");
+          debugPrint("❌ token null dari response refresh");
           _notifyRefreshQueue(null);
           await _forceLogout();
           return null;
@@ -232,17 +222,17 @@ class AuthService {
           await tokenStorage.saveRefreshToken(newRefreshToken);
         }
 
-        print("✅ Access token refreshed");
+        debugPrint("✅ Access token refreshed");
         _notifyRefreshQueue(newAccessToken);
         return newAccessToken;
       } else {
-        print("❌ Refresh failed: ${response.statusCode}, force logout...");
+        debugPrint("❌ Refresh failed: ${response.statusCode}, force logout...");
         _notifyRefreshQueue(null);
         await _forceLogout();
         return null;
       }
     } catch (e) {
-      print("❌ Refresh error: $e");
+      debugPrint("❌ Refresh error: $e");
       _notifyRefreshQueue(null);
       await _forceLogout();
       return null;
@@ -254,15 +244,17 @@ class AuthService {
   /// Force logout — hapus semua token + disconnect Google
   Future<void> _forceLogout() async {
     try {
-      print("🚪 [AuthService] Force logout...");
+      debugPrint("🚪 [AuthService] Force logout...");
+      // Coba hapus session di backend sebelum clear lokal
+      await _deleteUserSession();
       await tokenStorage.clearAll();
       await _googleSignIn.disconnect();
       await _clearLoginState();
       _currentUser = null;
-      print("✅ [AuthService] Force logout complete");
+      debugPrint("✅ [AuthService] Force logout complete");
       onSessionExpired?.call();
     } catch (e) {
-      print("❌ [AuthService] Force logout error: $e");
+      debugPrint("❌ [AuthService] Force logout error: $e");
       onSessionExpired?.call();
     }
   }
@@ -287,15 +279,14 @@ class AuthService {
         },
       );
 
-      print("📊 [checkLoginBackend] Status: ${response.statusCode}");
-      print("📦 Body: ${response.body}");
+      debugPrint("📊 [checkLoginBackend] Status: ${response.statusCode}");
+      debugPrint("📦 Body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        // Validasi field yang dibutuhkan
         if (data['token'] == null || data['refreshToken'] == null) {
-          print("❌ Response tidak mengandung token / refreshToken");
+          debugPrint("❌ Response tidak mengandung token / refreshToken");
           return null;
         }
 
@@ -304,8 +295,54 @@ class AuthService {
 
       return null;
     } catch (e) {
-      print("❌ _checkLoginBackend error: $e");
+      debugPrint("❌ _checkLoginBackend error: $e");
       return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 🗑️ BACKEND CALL — DELETE USER SESSION (LOGOUT)
+  // ═══════════════════════════════════════════════════════
+
+  /// Hapus session di backend menggunakan id_session yang disimpan saat login.
+  /// Endpoint: DELETE /api/usersession/delete?no_id={id_session}
+  /// Non-fatal: jika gagal, proses logout lokal tetap berjalan.
+  Future<void> _deleteUserSession() async {
+    try {
+      // ✅ no_id di query param diisi dengan nilai id_session (bukan No_Id)
+      final idSession = await tokenStorage.getIdSession();
+      if (idSession == null || idSession.isEmpty) {
+        debugPrint("⚠️  [AuthService] No id_session found, skip delete session");
+        return;
+      }
+
+      debugPrint("🗑️  [AuthService] Deleting session for id_session: $idSession");
+
+      final uri = Uri.parse('$_baseUrl/usersession/delete').replace(
+        queryParameters: {'no_id': idSession}, // ✅ id_session → no_id param
+      );
+
+      final accessToken = await tokenStorage.getAccessToken();
+      final response = await http.delete(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jenis-User': Constants.customer,
+          if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+        },
+      );
+
+      debugPrint("📊 [deleteSession] Status: ${response.statusCode}");
+      debugPrint("📊 [deleteSession] Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        debugPrint("✅ [AuthService] Session deleted from backend");
+      } else {
+        debugPrint("⚠️  [AuthService] Delete session returned ${response.statusCode} (non-fatal)");
+      }
+    } catch (e) {
+      // Non-fatal — tetap lanjut logout lokal
+      debugPrint("⚠️  [AuthService] _deleteUserSession error (non-fatal): $e");
     }
   }
 
@@ -315,12 +352,11 @@ class AuthService {
 
   Future<String?> _getDeviceToken() async {
     try {
-      final fcm = FirebaseMessaging.instance;
-      final token = await fcm.getToken();
-      print("📱 [AuthService] FCM token: ${token}");
+      final token = await FirebaseMessaging.instance.getToken();
+      debugPrint("📱 [AuthService] FCM token: $token");
       return token;
     } catch (e) {
-      print("⚠️  FCM token error: $e");
+      debugPrint("⚠️  FCM token error: $e");
       return null;
     }
   }
@@ -331,20 +367,23 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
-      print("🚪 [AuthService] Signing out...");
+      debugPrint("🚪 [AuthService] Signing out...");
 
-      // Hapus token dari storage (sesuai requirement)
-      await tokenStorage.clearAuthTokens();
+      // ── 1. Hapus session di backend ────────────────────────────────────
+      await _deleteUserSession();
 
-      // Sign out Google juga (biar picker muncul lagi saat login berikutnya)
+      // ── 2. Hapus token dari storage ────────────────────────────────────
+      await tokenStorage.clearAll();
+
+      // ── 3. Sign out Google ─────────────────────────────────────────────
       await _googleSignIn.signOut();
       await _clearLoginState();
       _currentUser = null;
 
-      print("✅ Sign-out complete");
+      debugPrint("✅ Sign-out complete");
     } catch (e) {
-      print("❌ Sign-out error: $e");
-      await tokenStorage.clearAuthTokens();
+      debugPrint("❌ Sign-out error: $e");
+      await tokenStorage.clearAll();
       await _clearLoginState();
       _currentUser = null;
     }
@@ -352,6 +391,7 @@ class AuthService {
 
   Future<void> disconnect() async {
     try {
+      await _deleteUserSession();
       await tokenStorage.clearAll();
       await _googleSignIn.disconnect();
       await _clearLoginState();

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import '../../../core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
@@ -32,10 +33,10 @@ class VendorService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -77,10 +78,10 @@ class VendorService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);

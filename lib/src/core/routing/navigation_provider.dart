@@ -132,24 +132,6 @@ class NavigationProvider with ChangeNotifier {
       await saveStatusUser(_statusUser!);
       await saveRole(role);
 
-      // ── Daftarkan device token setelah login berhasil ──────────────────
-      // Dilakukan di sini karena userId sudah tersedia dari userProv
-      // dan auth token sudah valid untuk hit backend
-      final userId = userProv.userId;
-      if (userId != null && userId.isNotEmpty) {
-        try {
-          final deviceTokenService = DeviceTokenService();
-          await deviceTokenService.addDeviceToken(userId, null);
-          // null → DeviceTokenService._getDeviceToken() fetch FCM token sendiri
-          debugPrint("[checkLogin] ✅ Device token registered for: $userId");
-        } catch (e) {
-          // Jangan block login meski gagal daftarkan token
-          debugPrint("[checkLogin] ⚠️ Add device token failed (non-fatal): $e");
-        }
-      } else {
-        debugPrint("[checkLogin] ⚠️ userId null — skip add device token");
-      }
-
       debugPrint("✅ [checkLogin] Status: $_statusUser");
       notifyListeners();
     } catch (e) {

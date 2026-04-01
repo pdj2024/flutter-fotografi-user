@@ -40,7 +40,7 @@ class PenawaranProvider with ChangeNotifier {
       final result = await penawaranService.getAll(
           status: status, idCustomer: userId, idVendor: vendorId);
 
-      print("RESULT PENAWRAN PROVIDER => $result");
+      debugPrint("RESULT PENAWRAN PROVIDER => $result");
 
       _penawaranList = result;
     } catch (e) {
@@ -63,10 +63,10 @@ class PenawaranProvider with ChangeNotifier {
     try {
       final penawaranServ = PenawaranService();
 
-      print(messages);
+      debugPrint(messages.toString());
 
       // 2. Kumpulkan no invoice yang tidak null
-      print("=== KUMPULKAN ID Penawaran");
+      debugPrint("=== KUMPULKAN ID Penawaran");
       final Set<String> penawaranIds = {};
 
       for (final msg in messages) {
@@ -74,15 +74,15 @@ class PenawaranProvider with ChangeNotifier {
           penawaranIds.add(msg.noPenawaran!);
         }
       }
-      print("ID Penawaran dalam room ini: $penawaranIds");
+      debugPrint("ID Penawaran dalam room ini: $penawaranIds");
 
       // Jika tidak ada paket, kembalikan list kosong
       if (penawaranIds.isEmpty) {
-        print("Tidak ada penawaran dalam room ini");
+        debugPrint("Tidak ada penawaran dalam room ini");
         return [];
       }
 
-      print("ID penawaran ditemukan dalam chat: $penawaranIds");
+      debugPrint("ID penawaran ditemukan dalam chat: $penawaranIds");
 
       // 3. Fetch semua paket berdasarkan ID
       final penawaranlist =
@@ -91,7 +91,7 @@ class PenawaranProvider with ChangeNotifier {
       return penawaranlist;
     } catch (e) {
       _errorOffer = e.toString();
-      print("Error: $e");
+      debugPrint("Error: $e");
       return [];
     } finally {
       notifyListeners();

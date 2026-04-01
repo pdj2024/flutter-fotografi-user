@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 
 class CustomerService {
-  final String entity     = 'Customer';
+  final String entity = 'Customer';
   final String controller = 'customer';
   final ApiClient _client = apiClient;
 
@@ -22,17 +23,17 @@ class CustomerService {
       final response = await _client.get(
         '/$controller/getAll',
         queryParameters: {
-          if (no_id        != null) 'no_id':        no_id,
-          if (email        != null) 'email':         email,
-          if (nama_display != null) 'nama_display':  nama_display,
-          if (kota         != null) 'kota':          kota,
-          if (status       != null) 'status':        status,
-          if (orderBy      != null) 'orderby':       orderBy,
-          if (orderDir     != null) 'orderdir':      orderDir,
+          if (no_id != null) 'no_id': no_id,
+          if (email != null) 'email': email,
+          if (nama_display != null) 'nama_display': nama_display,
+          if (kota != null) 'kota': kota,
+          if (status != null) 'status': status,
+          if (orderBy != null) 'orderby': orderBy,
+          if (orderDir != null) 'orderdir': orderDir,
         },
       );
 
-      print('📊 [CustomerService.getAll] Status: ${response.statusCode}');
+      debugPrint('📊 [CustomerService.getAll] Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -57,8 +58,8 @@ class CustomerService {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e, st) {
-      print("❌ [CustomerService.getAll] Error: $e");
-      print(st);
+      debugPrint("❌ [CustomerService.getAll] Error: $e");
+      debugPrint(st.toString());
       throw Exception('Error saat mengambil $entity: $e');
     }
   }
@@ -83,8 +84,8 @@ class CustomerService {
       body: jsonEncode(model.toJsonUpdate()),
     );
 
-    print('📊 [CustomerService.update] Status: ${response.statusCode}');
-    print('📦 Body: ${response.body}');
+    debugPrint('📊 [CustomerService.update] Status: ${response.statusCode}');
+    debugPrint('📦 Body: ${response.body}');
 
     if (response.statusCode != 200) {
       throw Exception('Gagal mengupdate $entity');

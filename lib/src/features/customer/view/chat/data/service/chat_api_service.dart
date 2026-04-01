@@ -153,7 +153,7 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      print("Customer updaatteee statuss ${messageId} ${status}");
+      debugPrint("Customer updaatteee statuss ${messageId} ${status}");
       final response = await _client.put(
         '/$_controller/update-send-status?message_id=$messageId&send_status=$status',
         headers: {'Content-Type': 'application/json'},
@@ -171,7 +171,7 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      print("Customer updaatteee statuss ${model.messageId} ${status}");
+      debugPrint("Customer updaatteee statuss ${model.messageId} ${status}");
       final response = await _client.put(
         '/$_controller/update?message_id=${model.messageId}',
         headers: {'Content-Type': 'application/json'},

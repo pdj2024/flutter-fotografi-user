@@ -10,6 +10,7 @@ import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/widget/field/custom_text_field.dart';
 import 'package:mpjnew/src/features/customer/widget/field/single_select_dropdown.dart';
+import 'package:mpjnew/src/features/customer/widget/loading_state.dart';
 import 'package:provider/provider.dart';
 
 class EditAccountPage extends StatefulWidget {
@@ -33,49 +34,58 @@ class _EditAccountPageState extends State<EditAccountPage> {
   String? usernameError;
   String? kotaError;
   String? emailError;
+  bool isLoading = false;
 
   Future<void> update(BuildContext context) async {
-  final userProvider = context.read<UserProvider>();
-  final customer = userProvider.customer;
-  if (customer == null) {
-    CustomSnackbar.showErrorSnackbar(context, "Sesi tidak ditemukan, coba login ulang");
-    return;
-  }
-
-  final kotaId = selectedKota?.noId;
-  try {
-    final updatedCustomer = customer.copyWith(
-      namaDisplay: nameController.text.trim().isNotEmpty
-          ? nameController.text.trim()
-          : customer.namaDisplay,
-      userName: usernameController.text.trim().isNotEmpty
-          ? usernameController.text.trim()
-          : customer.userName,
-      email: emailController.text.trim().isNotEmpty
-          ? emailController.text.trim()
-          : customer.email,
-      kota: kotaId,
-    );
-
-    await customerService.update(updatedCustomer);
-
-    if (!context.mounted) return;
-
-    // ✅ Update local state langsung tanpa nunggu backend
-    userProvider.updateCustomerLocally(updatedCustomer);
-
-    // ✅ Sync ke backend di background (tidak di-await)
-    userProvider.refreshUserData();
-
-    CustomSnackbar.showSuccessSnackbar(context, "Berhasil memperbarui data");
-  } catch (e) {
-    debugPrint('Error updating customer: $e');
-    if (context.mounted) {
-      CustomSnackbar.showErrorSnackbar(context, "Gagal memperbarui data");
+    final userProvider = context.read<UserProvider>();
+    setState(() {
+      isLoading = true;
+    });
+    final customer = userProvider.customer;
+    if (customer == null) {
+      CustomSnackbar.showErrorSnackbar(
+          context, "Sesi tidak ditemukan, coba login ulang");
+      return;
     }
-    rethrow;
+
+    final kotaId = selectedKota?.noId;
+    try {
+      final updatedCustomer = customer.copyWith(
+        namaDisplay: nameController.text.trim().isNotEmpty
+            ? nameController.text.trim()
+            : customer.namaDisplay,
+        userName: usernameController.text.trim().isNotEmpty
+            ? usernameController.text.trim()
+            : customer.userName,
+        email: emailController.text.trim().isNotEmpty
+            ? emailController.text.trim()
+            : customer.email,
+        kota: kotaId,
+      );
+
+      await customerService.update(updatedCustomer);
+
+      if (!context.mounted) return;
+
+      // ✅ Update local state langsung tanpa nunggu backend
+      userProvider.updateCustomerLocally(updatedCustomer);
+
+      // ✅ Sync ke backend di background (tidak di-await)
+      userProvider.refreshUserData();
+
+      CustomSnackbar.showSuccessSnackbar(context, "Berhasil memperbarui data");
+    } catch (e) {
+      debugPrint('Error updating customer: $e');
+      if (context.mounted) {
+        CustomSnackbar.showErrorSnackbar(context, "Gagal memperbarui data");
+      }
+      rethrow;
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
-}
 
   void loadData(CustomerModel customer) {
     setState(() {
@@ -130,154 +140,163 @@ class _EditAccountPageState extends State<EditAccountPage> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        title: const Text(
-          "Edit Profile",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // ── Alert banner jika profil belum lengkap ──
-                if (customer.userName.isEmpty || customer.namaDisplay.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.shade100, width: 1),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(Icons.info_outline,
-                              color: Colors.blue.shade700, size: 18),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
-                            maxLines: null,
-                            overflow: TextOverflow.visible,
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              fontSize: 13,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // ── Foto Section ──
-                userProvider.photoUrl == null
-                    ? Container(
-                        width: 82,
-                        height: 82,
-                        padding: const EdgeInsets.all(2),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            backgroundColor: const Color(0xFFF9F9F9),
+            elevation: 1,
+            title: const Text(
+              "Edit Profile",
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+            ),
+          ),
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ── Alert banner jika profil belum lengkap ──
+                    if (customer.userName.isEmpty ||
+                        customer.namaDisplay.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 20),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          shape: BoxShape.circle,
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border:
+                              Border.all(color: Colors.blue.shade100, width: 1),
                         ),
-                        child: const Icon(Icons.person),
-                      )
-                    : AvatarCircle(size: 82, imgUrl: userProvider.photoUrl),
-                const SizedBox(height: 10),
-                const SizedBox(height: 30),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Icon(Icons.info_outline,
+                                  color: Colors.blue.shade700, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Text(
+                                "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
+                                maxLines: null,
+                                overflow: TextOverflow.visible,
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                // ── Form Section ──
-                CustomTextField(
-                  label: "Nama Lengkap",
-                  controller: nameController,
-                  placeholder: "Nama Lengkap",
-                  keyboardType: TextInputType.text,
-                  errorMessage: nameError,
-                ),
-                CustomTextField(
-                  label: "Username",
-                  controller: usernameController,
-                  placeholder: "Username",
-                  keyboardType: TextInputType.text,
-                  errorMessage: usernameError,
-                ),
-                CustomTextField(
-                  label: "Email",
-                  controller: emailController,
-                  readOnly: true,
-                  placeholder: "Email",
-                  keyboardType: TextInputType.text,
-                  errorMessage: emailError,
-                ),
-                SingleSelectDropdown<KotaModel>(
-                  config: KotaDropdownConfig(
-                    label: 'Kota Domisili',
-                    errorMessage: kotaError,
-                    debounceDuration: 500,
-                    enableRemoteSearch: true,
-                  ),
-                  selectedValue: selectedKota,
-                  onChanged: (value) {
-                    setState(() => selectedKota = value);
-                  },
-                ),
+                    // ── Foto Section ──
+                    userProvider.photoUrl == null
+                        ? Container(
+                            width: 82,
+                            height: 82,
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.person),
+                          )
+                        : AvatarCircle(size: 82, imgUrl: userProvider.photoUrl),
+                    const SizedBox(height: 10),
+                    const SizedBox(height: 30),
 
-                // ── Button Section ──
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 50),
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      backgroundColor: Constants.primaryColorVendor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                    // ── Form Section ──
+                    CustomTextField(
+                      label: "Nama Lengkap",
+                      controller: nameController,
+                      placeholder: "Nama Lengkap",
+                      keyboardType: TextInputType.text,
+                      errorMessage: nameError,
+                    ),
+                    CustomTextField(
+                      label: "Username",
+                      controller: usernameController,
+                      placeholder: "Username",
+                      keyboardType: TextInputType.text,
+                      errorMessage: usernameError,
+                    ),
+                    CustomTextField(
+                      label: "Email",
+                      controller: emailController,
+                      readOnly: true,
+                      placeholder: "Email",
+                      keyboardType: TextInputType.text,
+                      errorMessage: emailError,
+                    ),
+                    SingleSelectDropdown<KotaModel>(
+                      config: KotaDropdownConfig(
+                        label: 'Kota Domisili',
+                        errorMessage: kotaError,
+                        debounceDuration: 500,
+                        enableRemoteSearch: true,
+                      ),
+                      selectedValue: selectedKota,
+                      onChanged: (value) {
+                        setState(() => selectedKota = value);
+                      },
+                    ),
+
+                    // ── Button Section ──
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 50),
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          backgroundColor: Constants.primaryColorVendor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: () async {
+                          var isValid = validateForm();
+                          if (!isValid) return;
+
+                          try {
+                            await update(context);
+                            if (!context.mounted) return;
+                            // ✅ Hanya pop jika update berhasil
+                            context.read<NavigationProvider>().showBottomNav();
+                            context
+                                .read<NavigationProvider>()
+                                .navigatorKeys[3]
+                                .currentState
+                                ?.pop();
+                          } catch (e) {
+                            // Error sudah ditampilkan di dalam update(), tidak perlu pop
+                          }
+                        },
+                        child: const Text("Simpan",
+                            style: TextStyle(fontSize: 16)),
                       ),
                     ),
-                    onPressed: () async {
-                      var isValid = validateForm();
-                      if (!isValid) return;
-
-                      try {
-                        await update(context);
-                        if (!context.mounted) return;
-                        // ✅ Hanya pop jika update berhasil
-                        context.read<NavigationProvider>().showBottomNav();
-                        context
-                            .read<NavigationProvider>()
-                            .navigatorKeys[3]
-                            .currentState
-                            ?.pop();
-                      } catch (e) {
-                        // Error sudah ditampilkan di dalam update(), tidak perlu pop
-                      }
-                    },
-                    child: const Text("Simpan", style: TextStyle(fontSize: 16)),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        if (isLoading) const LoadingState(),
+      ],
     );
   }
 

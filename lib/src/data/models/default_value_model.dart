@@ -4,8 +4,8 @@
 
 /// Data PPN, biaya platform, dan konfigurasi app
 class PpnModel {
-  final int ppn;        // % PPN (0 = tidak ada PPN)
-  final bool inclPpn;   // true = harga input sudah termasuk PPN
+  final int ppn; // % PPN (0 = tidak ada PPN)
+  final bool inclPpn; // true = harga input sudah termasuk PPN
   final double platform; // % biaya platform
 
   const PpnModel({
@@ -27,85 +27,108 @@ class PpnModel {
 
   /// Hitung estimasi pendapatan vendor dari harga yang diinput.
   ///
+  /// [harga]    — harga paket dari penawaran
+  /// [adminFee] — biaya metode pembayaran (gateway fee), default 0
+  ///
   /// ── INCL. PPN (inclPpn = true) ─────────────────────────────
-  ///   Harga input sudah termasuk PPN. Vendor harus menyetorkan
-  ///   PPN ke pemerintah, sehingga PPN mengurangi pendapatan.
+  ///   Harga input sudah termasuk PPN.
   ///
   ///   Rumus:
-  ///     DPP          = Harga ÷ (1 + Rate/100)
-  ///     PPN          = Harga - DPP          ← lebih akurat dari Harga×Rate/(1+Rate)
-  ///     Platform Fee = DPP × Rate Platform / 100
-  ///     Bersih       = DPP - Platform Fee
+  ///     DPP Paket    = Harga ÷ (1 + Rate/100)
+  ///     PPN Paket    = Harga - DPP Paket
+  ///     DPP Admin    = Admin Fee ÷ (1 + Rate/100)
+  ///     PPN Admin    = Admin Fee - DPP Admin
+  ///     Total PPN    = PPN Paket + PPN Admin
+  ///     Platform Fee = DPP Paket × Rate Platform / 100
+  ///     Bersih       = DPP Paket - Platform Fee
+  ///     Total Bayar  = Harga + Admin Fee  (keduanya sudah incl PPN)
   ///
   /// ── EXCL. PPN (inclPpn = false) ────────────────────────────
   ///   Harga input = DPP (belum termasuk PPN).
-  ///   PPN ditambahkan di atas harga dan ditanggung customer.
-  ///   Vendor menerima harga penuh → PPN tidak mengurangi pendapatan.
+  ///   PPN dihitung dari (DPP paket + admin fee) dan ditanggung customer.
   ///
   ///   Rumus:
-  ///     DPP          = Harga (itu sendiri)
-  ///     PPN          = DPP × Rate / 100
-  ///     Total Bayar  = DPP + PPN
-  ///     Platform Fee = DPP × Rate Platform / 100
-  ///     Bersih       = DPP - Platform Fee
-  EstimasiBiaya hitungEstimasi(int harga) {
+  ///     DPP Total    = Harga + Admin Fee
+  ///     PPN          = DPP Total × Rate / 100
+  ///     Platform Fee = Harga × Rate Platform / 100
+  ///     Bersih       = Harga - Platform Fee
+  ///     Total Bayar  = Harga + Admin Fee + PPN
+  EstimasiBiaya hitungEstimasi(int harga, {int adminFee = 0}) {
     if (hasPpn && inclPpn) {
       // ── INCL. PPN ────────────────────────────────────────────
 
-      // Langkah 1: Hitung DPP (ekstrak dari dalam harga)
-      // Gunakan double untuk presisi sebelum dibulatkan
-      final dppRaw = harga / (1 + ppn / 100);
-      final dpp = dppRaw.round();
+      // DPP & PPN dari harga paket
+      final dppPaketRaw = harga / (1 + ppn / 100);
+      final dppPaket = dppPaketRaw.round();
+      final ppnPaket = harga - dppPaket;
 
-      // Langkah 2: Hitung PPN
-      // PPN = Harga - DPP  → lebih akurat karena tidak ada selisih pembulatan
-      // DPP + PPN selalu = Harga
-      final biayaPpn = harga - dpp;
+      // DPP & PPN dari admin fee (admin fee juga incl PPN)
+      final dppAdminRaw = adminFee / (1 + ppn / 100);
+      final dppAdmin = dppAdminRaw.round();
+      final ppnAdmin = adminFee - dppAdmin;
 
-      // Langkah 3: Hitung biaya platform dari DPP (bukan dari harga total)
-      final biayaPlatform = (dpp * platform / 100).round();
+      // Total PPN
+      final totalPpn = ppnPaket + ppnAdmin;
 
-      // Langkah 4: Pendapatan bersih vendor
-      final bersih = dpp - biayaPlatform;
+      // Platform fee dari DPP paket saja (bukan dari admin)
+      final biayaPlatform = (dppPaket * platform / 100).round();
+
+      // Pendapatan bersih vendor
+      final bersih = dppPaket - biayaPlatform;
+
+      // Total bayar customer = harga + admin (keduanya sudah incl PPN)
+      final totalCustomer = harga + adminFee;
 
       return EstimasiBiaya(
-        hargaDasar:       harga,
-        dpp:              dpp,
-        biayaPpn:         biayaPpn,
-        biayaPlatform:    biayaPlatform,
-        inclPpn:          true,
-        ppnPersen:        ppn,
-        platformPersen:   platform,
-        totalCustomer:    harga, // customer bayar harga input saja
+        hargaDasar: harga,
+        dpp: dppPaket,
+        biayaPpn: totalPpn,
+        ppnPaket: ppnPaket,
+        ppnAdmin: ppnAdmin,
+        biayaAdmin: adminFee,
+        biayaPlatform: biayaPlatform,
+        inclPpn: true,
+        ppnPersen: ppn,
+        platformPersen: platform,
+        totalCustomer: totalCustomer,
         pendapatanBersih: bersih,
       );
     } else if (hasPpn && !inclPpn) {
       // ── EXCL. PPN ────────────────────────────────────────────
 
-      // Langkah 1: DPP = harga input (belum termasuk PPN)
+      // DPP = harga input (belum termasuk PPN)
       final dpp = harga;
 
-      // Langkah 2: Hitung PPN yang ditanggung customer
-      final biayaPpn = (dpp * ppn / 100).round();
+      // PPN dihitung dari (DPP paket + admin fee)
+      // Keduanya belum termasuk PPN, jadi PPN ditambahkan di atas
+      final dppTotal = dpp + adminFee;
+      final totalPpn = (dppTotal * ppn / 100).round();
 
-      // Langkah 3: Total yang dibayar customer
-      final totalCustomer = dpp + biayaPpn;
+      // Breakdown PPN per komponen (untuk transparansi)
+      final ppnPaket = (dpp * ppn / 100).round();
+      final ppnAdmin = totalPpn - ppnPaket;
 
-      // Langkah 4: Biaya platform dari DPP
+      // Total yang dibayar customer
+      final totalCustomer = dpp + adminFee + totalPpn;
+
+      // Biaya platform dari DPP paket saja
       final biayaPlatform = (dpp * platform / 100).round();
 
-      // Langkah 5: Pendapatan bersih vendor (PPN tidak mengurangi)
+      // Pendapatan bersih vendor (PPN tidak mengurangi)
       final bersih = dpp - biayaPlatform;
 
       return EstimasiBiaya(
-        hargaDasar:       harga,
-        dpp:              dpp,
-        biayaPpn:         biayaPpn,
-        biayaPlatform:    biayaPlatform,
-        inclPpn:          false,
-        ppnPersen:        ppn,
-        platformPersen:   platform,
-        totalCustomer:    totalCustomer,
+        hargaDasar: harga,
+        dpp: dpp,
+        biayaPpn: totalPpn,
+        ppnPaket: ppnPaket,
+        ppnAdmin: ppnAdmin,
+        biayaAdmin: adminFee,
+        biayaPlatform: biayaPlatform,
+        inclPpn: false,
+        ppnPersen: ppn,
+        platformPersen: platform,
+        totalCustomer: totalCustomer,
         pendapatanBersih: bersih,
       );
     } else {
@@ -113,16 +136,20 @@ class PpnModel {
 
       final biayaPlatform = (harga * platform / 100).round();
       final bersih = harga - biayaPlatform;
+      final totalCustomer = harga + adminFee;
 
       return EstimasiBiaya(
-        hargaDasar:       harga,
-        dpp:              harga,
-        biayaPpn:         0,
-        biayaPlatform:    biayaPlatform,
-        inclPpn:          false,
-        ppnPersen:        0,
-        platformPersen:   platform,
-        totalCustomer:    harga,
+        hargaDasar: harga,
+        dpp: harga,
+        biayaPpn: 0,
+        ppnPaket: 0,
+        ppnAdmin: 0,
+        biayaAdmin: adminFee,
+        biayaPlatform: biayaPlatform,
+        inclPpn: false,
+        ppnPersen: 0,
+        platformPersen: platform,
+        totalCustomer: totalCustomer,
         pendapatanBersih: bersih,
       );
     }
@@ -135,31 +162,36 @@ class PpnModel {
 
 /// Hasil kalkulasi estimasi biaya dari harga penawaran.
 ///
-/// Contoh — Harga input Rp 3.500.000, PPN 11%, Platform 5%:
-///
-///   INCL. PPN:
-///     DPP              = 3.500.000 ÷ 1,11  = Rp 3.153.153
-///     PPN (11%)        = 3.500.000 - DPP   = Rp 346.847
-///     Platform Fee (5%)= DPP × 5%          = Rp 157.658
-///     Pendapatan Bersih= DPP - Platform Fee = Rp 2.995.495
+/// Contoh — Harga Rp 3.500.000, Admin Fee Rp 4.000, PPN 11%, Platform 5%:
 ///
 ///   EXCL. PPN:
-///     DPP              = 3.500.000         = Rp 3.500.000
-///     PPN (11%)        = DPP × 11%         = Rp 385.000   ← ditanggung customer
-///     Total Customer   = DPP + PPN         = Rp 3.885.000
-///     Platform Fee (5%)= DPP × 5%          = Rp 175.000
-///     Pendapatan Bersih= DPP - Platform Fee = Rp 3.325.000
+///     DPP Paket        = Rp 3.500.000
+///     Admin Fee        = Rp 4.000
+///     DPP Total        = Rp 3.504.000
+///     PPN (11%)        = Rp 385.440  (dari DPP Total)
+///       - PPN Paket    = Rp 385.000
+///       - PPN Admin    = Rp 440
+///     Total Customer   = 3.500.000 + 4.000 + 385.440 = Rp 3.889.440
+///     Platform Fee (5%)= Rp 175.000  (dari DPP Paket saja)
+///     Pendapatan Bersih= Rp 3.325.000
 class EstimasiBiaya {
   /// Harga yang diinput vendor
   final int hargaDasar;
 
-  /// DPP — Dasar Pengenaan Pajak
-  /// Incl: harga ÷ (1 + rate)  |  Excl: harga itu sendiri
+  /// DPP — Dasar Pengenaan Pajak (dari harga paket saja)
   final int dpp;
 
-  /// Nilai PPN
-  /// Incl: harga - dpp  |  Excl: dpp × rate  |  Tanpa PPN: 0
+  /// Total nilai PPN (paket + admin)
   final int biayaPpn;
+
+  /// PPN dari harga paket saja
+  final int ppnPaket;
+
+  /// PPN dari biaya admin saja
+  final int ppnAdmin;
+
+  /// Biaya admin (gateway fee), sebelum PPN
+  final int biayaAdmin;
 
   /// Biaya platform = DPP × rate platform
   final int biayaPlatform;
@@ -168,8 +200,7 @@ class EstimasiBiaya {
   final int ppnPersen;
   final double platformPersen;
 
-  /// Total yang dibayar customer
-  /// Incl: = hargaDasar  |  Excl: = dpp + biayaPpn
+  /// Total yang dibayar customer (sudah termasuk PPN + admin)
   final int totalCustomer;
 
   /// Pendapatan bersih vendor = DPP - biayaPlatform
@@ -179,6 +210,9 @@ class EstimasiBiaya {
     required this.hargaDasar,
     required this.dpp,
     required this.biayaPpn,
+    required this.ppnPaket,
+    required this.ppnAdmin,
+    required this.biayaAdmin,
     required this.biayaPlatform,
     required this.inclPpn,
     required this.ppnPersen,

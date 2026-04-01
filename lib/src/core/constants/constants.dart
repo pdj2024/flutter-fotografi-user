@@ -7,7 +7,7 @@ class Constants {
   // versi minimum tertentu.
 
   /// Versi app customer (index 0 dari "customer_ver, vendor_ver")
-  static const String versionApp = '1.0.0';
+  static const String versionApp = '1.0.1';
 
   /// Versi API minimum yang kompatibel dengan app ini
   static const String versionApi = '1.0.0';
@@ -29,5 +29,5 @@ class Constants {
   // ── Play Store ────────────────────────────────────────────────
   /// URL Play Store untuk halaman update app customer
   static const String playStoreUrl =
-      'https://play.google.com/store/apps/details?id=com.yourcompany.mpjnew';
+      'https://play.google.com/store/apps/details?id=app.pacificdatajaya.fotograficustomer';
 }

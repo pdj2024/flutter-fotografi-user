@@ -198,25 +198,20 @@ class CustomDialog {
                                               .read<UserProvider>()
                                               .userId!;
 
-                                          // Tutup dialog dulu
+                                          // Tutup dialog dulu sebelum proses async
                                           Navigator.pop(context);
 
-                                          // ✅ Attach paket agar idPaket
-                                          // masuk ke ChatModel yang dikirim
-                                          roomChatProvider.attachPaket(
-                                            paket.no_id,
-                                            paket,
-                                          );
-
-                                          // ✅ Safety: set vendorId lagi
-                                          // (sudah di-set di OfferCard tapi
-                                          // jika dialog dipanggil dari tempat
-                                          // lain yang belum set vendorId)
-                                          roomChatProvider.vendorId =
-                                              paket.id_vendor;
-
-                                          await roomChatProvider.sendMessage(
+                                          // ✅ Gunakan sendMessageToPartner agar:
+                                          //    1. Room dicek dulu via findOrCreateRoom
+                                          //    2. Jika sudah ada → pakai roomId lama
+                                          //    3. Jika belum ada → buat room baru
+                                          await roomChatProvider
+                                              .sendMessageToPartner(
                                             currentUserId: userId,
+                                            partnerId: paket.id_vendor,
+                                            paket: paket,
+                                            // message dari controller sudah di-set
+                                            // oleh sendMessageToPartner via messageController
                                           );
 
                                           onSend?.call();

@@ -203,69 +203,80 @@ class _CustomerHomePageState extends State<CustomerHomePage>
             // KONTEN — SmartRefresher hanya di sini
             // ══════════════════════════════════════════════
             Expanded(
-              child: SmartRefresher(
-                controller: _refreshController,
-                onRefresh: _onRefresh,
-                physics: const AlwaysScrollableScrollPhysics(),
-                header: buildRefreshHeader(),
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    // KATEGORI DINAMIS
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: KategoriSection(),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is ScrollUpdateNotification) {
+                    final metrics = notification.metrics;
+                    if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+                      _preloadNextBatch();
+                    }
+                  }
+                  return false;
+                },
+                child: SmartRefresher(
+                  controller: _refreshController,
+                  onRefresh: _onRefresh,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  header: buildRefreshHeader(),
+                  child: CustomScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      // KATEGORI DINAMIS
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: KategoriSection(),
+                        ),
                       ),
-                    ),
 
-                    // DAFTAR PORTOFOLIO
-                    PortofolioSection(),
+                      // DAFTAR PORTOFOLIO
+                      PortofolioSection(),
 
-                    // Loading indicator preload
-                    SliverToBoxAdapter(
-                      child: Consumer<PortofolioProvider>(
-                        builder: (context, provider, child) {
-                          final stats = provider.getPreloadStats();
-                          final isPreloading = stats['isPreloading'] as bool;
-                          final queueLength = stats['queueLength'] as int;
+                      // Loading indicator preload
+                      SliverToBoxAdapter(
+                        child: Consumer<PortofolioProvider>(
+                          builder: (context, provider, child) {
+                            final stats = provider.getPreloadStats();
+                            final isPreloading = stats['isPreloading'] as bool;
+                            final queueLength = stats['queueLength'] as int;
 
-                          if (!isPreloading || queueLength == 0) {
-                            return const SizedBox.shrink();
-                          }
+                            if (!isPreloading || queueLength == 0) {
+                              return const SizedBox.shrink();
+                            }
 
-                          return Container(
-                            padding: const EdgeInsets.all(10),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation(
-                                      Constants.primaryColor,
+                            return Container(
+                              padding: const EdgeInsets.all(10),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        Constants.primaryColor,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Memuat gambar... ($queueLength)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Memuat gambar... ($queueLength)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
+                      const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                    ],
+                  ),
                 ),
               ),
             ),

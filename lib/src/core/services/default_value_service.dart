@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/models/default_value_model.dart';
-
 
 // ═══════════════════════════════════════════════════════════════
 // DEFAULT VALUE SERVICE
@@ -85,16 +85,16 @@ class DefaultValueService {
 
         // Log perbandingan versi (untuk debug)
         // ignore: avoid_print
-        print(
+        debugPrint(
             '[DefaultValueService] App versi lokal   : ${Constants.versionApp}');
         // ignore: avoid_print
-        print(
+        debugPrint(
             '[DefaultValueService] App versi server  : ${version.versionApp}');
         // ignore: avoid_print
-        print(
+        debugPrint(
             '[DefaultValueService] DB versi server   : ${version.versionDatabase}');
         // ignore: avoid_print
-        print(
+        debugPrint(
             '[DefaultValueService] API versi server  : ${version.versionApi}');
 
         return version;
