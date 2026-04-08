@@ -132,24 +132,6 @@ class NavigationProvider with ChangeNotifier {
       await saveStatusUser(_statusUser!);
       await saveRole(role);
 
-      // ── Daftarkan device token setelah login berhasil ──────────────────
-      // Dilakukan di sini karena userId sudah tersedia dari userProv
-      // dan auth token sudah valid untuk hit backend
-      final userId = userProv.userId;
-      if (userId != null && userId.isNotEmpty) {
-        try {
-          final deviceTokenService = DeviceTokenService();
-          await deviceTokenService.addDeviceToken(userId, null);
-          // null → DeviceTokenService._getDeviceToken() fetch FCM token sendiri
-          debugPrint("[checkLogin] ✅ Device token registered for: $userId");
-        } catch (e) {
-          // Jangan block login meski gagal daftarkan token
-          debugPrint("[checkLogin] ⚠️ Add device token failed (non-fatal): $e");
-        }
-      } else {
-        debugPrint("[checkLogin] ⚠️ userId null — skip add device token");
-      }
-
       debugPrint("✅ [checkLogin] Status: $_statusUser");
       notifyListeners();
     } catch (e) {
@@ -158,22 +140,29 @@ class NavigationProvider with ChangeNotifier {
     }
   }
 
-  /// ✅ Logout: clear local storage customer → signOut → navigate
+  /// Logout: clear semua data → signOut → popAllToRoot → arahkan ke UserLogin.
   ///
-  /// Urutan ini penting:
-  /// 1. clearOnLogout() harus sebelum authService.signOut()
-  ///    karena clearOnLogout() masih butuh context (chatProvider)
-  /// 2. authService.signOut() setelah data cleared
-  /// 3. popAllToRoot() terakhir agar widget masih mounted saat cleanup
-  Future<void> handleLogout(BuildContext context) async {
-    debugPrint("[handleLogout] 🚪 Starting...");
+  /// Urutan penting:
+  ///   1. clearOnLogout()   — butuh context (chatProvider), harus sebelum signOut
+  ///   2. authService.signOut() — hapus sesi Google
+  ///   3. clear state provider
+  ///   4. popAllToRoot()    — bersihkan navigation stack
+  ///   5. Navigator.push UserLogin — ganti akun / login ulang
+  ///
+  /// [showLoginPage] — default true.
+  ///   true  → arahkan ke UserLogin setelah logout (switch account, force logout)
+  ///   false → hanya logout tanpa redirect (misal expired token di background)
+  Future<void> handleLogout(
+    BuildContext context, {
+    bool showLoginPage = true,
+  }) async {
+    debugPrint("[handleLogout] 🚪 Starting... showLoginPage=$showLoginPage");
 
     try {
       final userProv = context.read<UserProvider>();
       final chatProvider = context.read<ChatProvider>();
 
-      // ── 1. Unregister device token via FCMService ──────────────────────
-      // Lebih baik lewat FCMService karena dia pegang _fcmToken terbaru
+      // ── 1. Unregister FCM token ────────────────────────────────────────
       final userId = userProv.userId;
       if (userId != null && userId.isNotEmpty) {
         try {
@@ -185,7 +174,7 @@ class NavigationProvider with ChangeNotifier {
         }
       }
 
-      // ── 2. Clear providers FCMService ─────────────────────────────────
+      // ── 2. Clear FCM providers ─────────────────────────────────────────
       FCMService.instance.clearProviders();
 
       // ── 3. Clear local storage ─────────────────────────────────────────
@@ -196,7 +185,7 @@ class NavigationProvider with ChangeNotifier {
       );
       debugPrint("[handleLogout] ✅ Local storage cleared");
 
-      // ── 4. Sign out ────────────────────────────────────────────────────
+      // ── 4. Sign out dari Google ────────────────────────────────────────
       await authService.signOut();
       debugPrint("[handleLogout] ✅ AuthService sign-out complete");
 
@@ -206,12 +195,47 @@ class NavigationProvider with ChangeNotifier {
       clearSelectedIndex();
       showBottomNav();
       userProv.clear();
+
+      // ── 6. Pop semua route ke root ─────────────────────────────────────
       popAllToRoot();
 
       debugPrint("[handleLogout] ✅ Logout complete");
+
+      // ── 7. Arahkan ke UserLogin ────────────────────────────────────────
+      // Dilakukan setelah popAllToRoot() agar stack bersih.
+      // UserLogin ditampilkan dengan rootNavigator sehingga muncul
+      // di atas semua tab navigator — tidak terjebak di navigator tab tertentu.
+      if (showLoginPage && context.mounted) {
+        Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => const UserLogin(),
+            settings: const RouteSettings(
+              // targetPage kosong → UserLogin redirect ke home setelah login
+              arguments: {
+                'targetPage': 'Tab0',
+                'tabIndex': 0,
+              },
+            ),
+          ),
+        );
+        debugPrint("[handleLogout] ✅ Navigated to UserLogin");
+      }
     } catch (e) {
       debugPrint("❌ [handleLogout] Error: $e");
-      if (context.mounted) popAllToRoot();
+      if (context.mounted) {
+        popAllToRoot();
+        // Tetap coba arahkan ke login meskipun ada error
+        if (showLoginPage) {
+          Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              builder: (_) => const UserLogin(),
+              settings: const RouteSettings(
+                arguments: {'targetPage': 'Tab0', 'tabIndex': 0},
+              ),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -254,7 +278,8 @@ class NavigationProvider with ChangeNotifier {
 
       default:
         debugPrint("❌ Unknown status '$status' → logout");
-        await handleLogout(context);
+        // Logout tanpa showLoginPage karena ini dipanggil saat sudah di auth flow
+        await handleLogout(context, showLoginPage: false);
     }
   }
 
@@ -271,7 +296,6 @@ class NavigationProvider with ChangeNotifier {
     String targetPage = 'Home',
     String searchPageArg = '',
     PageTransitionType transitionType = PageTransitionType.slideRight,
-    // ✅ TAMBAH: pass identifiers agar UserLogin bisa restore halaman yang benar
     String? noIdPortofolio,
     String? noIdVendor,
   }) async {
@@ -290,8 +314,6 @@ class NavigationProvider with ChangeNotifier {
                 'targetPage': targetPage,
                 'tabIndex': targetTabIndex,
                 'searchPageArg': searchPageArg,
-                // ✅ FIX: pass noIdPortofolio dan noIdVendor
-                // agar UserLogin bisa restore halaman yang benar setelah login
                 if (noIdPortofolio != null) 'noIdPortofolio': noIdPortofolio,
                 if (noIdVendor != null) 'noIdVendor': noIdVendor,
               }),

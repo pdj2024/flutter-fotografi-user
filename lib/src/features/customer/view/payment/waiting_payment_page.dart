@@ -58,8 +58,11 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     _currentData = widget.paymentData;
     _initTimer();
     _startPolling();
-    // FCM listener dipasang setelah frame pertama agar context tersedia
-    WidgetsBinding.instance.addPostFrameCallback((_) => _listenFCM());
+    // FCM listener dan cek awal dipasang setelah frame pertama agar context tersedia
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _listenFCM();
+      _checkIfAlreadySettled();
+    });
   }
 
   @override
@@ -69,6 +72,25 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     _fcmSubscription?.cancel();
     _refreshController.dispose();
     super.dispose();
+  }
+
+  // =========================================
+  // CEK AWAL: sudah settled saat halaman dibuka?
+  // Menangani kasus: user membuka WaitingPaymentPage
+  // tapi payment sudah capture/settlement sebelumnya
+  // =========================================
+  void _checkIfAlreadySettled() {
+    if (!mounted || _isNavigating) return;
+    final alreadySettled =
+        PesananProvider.isPaymentSettled(_currentData.statusBayar) ||
+            _currentData.statusProgresPesanan == 'persiapan';
+
+    if (alreadySettled) {
+      debugPrint('[WaitingPayment] 💡 Payment already settled on open '
+          '(statusBayar: ${_currentData.statusBayar}, '
+          'statusProgres: ${_currentData.statusProgresPesanan})');
+      _handleSuccess();
+    }
   }
 
   // =========================================
@@ -165,12 +187,18 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
 
       final fresh = list.first;
 
-      if (fresh.statusBayar != _currentData.statusBayar) {
-        debugPrint(
-            '[WaitingPayment] 📊 Poll status changed: ${_currentData.statusBayar} → ${fresh.statusBayar}');
+      final statusBayarChanged = fresh.statusBayar != _currentData.statusBayar;
+      final progresChanged =
+          fresh.statusProgresPesanan != _currentData.statusProgresPesanan;
+
+      if (statusBayarChanged || progresChanged) {
+        debugPrint('[WaitingPayment] 📊 Poll changed — '
+            'statusBayar: ${_currentData.statusBayar} → ${fresh.statusBayar} | '
+            'progres: ${_currentData.statusProgresPesanan} → ${fresh.statusProgresPesanan}');
         setState(() => _currentData = fresh);
 
-        if (PesananProvider.isPaymentSettled(fresh.statusBayar)) {
+        if (PesananProvider.isPaymentSettled(fresh.statusBayar) ||
+            fresh.statusProgresPesanan == 'persiapan') {
           _handleSuccess();
         }
       }
@@ -272,6 +300,10 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Future<void> _handleExpired() async {
     if (!mounted || _isNavigating) return;
     setState(() => _isNavigating = true);
+
+    _countdownTimer?.cancel();
+    _pollingTimer?.cancel(); 
+    _fcmSubscription?.cancel();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(

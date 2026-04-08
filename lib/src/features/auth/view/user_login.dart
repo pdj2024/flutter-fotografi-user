@@ -22,16 +22,6 @@ import 'package:collection/collection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-/// ============================================
-/// 🔐 UserLogin - FCM-ONLY VERSION
-/// ============================================
-/// Changes:
-/// 1. ✅ Removed all SignalR initialization
-/// 2. ✅ Uses FCM for real-time updates
-/// 3. ✅ Simpler initialization flow
-/// 4. ✅ Better error handling
-/// ============================================
-
 class UserLogin extends StatefulWidget {
   const UserLogin({super.key});
 
@@ -44,6 +34,7 @@ class _UserLoginState extends State<UserLogin>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late Animation<double> _imageScaleAnimation;
   bool _isLoading = false;
 
   @override
@@ -51,23 +42,30 @@ class _UserLoginState extends State<UserLogin>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1600),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+        curve: const Interval(0.3, 0.7, curve: Curves.easeOut),
       ),
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
+      begin: const Offset(0, 0.15),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
+        curve: const Interval(0.35, 0.85, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _imageScaleAnimation = Tween<double>(begin: 1.1, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
       ),
     );
 
@@ -80,7 +78,10 @@ class _UserLoginState extends State<UserLogin>
     super.dispose();
   }
 
-  /// ✅ Handle Google Login - FCM-only version
+  // ════════════════════════════════════════════════════════════
+  // LOGIN LOGIC
+  // ════════════════════════════════════════════════════════════
+
   Future<void> handleLoginGoogle(
     BuildContext context,
     String targetPage,
@@ -102,8 +103,6 @@ class _UserLoginState extends State<UserLogin>
       final historyOrderProv = context.read<HistoryOrderProvider>();
       final pesananProv = context.read<PesananProvider>();
 
-
-      // ✅ Login with Google
       final result = await provider.checkLoginGoogle(
         role: Constants.customer,
         silent: false,
@@ -113,127 +112,76 @@ class _UserLoginState extends State<UserLogin>
 
       debugPrint("📊 [UserLogin] Login result: ${result.name}");
 
-      // ==========================================
-      // CHECK LOGIN RESULT
-      // ==========================================
-
       if (result.name == 'aktif') {
-        debugPrint("✅ [UserLogin] Login successful!");
-        debugPrint("   User: ${provider.customer?.namaDisplay}");
+        debugPrint(
+            "✅ [UserLogin] Login successful: ${provider.customer?.namaDisplay}");
 
-        LocalStorageService.instance.setActiveCustomer(
-          provider.customer!.noId,
-        );
+        LocalStorageService.instance.setActiveCustomer(provider.customer!.noId);
 
-        // ==========================================
-        // 1️⃣ REQUEST NOTIFICATION PERMISSION (Android 13+)
-        // ==========================================
-        await _requestNotificationPermission(context);
+        // Gelombang 1: permission + chatProvider init
+        await Future.wait([
+          _requestNotificationPermission(context),
+          _initializeChatProvider(context, provider, chatProv),
+        ]);
 
-        // ==========================================
-        // 2️⃣ INITIALIZE ChatProvider (FCM-based)
-        // ==========================================
-        await _initializeChatProvider(context, provider, chatProv);
-
-        // ==========================================
-        // 3️⃣ INITIALIZE HistoryOrderProvider (FCM-based)
-        // ==========================================
-        await _initializeHistoryOrderProvider(
-          context,
-          provider,
-          historyOrderProv,
-          pesananProv,
-        );
-
-        // ==========================================
-        // 4️⃣ REGISTER FCM TOKEN
-        // ==========================================
-        await _registerFCMToken(provider);
-
-        // ==========================================
-        // 5️⃣ LOAD KOTA LIST
-        // ==========================================
-        await _loadKotaList(context);
-
-        if (!mounted) return;
-
-        await _loadLikedAndSaved(context, provider);
+        // Gelombang 2: order, FCM, kota, liked/saved
+        await Future.wait([
+          _initializeHistoryOrderProvider(
+              context, provider, historyOrderProv, pesananProv),
+          _registerFCMToken(provider),
+          _loadKotaList(context),
+          _loadLikedAndSaved(context, provider),
+        ]);
 
         debugPrint("✅ [UserLogin] All services initialized");
         debugPrint("═══════════════════════════════════════");
 
-        // ✅ Pop login page with success = true
+        if (!mounted) return;
         Navigator.pop(context, true);
 
-        // ✅ Navigate to target page
         final targetWidget = getPageFromString(
           targetPage,
           noIdPortofolio: noIdPortofolio,
           noIdVendor: noIdVendor,
         );
 
-        // ✅ If target is tab page, switch tab
         if (targetPage.startsWith('Tab')) {
           navigationProvider.setSelectedIndex(tabIndex);
           navigationProvider.showBottomNav();
         } else {
-          // ✅ If target is detail page, navigate
           await navigationProvider.navigateToPage(
             context,
             targetWidget,
             targetTabIndex: tabIndex,
-            hrsLogin: false, // Already logged in
+            hrsLogin: false,
           );
         }
-
-        debugPrint("✅ [UserLogin] Navigation completed");
       } else if (result.name == 'nonaktif') {
         debugPrint("⚠️ [UserLogin] Account inactive");
-
         if (!mounted) return;
-
         CustomSnackbar.showErrorSnackbar(
           context,
           "Akun Anda tidak aktif. Silakan hubungi admin.",
         );
-
         await provider.logout();
-
-        // ✅ Pop with false (login failed)
-        if (mounted) {
-          Navigator.pop(context, false);
-        }
+        if (mounted) Navigator.pop(context, false);
       } else {
         debugPrint("❌ [UserLogin] Login failed: ${result.name}");
-
         if (!mounted) return;
-
         CustomSnackbar.showErrorSnackbar(
           context,
           "Login gagal. Silakan coba lagi.",
         );
-
         await provider.logout();
-
-        // ✅ Pop with false (login failed)
-        if (mounted) {
-          Navigator.pop(context, false);
-        }
+        if (mounted) Navigator.pop(context, false);
       }
     } catch (e, st) {
-      debugPrint("═══════════════════════════════════════");
-      debugPrint("❌ [UserLogin] Error during login");
-      debugPrint("═══════════════════════════════════════");
-      debugPrint("Error: $e");
-      debugPrint("Stack: $st");
-
+      debugPrint("❌ [UserLogin] Error: $e\n$st");
       if (mounted) {
         CustomSnackbar.showErrorSnackbar(
           context,
           "Terjadi kesalahan saat login: $e",
         );
-
-        // ✅ Pop with false (error)
         Navigator.pop(context, false);
       }
     } finally {
@@ -241,45 +189,27 @@ class _UserLoginState extends State<UserLogin>
     }
   }
 
+  // ════════════════════════════════════════════════════════════
+  // INIT HELPERS
+  // ════════════════════════════════════════════════════════════
+
   Future<void> _loadLikedAndSaved(
-    BuildContext context,
-    UserProvider provider,
-  ) async {
+      BuildContext context, UserProvider provider) async {
     try {
-      debugPrint("[UserLogin] 🔧 Loading liked & saved portofolio...");
       final portoProvider = context.read<PortofolioProvider>();
-
-      // Jalankan paralel — tidak perlu tunggu satu per satu
       await Future.wait([
-        portoProvider.loadLikedPortofolio(
-          context: context,
-          syncFromApi: true, // fetch dari API untuk data terbaru
-        ),
-        portoProvider.loadSavedPortofolio(
-          context: context,
-          syncFromApi: true,
-        ),
+        portoProvider.loadLikedPortofolio(context: context, syncFromApi: true),
+        portoProvider.loadSavedPortofolio(context: context, syncFromApi: true),
       ]);
-
-      debugPrint(
-          "[UserLogin] ✅ Liked: ${portoProvider.portofolioLikelist.length}"
-          " | Saved: ${portoProvider.portofolioSaveList.length}");
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ Load liked/saved error: $e");
-      // Tidak throw — lanjut tanpa data liked/saved
     }
   }
 
-  /// ✅ Request notification permission (Android 13+)
   Future<void> _requestNotificationPermission(BuildContext context) async {
     if (!Platform.isAndroid) return;
-
     try {
-      debugPrint("[UserLogin] 🔔 Requesting notification permission...");
-
       final status = await Permission.notification.request();
-      debugPrint("[UserLogin] Permission status: $status");
-
       if (status.isDenied && mounted) {
         showDialog(
           context: context,
@@ -287,8 +217,7 @@ class _UserLoginState extends State<UserLogin>
             title: const Text('Izin Notifikasi'),
             content: const Text(
               'Aplikasi membutuhkan izin notifikasi untuk '
-              'memberi tahu Anda tentang pesan baru, update pesanan, '
-              'dan aktivitas lainnya.',
+              'memberi tahu Anda tentang pesan baru dan update pesanan.',
             ),
             actions: [
               TextButton(
@@ -305,52 +234,27 @@ class _UserLoginState extends State<UserLogin>
             ],
           ),
         );
-      } else if (status.isPermanentlyDenied && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Izin notifikasi ditolak. '
-              'Buka Pengaturan untuk mengaktifkannya.',
-            ),
-            action: SnackBarAction(
-              label: 'Pengaturan',
-              onPressed: () => openAppSettings(),
-            ),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      } else if (status.isGranted) {
-        debugPrint("[UserLogin] ✅ Notification permission granted");
       }
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ Notification permission error: $e");
     }
   }
 
-  /// ✅ Initialize ChatProvider (FCM-based, no SignalR)
   Future<void> _initializeChatProvider(
     BuildContext context,
     UserProvider provider,
     ChatProvider chatProv,
   ) async {
     try {
-      debugPrint("[UserLogin] 🔧 Initializing ChatProvider (FCM-based)...");
-
-      // Initialize ChatProvider (loads rooms from API)
       await chatProv.initialize(
         userId: provider.customer!.noId,
         userType: Constants.customer,
       );
-
-      debugPrint("[UserLogin] ✅ ChatProvider initialized");
-      debugPrint("[UserLogin] ℹ️ Real-time updates via FCM");
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ ChatProvider init error: $e");
-      // Don't throw - allow app to continue without chat
     }
   }
 
-  /// ✅ Initialize HistoryOrderProvider (FCM-based, no SignalR)
   Future<void> _initializeHistoryOrderProvider(
     BuildContext context,
     UserProvider provider,
@@ -358,57 +262,36 @@ class _UserLoginState extends State<UserLogin>
     PesananProvider pesananProv,
   ) async {
     try {
-      debugPrint(
-          "[UserLogin] 🔧 Initializing HistoryOrderProvider (FCM-based)...");
-
-      // Load orders first
-      await pesananProv.loadOrder(context);
-      debugPrint(
-          "[UserLogin] ✅ Orders loaded: ${pesananProv.allPesanan.length}");
-
-      // HistoryOrderProvider is already initialized in main.dart
-      // Just track the orders here
+      await pesananProv.loadOrderOnly(context);
       for (final order in pesananProv.allPesanan) {
         if (order.noBukti.isNotEmpty) {
           historyOrderProv.trackOrder(order.noBukti);
         }
       }
-
-      debugPrint("[UserLogin] ✅ HistoryOrderProvider ready");
-      debugPrint("[UserLogin] ℹ️ Real-time updates via FCM");
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
-      // Don't throw - allow app to continue
     }
   }
 
-  /// ✅ Register FCM token to backend
   Future<void> _registerFCMToken(UserProvider provider) async {
     try {
-      debugPrint("[UserLogin] 📱 Registering FCM token...");
-
       await FCMService.instance.registerToken(provider.customer!.noId);
-
-      debugPrint("[UserLogin] ✅ FCM token registered");
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ FCM token registration error: $e");
-      // Don't throw - allow app to continue
     }
   }
 
-  /// ✅ Load Kota list
   Future<void> _loadKotaList(BuildContext context) async {
     try {
-      debugPrint("[UserLogin] 🔧 Loading Kota list...");
-
       await context.read<KotaProvider>().getAllKotaList();
-
-      debugPrint("[UserLogin] ✅ Kota list loaded");
     } catch (e) {
       debugPrint("[UserLogin] ⚠️ Kota list load error: $e");
-      // Don't throw - allow app to continue
     }
   }
+
+  // ════════════════════════════════════════════════════════════
+  // BUILD — Full-screen image background layout
+  // ════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -420,325 +303,302 @@ class _UserLoginState extends State<UserLogin>
     final String? noIdPortofolio = args['noIdPortofolio'];
     final String? noIdVendor = args['noIdVendor'];
 
-    return WillPopScope(
-      // ✅ When user presses back, return false (cancelled)
-      onWillPop: () async {
-        Navigator.pop(context, false);
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Navigator.pop(context, false);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF9F9F9),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: CustomScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  slivers: [
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 30),
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // ═══════════════════════════════════════════
+            // LAYER 1: Full-screen background image
+            // ═══════════════════════════════════════════
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _imageScaleAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _imageScaleAnimation.value,
+                    child: child,
+                  );
+                },
+                child: Image.asset(
+                  'assets/login_image_2.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
 
-                          /// --- Animated Logo ---
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: Hero(
-                              tag: 'app_logo',
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                child: Image.asset(
-                                  'assets/camera_icon_transparent.png',
-                                  height: 50,
+            // ═══════════════════════════════════════════
+            // LAYER 2: Gradient overlay
+            // ═══════════════════════════════════════════
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.3, 0.55, 1.0],
+                    colors: [
+                      Colors.black.withOpacity(0.3),
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.4),
+                      Colors.black.withOpacity(0.92),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ═══════════════════════════════════════════
+            // LAYER 3: Back button
+            // ═══════════════════════════════════════════
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context, false),
+              ),
+            ),
+
+            // ═══════════════════════════════════════════
+            // LAYER 4: Content at bottom
+            // ═══════════════════════════════════════════
+            Positioned.fill(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    const Spacer(),
+
+                    // ── Welcome text ─────────────────────
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Temukan Fotografer\nTerbaik Anda',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.15,
+                                  letterSpacing: -0.5,
                                 ),
                               ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          /// --- Hero Image ---
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: ClipRRect(
-                              child: Image.asset(
-                                'assets/user_login_image.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 30),
-
-                          /// --- Welcome Text ---
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: Column(
-                              children: [
-                                const Text(
-                                  'Selamat Datang di',
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                ShaderMask(
-                                  shaderCallback: (bounds) => LinearGradient(
-                                    colors: [
-                                      Constants.primaryColor,
-                                      Constants.primaryColor.withOpacity(0.8),
-                                    ],
-                                  ).createShader(bounds),
-                                  child: const Text(
-                                    'Fotografi',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      color: Constants.primaryColor,
-                                      fontSize: 28,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const Spacer(),
-
-                          /// --- Google Sign In Button ---
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24),
-                                child: ElevatedButton(
-                                  onPressed: _isLoading
-                                      ? null
-                                      : () async {
-                                          await handleLoginGoogle(
-                                            context,
-                                            targetPage,
-                                            tabIndex,
-                                            noIdPortofolio,
-                                            noIdVendor,
-                                          );
-                                        },
-                                  style: ElevatedButton.styleFrom(
-                                    elevation: 0,
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.black87,
-                                    disabledBackgroundColor:
-                                        Colors.grey.shade100,
-                                    minimumSize: const Size.fromHeight(60),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      side: BorderSide(
-                                        color: Colors.grey.shade200,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                  child: _isLoading
-                                      ? const SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                              Constants.primaryColor,
-                                            ),
-                                          ),
-                                        )
-                                      : Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Image.asset(
-                                              'assets/google_icon.png',
-                                              height: 26,
-                                            ),
-                                            const SizedBox(width: 14),
-                                            const Text(
-                                              'Masuk dengan Google',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.3,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Jelajahi portofolio, bandingkan paket, dan '
+                                'pesan fotografer profesional untuk momen spesial Anda.',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.75),
+                                  fontSize: 14.5,
+                                  height: 1.55,
+                                  fontWeight: FontWeight.w400,
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-
-                          const SizedBox(height: 24),
-
-                          /// --- Terms & Privacy ---
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 50),
-                              child: Wrap(
-                                alignment: WrapAlignment.center,
-                                children: [
-                                  Text(
-                                    'Dengan masuk, Anda menyetujui ',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontSize: 12,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const LegalPage(
-                                            type: LegalType.terms),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Syarat & Ketentuan',
-                                      style: TextStyle(
-                                        color: Constants.primaryColor,
-                                        fontSize: 12,
-                                        height: 1.5,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    ' dan ',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontSize: 12,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const LegalPage(
-                                            type: LegalType.privacy),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Kebijakan Privasi',
-                                      style: TextStyle(
-                                        color: Constants.primaryColor,
-                                        fontSize: 12,
-                                        height: 1.5,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    ' kami',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontSize: 12,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                        ],
+                        ),
                       ),
                     ),
+
+                    const SizedBox(height: 32),
+
+                    // ── Google Login button ───────────────
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: ElevatedButton(
+                              onPressed: _isLoading
+                                  ? null
+                                  : () async {
+                                      await handleLoginGoogle(
+                                        context,
+                                        targetPage,
+                                        tabIndex,
+                                        noIdPortofolio,
+                                        noIdVendor,
+                                      );
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                elevation: 0,
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black87,
+                                disabledBackgroundColor:
+                                    Colors.white.withOpacity(0.6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Constants.primaryColor,
+                                        ),
+                                      ),
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Image.asset(
+                                          'assets/google_icon.png',
+                                          height: 24,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Text(
+                                          'Masuk dengan Google',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── Legal links ───────────────────────
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 40),
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            children: [
+                              Text(
+                                'Dengan masuk, Anda menyetujui ',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const LegalPage(type: LegalType.terms),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Syarat & Ketentuan',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.85),
+                                    fontSize: 12,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor:
+                                        Colors.white.withOpacity(0.5),
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                ' dan ',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LegalPage(
+                                        type: LegalType.privacy),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Kebijakan Privasi',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.85),
+                                    fontSize: 12,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor:
+                                        Colors.white.withOpacity(0.5),
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                ' kami',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
                   ],
                 ),
               ),
-
-              // ✅ Back button - returns false when pressed
-              Positioned(
-                top: 16,
-                left: 16,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Navigator.pop(context, false);
-                  },
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  /// Get page widget from string identifier
+  // ════════════════════════════════════════════════════════════
+  // PAGE ROUTING
+  // ════════════════════════════════════════════════════════════
+
   Widget getPageFromString(
     String targetPage, {
     String? noIdPortofolio,
     String? noIdVendor,
   }) {
-    debugPrint("[UserLogin] 🎯 Target page: $targetPage");
-    debugPrint("[UserLogin]    noIdPortofolio: $noIdPortofolio");
-
     switch (targetPage) {
       case 'SinglePostPage':
         final portoProvider = context.read<PortofolioProvider>();
-
-        // ✅ FIX: Strategi restore porto dengan 3 fallback:
-        //
-        // 1. Cari dari portofolioList by noIdPortofolio (dari arguments)
-        //    → paling akurat, data sudah ada di list
-        //
-        // 2. Pakai selectedPortofolio yang sudah di-set sebelum redirect login
-        //    → fallback jika noIdPortofolio tidak ada di arguments
-        //    → ini yang terjadi saat user tap porto lalu di-redirect login
-        //    → setSelectedPortofolio() sudah dipanggil sebelum navigateToPage()
-        //
-        // 3. Null → SinglePostPage tampilkan _buildEmptyScaffold()
-        //    (sudah ada handler-nya)
-
         if (noIdPortofolio != null && noIdPortofolio.isNotEmpty) {
-          // Strategi 1: lookup dari list
           final porto = portoProvider.portofolioList
               .firstWhereOrNull((p) => p.noId == noIdPortofolio);
-
           if (porto != null) {
-            // Ditemukan di list → update selectedPortofolio
             portoProvider.setSelectedPortofolio(porto);
-            debugPrint("[UserLogin] ✅ Porto found by id: $noIdPortofolio");
-          } else {
-            // Tidak ditemukan di list — jangan overwrite selectedPortofolio
-            // yang sudah di-set sebelum redirect (strategi 2)
-            debugPrint(
-                "[UserLogin] ⚠️ Porto not in list, keeping existing selected");
           }
         }
-        // else: noIdPortofolio null → pakai selectedPortofolio yang sudah ada (strategi 2)
-
-        // selectedPortofolio sekarang berisi porto yang benar (atau tetap dari sebelum redirect)
         return const SinglePostPage();
 
       case 'VendorBioPage':
-        return VendorBioPage(
-          idVendor: noIdVendor ?? 'ven_2',
-        );
+        return VendorBioPage(idVendor: noIdVendor ?? 'ven_2');
       case 'Tab1':
         return const ChatListPage();
       case 'Tab2':

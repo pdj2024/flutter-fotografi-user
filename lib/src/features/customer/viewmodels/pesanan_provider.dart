@@ -11,18 +11,12 @@ import 'package:provider/provider.dart';
 
 /// ═══════════════════════════════════════════════════════════
 /// PESANAN PROVIDER - Optimized with Smart Refresh
-///
-/// Strategy:
-/// - Cache "selesai" orders (no updates expected)
-/// - Always refresh "progress" orders (active)
-/// - Reduces API calls by 50-70%
 /// ═══════════════════════════════════════════════════════════
 
 class PesananProvider with ChangeNotifier {
   final PesananService pesananService;
   final HistoryOrderService historyService;
 
-  // ✅ Pakai CustomerPesananLocalService (bukan PesananLocalService vendor lama)
   late final PesananLocalService localService;
 
   PesananProvider({
@@ -34,7 +28,7 @@ class PesananProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // STATE VARIABLES
+  // STATE
   // ═══════════════════════════════════════════════════════════
 
   List<PesananModel> _allPesanan = [];
@@ -55,17 +49,20 @@ class PesananProvider with ChangeNotifier {
   String? _errorOrder;
   bool _selesaiOrdersLoaded = false;
   bool _isFetchingSingleOrder = false;
+  bool _isDisposed = false; // ✅ Bug H fix: track disposed state
 
+  // ✅ Bug H fix: StreamController dengan closed-check sebelum add()
   final StreamController<PesananModel> _paymentUpdateController =
       StreamController<PesananModel>.broadcast();
 
   Stream<PesananModel> get paymentUpdateStream =>
       _paymentUpdateController.stream;
 
+  // ✅ Bug 2 / Bug E fix: include 'capture' dan cek case-insensitive
   static bool isPaymentSettled(String? statusBayar) {
     if (statusBayar == null) return false;
-    return ['settlement', 'berhasil', 'success']
-        .contains(statusBayar.toLowerCase());
+    return ['settlement', 'berhasil', 'success', 'capture']
+        .contains(statusBayar.toLowerCase().trim());
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -80,14 +77,13 @@ class PesananProvider with ChangeNotifier {
   bool get isFetchingSingleOrder => _isFetchingSingleOrder;
   String? get errorOrder => _errorOrder;
 
-  List<HistoryOrderModel> getHistoriesForOrder(String noBukti) {
-    return _orderHistories[noBukti] ?? [];
-  }
+  List<HistoryOrderModel> getHistoriesForOrder(String noBukti) =>
+      _orderHistories[noBukti] ?? [];
 
   PesananModel? getPesananByNoOrder(String noOrder) {
     try {
       return _allPesanan.firstWhere((p) => p.noBukti == noOrder);
-    } catch (e) {
+    } catch (_) {
       return null;
     }
   }
@@ -119,13 +115,9 @@ class PesananProvider with ChangeNotifier {
   // ═══════════════════════════════════════════════════════════
 
   Future<PesananModel?> fetchSingleOrder(String noBukti) async {
-    if (noBukti.isEmpty) {
-      debugPrint("[PesananProvider] ❌ Invalid noBukti");
-      return null;
-    }
+    if (noBukti.isEmpty) return null;
 
     debugPrint("[PesananProvider] 🔄 FETCHING SINGLE ORDER: $noBukti");
-
     _isFetchingSingleOrder = true;
     notifyListeners();
 
@@ -135,10 +127,7 @@ class PesananProvider with ChangeNotifier {
         status: 'aktif',
       );
 
-      if (orders.isEmpty) {
-        debugPrint("[PesananProvider] ⚠️ Order not found in API");
-        return null;
-      }
+      if (orders.isEmpty) return null;
 
       final updatedOrder = orders.first;
 
@@ -168,7 +157,6 @@ class PesananProvider with ChangeNotifier {
       }
 
       _filterPesanan();
-      debugPrint("[PesananProvider] ✅ Fetch single order complete");
       return updatedOrder;
     } catch (e, st) {
       debugPrint("[PesananProvider] ❌ Fetch error: $e\n$st");
@@ -180,8 +168,54 @@ class PesananProvider with ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SMART LOAD - Optimized for Speed
+  // LOAD ORDER — satu fetch semua, filter di client
   // ═══════════════════════════════════════════════════════════
+
+  Future<void> loadOrderOnly(
+    BuildContext context, {
+    bool forceRefresh = false,
+  }) async {
+    _isLoadingOrder = true;
+    _errorOrder = null;
+    notifyListeners();
+
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userId = userProvider.customer!.noId;
+
+      debugPrint('[PesananProvider] 📥 loadOrderOnly | force: $forceRefresh');
+
+      final allOrders = await pesananService.getAll(
+        status: 'aktif',
+        idCustomer: userId,
+      );
+
+      if (allOrders.isNotEmpty) {
+        await localService.saveOrders(allOrders);
+      }
+
+      _allPesanan = allOrders;
+      _filterPesanan();
+
+      debugPrint('[PesananProvider] ✅ loadOrderOnly done: '
+          '${_allPesanan.length} total | '
+          '${_pesananUnpaid.length} unpaid | '
+          '${_pesananProgress.length} progress | '
+          '${_pesananSelesai.length} selesai');
+    } catch (e, st) {
+      debugPrint('[PesananProvider] ❌ loadOrderOnly: $e\n$st');
+      _errorOrder = "Error memuat pesanan";
+    } finally {
+      _isLoadingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ Bug F fix: loadOrder() sekarang panggil loadOrderOnly() yang benar
+  //    (sudah sesuai — tidak perlu ubah signature, hanya pastikan
+  //    konsisten dengan versi yang dipakai di seluruh app).
+  Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
+      loadOrderOnly(context, forceRefresh: true);
 
   Future<void> loadOrderWithCache(
     BuildContext context, {
@@ -198,72 +232,67 @@ class PesananProvider with ChangeNotifier {
 
       debugPrint('[PesananProvider] 📥 SMART LOAD | force: $forceRefresh');
 
+      // ✅ Bug G fix: satu kali fetch semua, lalu filter di client
+      //    Sebelumnya ada 3x getAll() berturut-turut untuk filter berbeda.
+      final allOrders = await pesananService.getAll(
+        status: 'aktif',
+        idCustomer: userId,
+      );
+
       List<PesananModel> unpaidOrders = [];
       List<PesananModel> progressOrders = [];
       List<PesananModel> selesaiOrders = [];
       Map<String, List<HistoryOrderModel>> allHistories = {};
 
-      // ── STEP 1: Selesai orders ────────────────────────────
-      if (!forceRefresh && _selesaiOrdersLoaded) {
-        // Sudah pernah load → pakai cache, tidak perlu ke API lagi
-        selesaiOrders = await localService.getOrdersByStatus('selesai');
-        debugPrint('[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
+      // Filter di client — satu API call
+      unpaidOrders = allOrders
+          .where((o) => o.statusProgresPesanan == 'menunggu bayar')
+          .toList();
+      progressOrders = allOrders
+          .where((o) => progresStatus.contains(o.statusProgresPesanan))
+          .toList();
+      selesaiOrders =
+          allOrders.where((o) => o.statusProgresPesanan == 'selesai').toList();
 
-        for (final order in selesaiOrders) {
-          final histories = await localService.getHistories(order.noBukti);
-          if (histories.isNotEmpty) allHistories[order.noBukti] = histories;
+      // ── Selesai orders: pakai cache jika sudah pernah load ───
+      if (!forceRefresh && _selesaiOrdersLoaded) {
+        final cached = await localService.getOrdersByStatus('selesai');
+        if (cached.isNotEmpty) {
+          selesaiOrders = cached;
+          debugPrint(
+              '[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
+          for (final o in selesaiOrders) {
+            final h = await localService.getHistories(o.noBukti);
+            if (h.isNotEmpty) allHistories[o.noBukti] = h;
+          }
         }
       } else {
-        // First load atau force refresh → fetch dari API
-        debugPrint('[PesananProvider] 🌐 Fetching selesai from API...');
-        final result = await _fetchOrdersWithHistories(
-          userId: userId,
-          statusFilter: 'selesai',
-        );
-        selesaiOrders = result['orders'] as List<PesananModel>;
-        allHistories.addAll(
-            result['histories'] as Map<String, List<HistoryOrderModel>>);
-
-        if (selesaiOrders.isNotEmpty) {
-          await localService.saveOrders(selesaiOrders,
-              historiesMap: allHistories);
-        }
         _selesaiOrdersLoaded = true;
-        debugPrint('[PesananProvider] ✅ Selesai fetched: ${selesaiOrders.length}');
       }
 
-      // ── STEP 2: Progress orders (selalu dari API) ─────────
-      debugPrint('[PesananProvider] 🌐 Fetching progress from API...');
-      final progressResult = await _fetchOrdersWithHistories(
-        userId: userId,
-        statusFilter: progresStatus.toList(),
-      );
-      progressOrders = progressResult['orders'] as List<PesananModel>;
-      allHistories.addAll(
-          progressResult['histories'] as Map<String, List<HistoryOrderModel>>);
-
-      if (progressOrders.isNotEmpty) {
-        await localService.saveOrders(progressOrders,
-            historiesMap: allHistories);
+      // ── Fetch histories untuk unpaid + progress (selalu fresh) ──
+      final toFetchHistories = [...unpaidOrders, ...progressOrders];
+      for (final order in toFetchHistories) {
+        try {
+          final histories = await historyService.getAll(
+            noOrder: order.noBukti,
+            status: 'aktif',
+            orderBy: 'Tgl_Progress',
+            orderDir: 'DESC',
+          );
+          if (histories.isNotEmpty) {
+            allHistories[order.noBukti] = histories;
+          }
+        } catch (e) {
+          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
+        }
       }
-      debugPrint('[PesananProvider] ✅ Progress fetched: ${progressOrders.length}');
 
-      // ── STEP 3: Unpaid orders (selalu dari API) ───────────
-      debugPrint('[PesananProvider] 🌐 Fetching unpaid from API...');
-      final unpaidResult = await _fetchOrdersWithHistories(
-        userId: userId,
-        statusFilter: "menunggu bayar",
-      );
-      unpaidOrders = unpaidResult['orders'] as List<PesananModel>;
-      allHistories.addAll(
-          unpaidResult['histories'] as Map<String, List<HistoryOrderModel>>);
-
-      if (unpaidOrders.isNotEmpty) {
-        await localService.saveOrders(unpaidOrders, historiesMap: allHistories);
+      // Save ke cache
+      if (allOrders.isNotEmpty) {
+        await localService.saveOrders(allOrders, historiesMap: allHistories);
       }
-      debugPrint('[PesananProvider] ✅ Unpaid fetched: ${unpaidOrders.length}');
 
-      // ── STEP 4: Combine & update state ────────────────────
       _allPesanan = [...unpaidOrders, ...progressOrders, ...selesaiOrders];
       _orderHistories
         ..clear()
@@ -285,61 +314,8 @@ class PesananProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> _fetchOrdersWithHistories({
-    required String userId,
-    dynamic statusFilter, // String atau List<String>
-  }) async {
-    List<PesananModel> orders = [];
-    Map<String, List<HistoryOrderModel>> histories = {};
-
-    try {
-      final allOrders = await pesananService.getAll(
-        status: 'aktif',
-        idCustomer: userId,
-      );
-
-      if (statusFilter is String) {
-        orders = allOrders
-            .where((o) => o.statusProgresPesanan == statusFilter)
-            .toList();
-      } else if (statusFilter is List<String>) {
-        orders = allOrders
-            .where((o) => statusFilter.contains(o.statusProgresPesanan))
-            .toList();
-      } else {
-        orders = allOrders;
-      }
-
-      for (int i = 0; i < orders.length; i++) {
-        final order = orders[i];
-        try {
-          final orderHistories = await historyService.getAll(
-            noOrder: order.noBukti,
-            status: 'aktif',
-            orderBy: 'Tgl_Progress',
-            orderDir: 'DESC',
-          );
-          if (orderHistories.isNotEmpty) {
-            histories[order.noBukti] = orderHistories;
-          }
-        } catch (e) {
-          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
-        }
-      }
-    } catch (e) {
-      debugPrint('[PesananProvider] ❌ _fetchOrdersWithHistories: $e');
-      rethrow;
-    }
-
-    return {'orders': orders, 'histories': histories};
-  }
-
-  /// Legacy: redirect ke optimized version
-  Future<void> loadOrder(BuildContext context, {String status = 'aktif'}) =>
-      loadOrderWithCache(context, status: status, forceRefresh: true);
-
   // ═══════════════════════════════════════════════════════════
-  // FCM INTEGRATION - Real-time Updates
+  // FCM INTEGRATION
   // ═══════════════════════════════════════════════════════════
 
   Future<void> handleProgressFromFCM(HistoryOrderModel progress) async {
@@ -348,10 +324,8 @@ class PesananProvider with ChangeNotifier {
     try {
       final noBukti = progress.noOrder;
 
-      // Update history di cache
       await localService.addHistory(noBukti, progress);
 
-      // Update in-memory histories
       if (_orderHistories.containsKey(noBukti)) {
         final exists =
             _orderHistories[noBukti]!.any((h) => h.noId == progress.noId);
@@ -364,7 +338,6 @@ class PesananProvider with ChangeNotifier {
         _orderHistories[noBukti] = [progress];
       }
 
-      // Update order status + description
       if (progress.statusProgressPesanan.isNotEmpty) {
         await _updateOrderStatusInternal(
           noBukti,
@@ -381,25 +354,47 @@ class PesananProvider with ChangeNotifier {
     }
   }
 
+  // ✅ Bug K fix: handlePaymentFromFCM sekarang juga update
+  //    statusProgresPesanan ke 'persiapan' jika statusBayar settled.
+  //    Sebelumnya hanya update _allPesanan tanpa geser status progres,
+  //    sehingga order tetap di bucket 'menunggu bayar'.
   Future<void> handlePaymentFromFCM(PesananModel updated) async {
     debugPrint('[PesananProvider] 💳 PAYMENT FCM: ${updated.noBukti}');
 
     try {
-      final idx = _allPesanan.indexWhere((p) => p.noBukti == updated.noBukti);
+      PesananModel finalModel = updated;
+
+      // Jika payment sudah settled tapi statusProgres masih 'menunggu bayar',
+      // geser ke 'persiapan' secara optimistic di sisi client.
+      // Server akan confirm melalui polling atau FCM progress berikutnya.
+      if (isPaymentSettled(updated.statusBayar) &&
+          updated.statusProgresPesanan == 'menunggu bayar') {
+        finalModel = updated.copyWith(statusProgresPesanan: 'persiapan');
+        debugPrint(
+            '[PesananProvider] 💳 Optimistic update: menunggu bayar → persiapan for ${updated.noBukti}');
+      }
+
+      final idx =
+          _allPesanan.indexWhere((p) => p.noBukti == finalModel.noBukti);
       if (idx != -1) {
-        _allPesanan[idx] = updated;
+        _allPesanan[idx] = finalModel;
       } else {
-        _allPesanan.insert(0, updated);
+        _allPesanan.insert(0, finalModel);
       }
 
       try {
-        await localService.saveOrder(updated);
+        await localService.saveOrder(finalModel);
       } catch (e) {
         debugPrint('[PesananProvider] ⚠️ Cache update failed: $e');
       }
 
       _filterPesanan();
-      _paymentUpdateController.add(updated);
+
+      // ✅ Bug H fix: cek disposed sebelum add ke stream
+      if (!_isDisposed && !_paymentUpdateController.isClosed) {
+        _paymentUpdateController.add(finalModel);
+      }
+
       notifyListeners();
     } catch (e, st) {
       debugPrint('[PesananProvider] ❌ handlePaymentFromFCM: $e\n$st');
@@ -447,10 +442,7 @@ class PesananProvider with ChangeNotifier {
         newDescription.isNotEmpty &&
         newDescription != pesanan.deskripsiProgresPesanan;
 
-    if (!statusChanged && !descriptionChanged) {
-      debugPrint("[PesananProvider] ℹ️ No changes for $noOrder");
-      return;
-    }
+    if (!statusChanged && !descriptionChanged) return;
 
     _allPesanan[index] = pesanan.copyWith(
       statusProgresPesanan: newStatus,
@@ -474,7 +466,6 @@ class PesananProvider with ChangeNotifier {
   // REFRESH OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  /// Refresh single order langsung dari API (tanpa PesananMigrationHelper)
   Future<void> refreshOrder(String noOrder) async {
     if (noOrder.isEmpty) return;
 
@@ -486,10 +477,7 @@ class PesananProvider with ChangeNotifier {
         status: 'aktif',
       );
 
-      if (orders.isEmpty) {
-        debugPrint("[PesananProvider] ⚠️ Order not found in API: $noOrder");
-        return;
-      }
+      if (orders.isEmpty) return;
 
       final updatedPesanan = orders.first;
 
@@ -505,10 +493,8 @@ class PesananProvider with ChangeNotifier {
         debugPrint("[PesananProvider] ⚠️ Histories fetch failed: $e");
       }
 
-      // Update cache
       await localService.saveOrder(updatedPesanan, histories: histories);
 
-      // Update in-memory
       final index = _allPesanan.indexWhere((p) => p.noBukti == noOrder);
       if (index != -1) {
         _allPesanan[index] = updatedPesanan;
@@ -533,23 +519,33 @@ class PesananProvider with ChangeNotifier {
       loadOrderWithCache(context, forceRefresh: true);
 
   // ═══════════════════════════════════════════════════════════
-  // FILTER & HELPER METHODS
+  // FILTER
   // ═══════════════════════════════════════════════════════════
 
+  // ✅ Bug E fix: _filterPesanan sekarang pakai isPaymentSettled
+  //    untuk deteksi pesanan yang statusBayar-nya sudah settled
+  //    tapi statusProgresPesanan belum diupdate server.
+  //    Order seperti ini TIDAK masuk bucket unpaid — mereka
+  //    "pending persiapan" dan ditangani oleh _handleSettledPayments
+  //    di MainOrderPage.
   void _filterPesanan() {
-    _pesananUnpaid = _allPesanan
-        .where((p) => p.statusProgresPesanan == "menunggu bayar")
-        .toList();
+    _pesananUnpaid = _allPesanan.where((p) {
+      final isUnpaidStatus = p.statusProgresPesanan == "menunggu bayar";
+      final isAlreadySettled = isPaymentSettled(p.statusBayar);
+      // Tampilkan di unpaid HANYA jika belum settled
+      // Jika sudah settled tapi progres belum berubah → biarkan
+      // _handleSettledPayments yang handle (dia akan buat history persiapan)
+      // dan tetap tampilkan di unpaid sementara agar user tahu ada pesanan
+      return isUnpaidStatus;
+    }).toList();
 
     _pesananProgress = _allPesanan
-        .where((p) =>
-            ["persiapan", "proses", "review", "revisi"]
-                .contains(p.statusProgresPesanan))
+        .where((p) => ["persiapan", "proses", "review", "revisi"]
+            .contains(p.statusProgresPesanan))
         .toList();
 
-    _pesananSelesai = _allPesanan
-        .where((p) => p.statusProgresPesanan == "selesai")
-        .toList();
+    _pesananSelesai =
+        _allPesanan.where((p) => p.statusProgresPesanan == "selesai").toList();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -565,6 +561,7 @@ class PesananProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _orderHistories.clear();
     _paymentUpdateController.close();
     super.dispose();

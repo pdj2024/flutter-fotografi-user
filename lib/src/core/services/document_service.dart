@@ -1,8 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
-
 
 class DocumentModel {
   final String kode;
@@ -41,8 +41,8 @@ class DocumentService {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e, s) {
-      print(e);
-      print(s);
+      debugPrint(e.toString());
+      debugPrint(s.toString());
       throw Exception('Gagal load $entity');
     }
   }
@@ -59,8 +59,8 @@ class DocumentService {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e, s) {
-      print(e);
-      print(s);
+      debugPrint(e.toString());
+      debugPrint(s.toString());
       throw Exception('Gagal load $entity');
     }
   }

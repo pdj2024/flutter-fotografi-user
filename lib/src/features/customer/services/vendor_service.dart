@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/data/models/vendor_model.dart';
 import '../../../core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
@@ -32,10 +33,10 @@ class VendorService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -56,6 +57,7 @@ class VendorService {
 
   Future<List<VendorModel>> searchVendor({
     String? no_id,
+    String? filter,
     String? namaDisplay,
     String? username,
     String? id_media,
@@ -68,8 +70,7 @@ class VendorService {
         '/$controller/getAll/search',
         queryParameters: {
           if (no_id != null) 'no_id': no_id,
-          if (namaDisplay != null) 'Nama_Display': namaDisplay,
-          if (username != null) 'username': username,
+          if (filter != null) 'filter': filter,
           if (id_media != null) 'id_media': id_media,
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
@@ -77,10 +78,10 @@ class VendorService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:mpjnew/src/data/models/ulasan_model.dart';
 
@@ -20,13 +21,13 @@ class UlasanLocalService {
     try {
       if (!Hive.isBoxOpen(_boxName)) {
         _box = await Hive.openBox<UlasanModel>(_boxName);
-        print('✅ [UlasanLocal] Box opened: ${_box!.length} items');
+        debugPrint('✅ [UlasanLocal] Box opened: ${_box!.length} items');
       } else {
         _box = Hive.box<UlasanModel>(_boxName);
-        print('✅ [UlasanLocal] Box already open: ${_box!.length} items');
+        debugPrint('✅ [UlasanLocal] Box already open: ${_box!.length} items');
       }
     } catch (e) {
-      print('❌ [UlasanLocal] Error opening box: $e');
+      debugPrint('❌ [UlasanLocal] Error opening box: $e');
       rethrow;
     }
   }
@@ -48,9 +49,9 @@ class UlasanLocalService {
 
     try {
       await _box!.put(ulasan.noId, ulasan);
-      print('✅ [UlasanLocal] Saved: ${ulasan.noId} (${ulasan.rating}⭐)');
+      debugPrint('✅ [UlasanLocal] Saved: ${ulasan.noId} (${ulasan.rating}⭐)');
     } catch (e) {
-      print('❌ [UlasanLocal] Error saving ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error saving ulasan: $e');
       rethrow;
     }
   }
@@ -65,9 +66,9 @@ class UlasanLocalService {
       };
 
       await _box!.putAll(ulasanMap);
-      print('✅ [UlasanLocal] Saved ${ulasanList.length} ulasan');
+      debugPrint('✅ [UlasanLocal] Saved ${ulasanList.length} ulasan');
     } catch (e) {
-      print('❌ [UlasanLocal] Error saving ulasan list: $e');
+      debugPrint('❌ [UlasanLocal] Error saving ulasan list: $e');
       rethrow;
     }
   }
@@ -79,9 +80,10 @@ class UlasanLocalService {
     try {
       await _box!.clear();
       await saveUlasanList(ulasanList);
-      print('✅ [UlasanLocal] Replaced all data: ${ulasanList.length} items');
+      debugPrint(
+          '✅ [UlasanLocal] Replaced all data: ${ulasanList.length} items');
     } catch (e) {
-      print('❌ [UlasanLocal] Error replacing data: $e');
+      debugPrint('❌ [UlasanLocal] Error replacing data: $e');
       rethrow;
     }
   }
@@ -96,10 +98,10 @@ class UlasanLocalService {
 
     try {
       final ulasan = _box!.values.toList();
-      print('📦 [UlasanLocal] Retrieved ${ulasan.length} ulasan');
+      debugPrint('📦 [UlasanLocal] Retrieved ${ulasan.length} ulasan');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting all ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error getting all ulasan: $e');
       return [];
     }
   }
@@ -111,13 +113,13 @@ class UlasanLocalService {
     try {
       final ulasan = _box!.get(noId);
       if (ulasan != null) {
-        print('📦 [UlasanLocal] Found: $noId (${ulasan.rating}⭐)');
+        debugPrint('📦 [UlasanLocal] Found: $noId (${ulasan.rating}⭐)');
       } else {
-        print('⚠️ [UlasanLocal] Not found: $noId');
+        debugPrint('⚠️ [UlasanLocal] Not found: $noId');
       }
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan: $e');
       return null;
     }
   }
@@ -132,11 +134,11 @@ class UlasanLocalService {
               u.idVendor == vendorId && u.status.toLowerCase() == 'aktif')
           .toList();
 
-      print(
+      debugPrint(
           '📦 [UlasanLocal] Found ${ulasan.length} ulasan for vendor: $vendorId');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by vendor: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by vendor: $e');
       return [];
     }
   }
@@ -158,11 +160,11 @@ class UlasanLocalService {
       // Sort by date descending (newest first)
       ulasan.sort((a, b) => b.tglUlasan.compareTo(a.tglUlasan));
 
-      print(
+      debugPrint(
           '📦 [UlasanLocal] Found ${ulasan.length} ulasan for paket: $paketId');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by paket: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by paket: $e');
       return [];
     }
   }
@@ -201,10 +203,11 @@ class UlasanLocalService {
         entry.value.sort((a, b) => b.tglUlasan.compareTo(a.tglUlasan));
       }
 
-      print('📦 [UlasanLocal] Grouped ulasan for ${paketIds.length} pakets');
+      debugPrint(
+          '📦 [UlasanLocal] Grouped ulasan for ${paketIds.length} pakets');
       return result;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by paket IDs: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by paket IDs: $e');
       return {};
     }
   }
@@ -216,11 +219,11 @@ class UlasanLocalService {
     try {
       final ulasan = _box!.values.where((u) => u.noOrder == orderId).toList();
 
-      print(
+      debugPrint(
           '📦 [UlasanLocal] Found ${ulasan.length} ulasan for order: $orderId');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by order: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by order: $e');
       return [];
     }
   }
@@ -235,11 +238,11 @@ class UlasanLocalService {
               u.idCustomer == customerId && u.status.toLowerCase() == 'aktif')
           .toList();
 
-      print(
+      debugPrint(
           '📦 [UlasanLocal] Found ${ulasan.length} ulasan from customer: $customerId');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by customer: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by customer: $e');
       return [];
     }
   }
@@ -261,11 +264,11 @@ class UlasanLocalService {
         return true;
       }).toList();
 
-      print(
+      debugPrint(
           '📦 [UlasanLocal] Found ${ulasan.length} ulasan with rating $minRating-${maxRating ?? 5}');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan by rating: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan by rating: $e');
       return [];
     }
   }
@@ -282,10 +285,10 @@ class UlasanLocalService {
         return true;
       }).toList();
 
-      print('📦 [UlasanLocal] Found ${ulasan.length} ulasan with balasan');
+      debugPrint('📦 [UlasanLocal] Found ${ulasan.length} ulasan with balasan');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan with balasan: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan with balasan: $e');
       return [];
     }
   }
@@ -305,10 +308,10 @@ class UlasanLocalService {
       // Sort by date ascending (oldest first - need reply urgently)
       ulasan.sort((a, b) => a.tglUlasan.compareTo(b.tglUlasan));
 
-      print('📦 [UlasanLocal] Found ${ulasan.length} ulasan need reply');
+      debugPrint('📦 [UlasanLocal] Found ${ulasan.length} ulasan need reply');
       return ulasan;
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting ulasan need reply: $e');
+      debugPrint('❌ [UlasanLocal] Error getting ulasan need reply: $e');
       return [];
     }
   }
@@ -324,14 +327,14 @@ class UlasanLocalService {
     try {
       if (_box!.containsKey(ulasan.noId)) {
         await _box!.put(ulasan.noId, ulasan);
-        print('✅ [UlasanLocal] Updated: ${ulasan.noId}');
+        debugPrint('✅ [UlasanLocal] Updated: ${ulasan.noId}');
       } else {
-        print(
+        debugPrint(
             '⚠️ [UlasanLocal] Ulasan not found, creating new: ${ulasan.noId}');
         await saveUlasan(ulasan);
       }
     } catch (e) {
-      print('❌ [UlasanLocal] Error updating ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error updating ulasan: $e');
       rethrow;
     }
   }
@@ -352,13 +355,13 @@ class UlasanLocalService {
           tglBalasan: DateTime.now(),
         );
         await updateUlasan(updated);
-        print('✅ [UlasanLocal] Added balasan to: $ulasanId');
+        debugPrint('✅ [UlasanLocal] Added balasan to: $ulasanId');
       } else {
-        print(
+        debugPrint(
             '⚠️ [UlasanLocal] Cannot add balasan, ulasan not found: $ulasanId');
       }
     } catch (e) {
-      print('❌ [UlasanLocal] Error adding balasan: $e');
+      debugPrint('❌ [UlasanLocal] Error adding balasan: $e');
       rethrow;
     }
   }
@@ -373,9 +376,9 @@ class UlasanLocalService {
 
     try {
       await _box!.delete(noId);
-      print('✅ [UlasanLocal] Deleted: $noId');
+      debugPrint('✅ [UlasanLocal] Deleted: $noId');
     } catch (e) {
-      print('❌ [UlasanLocal] Error deleting ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error deleting ulasan: $e');
       rethrow;
     }
   }
@@ -391,10 +394,10 @@ class UlasanLocalService {
         await _box!.delete(ulasan.noId);
       }
 
-      print(
+      debugPrint(
           '✅ [UlasanLocal] Deleted ${ulasanToDelete.length} ulasan for paket: $paketId');
     } catch (e) {
-      print('❌ [UlasanLocal] Error deleting ulasan by paket: $e');
+      debugPrint('❌ [UlasanLocal] Error deleting ulasan by paket: $e');
       rethrow;
     }
   }
@@ -410,10 +413,10 @@ class UlasanLocalService {
         await _box!.delete(ulasan.noId);
       }
 
-      print(
+      debugPrint(
           '✅ [UlasanLocal] Deleted ${ulasanToDelete.length} ulasan for vendor: $vendorId');
     } catch (e) {
-      print('❌ [UlasanLocal] Error deleting ulasan by vendor: $e');
+      debugPrint('❌ [UlasanLocal] Error deleting ulasan by vendor: $e');
       rethrow;
     }
   }
@@ -424,9 +427,9 @@ class UlasanLocalService {
 
     try {
       await _box!.clear();
-      print('✅ [UlasanLocal] Cleared all ulasan');
+      debugPrint('✅ [UlasanLocal] Cleared all ulasan');
     } catch (e) {
-      print('❌ [UlasanLocal] Error clearing ulasan: $e');
+      debugPrint('❌ [UlasanLocal] Error clearing ulasan: $e');
       rethrow;
     }
   }
@@ -478,7 +481,7 @@ class UlasanLocalService {
         'reply_rate': withBalasan / ulasanList.length * 100,
       };
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting statistics: $e');
+      debugPrint('❌ [UlasanLocal] Error getting statistics: $e');
       return {};
     }
   }
@@ -511,7 +514,7 @@ class UlasanLocalService {
         'rating_distribution': ratingDistribution,
       };
     } catch (e) {
-      print('❌ [UlasanLocal] Error getting paket statistics: $e');
+      debugPrint('❌ [UlasanLocal] Error getting paket statistics: $e');
       return {};
     }
   }
@@ -548,7 +551,7 @@ class UlasanLocalService {
   Future<void> close() async {
     if (_box?.isOpen ?? false) {
       await _box!.close();
-      print('✅ [UlasanLocal] Box closed');
+      debugPrint('✅ [UlasanLocal] Box closed');
     }
   }
 
@@ -562,7 +565,7 @@ class UlasanLocalService {
     await _ensureBoxReady();
 
     try {
-      print('🔄 [UlasanLocal] Syncing ulasan for vendor: $vendorId');
+      debugPrint('🔄 [UlasanLocal] Syncing ulasan for vendor: $vendorId');
 
       // Get current local ulasan for this vendor
       final localUlasan = await getUlasanByVendor(vendorId);
@@ -573,7 +576,7 @@ class UlasanLocalService {
       final toDelete = localIds.difference(apiIds);
       for (var id in toDelete) {
         await _box!.delete(id);
-        print('   🗑️ Deleted: $id (not in API)');
+        debugPrint('   🗑️ Deleted: $id (not in API)');
       }
 
       // ✅ ALWAYS update/add ulasan from API to ensure complete data
@@ -589,23 +592,23 @@ class UlasanLocalService {
           updated++;
           // Only log first few to avoid spam
           if (updated <= 3) {
-            print('   🔄 Updated: ${ulasan.noId}');
+            debugPrint('   🔄 Updated: ${ulasan.noId}');
           }
         } else {
           added++;
           if (added <= 3) {
-            print('   ➕ Added: ${ulasan.noId}');
+            debugPrint('   ➕ Added: ${ulasan.noId}');
           }
         }
       }
 
-      print('✅ [UlasanLocal] Vendor sync complete:');
-      print('   Total: ${apiData.length} items');
-      print('   Updated: $updated items (with complete data)');
-      print('   Added: $added items');
-      print('   Deleted: ${toDelete.length} items');
+      debugPrint('✅ [UlasanLocal] Vendor sync complete:');
+      debugPrint('   Total: ${apiData.length} items');
+      debugPrint('   Updated: $updated items (with complete data)');
+      debugPrint('   Added: $added items');
+      debugPrint('   Deleted: ${toDelete.length} items');
     } catch (e) {
-      print('❌ [UlasanLocal] Error syncing: $e');
+      debugPrint('❌ [UlasanLocal] Error syncing: $e');
       rethrow;
     }
   }
@@ -616,7 +619,7 @@ class UlasanLocalService {
     await _ensureBoxReady();
 
     try {
-      print('🔄 [UlasanLocal] Syncing ulasan for paket: $paketId');
+      debugPrint('🔄 [UlasanLocal] Syncing ulasan for paket: $paketId');
 
       // Get current local ulasan for this paket
       final localUlasan = await getUlasanByPaket(paketId);
@@ -627,7 +630,7 @@ class UlasanLocalService {
       final toDelete = localIds.difference(apiIds);
       for (var id in toDelete) {
         await _box!.delete(id);
-        print('   🗑️ Deleted: $id (not in API)');
+        debugPrint('   🗑️ Deleted: $id (not in API)');
       }
 
       // ✅ ALWAYS update/add ulasan from API to ensure complete data
@@ -641,20 +644,20 @@ class UlasanLocalService {
 
         if (isExisting) {
           updated++;
-          print('   🔄 Updated: ${ulasan.noId} (refreshed from API)');
+          debugPrint('   🔄 Updated: ${ulasan.noId} (refreshed from API)');
         } else {
           added++;
-          print('   ➕ Added: ${ulasan.noId} (new from API)');
+          debugPrint('   ➕ Added: ${ulasan.noId} (new from API)');
         }
       }
 
-      print('✅ [UlasanLocal] Paket sync complete:');
-      print('   Total: ${apiData.length} items');
-      print('   Updated: $updated items');
-      print('   Added: $added items');
-      print('   Deleted: ${toDelete.length} items');
+      debugPrint('✅ [UlasanLocal] Paket sync complete:');
+      debugPrint('   Total: ${apiData.length} items');
+      debugPrint('   Updated: $updated items');
+      debugPrint('   Added: $added items');
+      debugPrint('   Deleted: ${toDelete.length} items');
     } catch (e) {
-      print('❌ [UlasanLocal] Error syncing paket: $e');
+      debugPrint('❌ [UlasanLocal] Error syncing paket: $e');
       rethrow;
     }
   }

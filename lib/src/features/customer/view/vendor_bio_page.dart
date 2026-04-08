@@ -96,7 +96,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
   Widget build(BuildContext context) {
     if (isLoadingVendor) {
       return const Scaffold(
-        backgroundColor: const Color(0xFFF9F9F9),
+        backgroundColor: Color(0xFFF9F9F9),
         body: VendorBioShimmer(),
       );
     }
@@ -107,25 +107,20 @@ class _VendorBioPageState extends State<VendorBioPage> {
       backgroundColor: const Color(0xFFF9F9F9),
       body: CustomScrollView(
         slivers: [
-          // ── 1. SLIVER APP BAR ─────────────────────────────
-          // Hanya foto background + avatar + nama + kota.
-          // Tidak ada duplikasi — ini satu-satunya tempat nama & foto tampil.
           _buildSliverAppBar(context),
 
-          // ── 2. INFO SECTION ───────────────────────────────
-          // Rating, deskripsi, dan tombol aksi.
-          // Menggantikan VendorBioCard sepenuhnya.
+          // Stats + Bio + Actions
           SliverToBoxAdapter(
             child: _buildInfoSection(context, vendorFound),
           ),
 
-          // ── 3. HEADER PORTOFOLIO ──────────────────────────
+          // Portofolio header
           if (!isLoadingPorto && portofolioList.isNotEmpty)
             SliverToBoxAdapter(
               child: _buildPortofolioHeader(context),
             ),
 
-          // ── 4a. SHIMMER GRID ──────────────────────────────
+          // Shimmer grid
           if (isLoadingPorto)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -142,7 +137,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
               ),
             )
 
-          // ── 4b. PORTO GRID ────────────────────────────────
+          // Porto grid
           else if (portofolioList.isNotEmpty)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -159,7 +154,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
               ),
             )
 
-          // ── 4c. EMPTY STATE ───────────────────────────────
+          // Empty
           else
             SliverFillRemaining(
               hasScrollBody: false,
@@ -170,16 +165,16 @@ class _VendorBioPageState extends State<VendorBioPage> {
     );
   }
 
-  // ─── SliverAppBar ─────────────────────────────────────────────
-  // Foto profil sebagai background, avatar + nama + kota di expanded.
-  // Saat collapsed: hanya judul teks di AppBar, TIDAK ada avatar lagi.
+  // ═══════════════════════════════════════════════════════════════
+  // SLIVER APP BAR
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildSliverAppBar(BuildContext context) {
     return SliverAppBar(
       expandedHeight: 220,
       pinned: true,
       elevation: 0,
       backgroundColor: const Color(0xFFF9F9F9),
-      // Back button
       leading: GestureDetector(
         onTap: () => Navigator.of(context).maybePop(),
         child: Container(
@@ -192,14 +187,11 @@ class _VendorBioPageState extends State<VendorBioPage> {
         ),
       ),
       flexibleSpace: FlexibleSpaceBar(
-        // Collapsed title: hanya nama, tidak ada avatar
         titlePadding: const EdgeInsets.fromLTRB(56, 0, 16, 14),
-
-        // Expanded background: foto profil + overlay + avatar besar + teks
         background: Stack(
           fit: StackFit.expand,
           children: [
-            // Foto profil sebagai background blur-cover
+            // Background image
             vendor.idMedia.isNotEmpty
                 ? CachedNetworkImage(
                     imageUrl: vendor.idMedia,
@@ -211,7 +203,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
                   )
                 : Container(color: const Color(0xFF1A1A2E)),
 
-            // Gradient gelap agar teks terbaca
+            // Gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -225,7 +217,7 @@ class _VendorBioPageState extends State<VendorBioPage> {
               ),
             ),
 
-            // Avatar + nama + kota di bagian bawah expanded
+            // Avatar + Name + Kota
             Positioned(
               bottom: 44,
               left: 20,
@@ -233,7 +225,6 @@ class _VendorBioPageState extends State<VendorBioPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar — satu-satunya tempat foto tampil
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -273,7 +264,6 @@ class _VendorBioPageState extends State<VendorBioPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Nama + kota — satu-satunya tempat nama tampil di header
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -323,10 +313,25 @@ class _VendorBioPageState extends State<VendorBioPage> {
     );
   }
 
-  // ─── Info Section ──────────────────────────────────────────────
-  // Rating, deskripsi bio, tombol "Lihat Paket" + "Chat".
-  // Menggantikan VendorBioCard — tidak ada duplikasi foto/nama di sini.
+  // ═══════════════════════════════════════════════════════════════
+  // INFO SECTION — Stats row + Bio + Action buttons
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildInfoSection(BuildContext context, bool vendorFound) {
+    final hasRating = vendor.rating > 0;
+    final portoCount = portofolioList.length;
+
+    // Kota layanan
+    final kotaObjects = vendor.kotaLayananObject ?? [];
+    final kotaNames = kotaObjects
+        .map((k) => k.namaKota)
+        .where((name) => name != null && name.isNotEmpty)
+        .cast<String>()
+        .toList();
+    final jumlahKota = kotaNames.isNotEmpty
+        ? kotaNames.length
+        : (vendor.namaKota.isNotEmpty ? 1 : 0);
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(16),
@@ -344,50 +349,63 @@ class _VendorBioPageState extends State<VendorBioPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Rating row
-          if (vendor.rating > 0) ...[
-            Row(
-              children: [
-                const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                const SizedBox(width: 4),
-                Text(
-                  vendor.rating.toStringAsFixed(1),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: Color(0xFF1A1A2E),
-                  ),
+          // ── Stats Row (3 kolom) ─────────────────────────
+          Row(
+            children: [
+              // Rating
+              Expanded(
+                child: _StatColumn(
+                  value: hasRating ? vendor.rating.toStringAsFixed(1) : '-',
+                  label: 'rating',
+                  icon: hasRating
+                      ? const Icon(Icons.star_rounded,
+                          color: Colors.amber, size: 14)
+                      : null,
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  'Rating',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-          ],
+              ),
 
-          // Deskripsi bio
+              // Portofolio count
+              Expanded(
+                child: _StatColumn(
+                  value: isLoadingPorto ? '...' : portoCount.toString(),
+                  label: 'portofolio',
+                ),
+              ),
+
+              // Kota Layanan (clickable)
+              Expanded(
+                child: GestureDetector(
+                  onTap: jumlahKota > 0
+                      ? () => _showKotaLayananSheet(context)
+                      : null,
+                  child: _StatColumn(
+                    value: jumlahKota.toString(),
+                    label: 'kota layanan',
+                    isClickable: jumlahKota > 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // ── Deskripsi Bio ──────────────────────────────
           if (vendor.deskripsiBio.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
             Text(
               vendor.deskripsiBio,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13.5,
                 color: Colors.grey.shade700,
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 16),
           ],
 
-          // Tombol aksi — hanya tampil jika vendor ditemukan
-          if (vendorFound)
+          // ── Action Buttons ─────────────────────────────
+          if (vendorFound) ...[
+            const SizedBox(height: 16),
             Row(
               children: [
                 // Lihat Paket
@@ -459,12 +477,111 @@ class _VendorBioPageState extends State<VendorBioPage> {
                 ),
               ],
             ),
+          ],
         ],
       ),
     );
   }
 
-  // ─── Header Portofolio ─────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // BOTTOM SHEET: Kota Layanan
+  // ═══════════════════════════════════════════════════════════════
+
+  void _showKotaLayananSheet(BuildContext context) {
+    final kotaObjects = vendor.kotaLayananObject ?? [];
+    final kotaNames = kotaObjects
+        .map((k) => k.namaKota)
+        .where((name) => name != null && name.isNotEmpty)
+        .cast<String>()
+        .toList();
+
+    if (kotaNames.isEmpty && vendor.namaKota.isNotEmpty) {
+      kotaNames.add(vendor.namaKota);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Kota Layanan',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Area yang dilayani oleh vendor ini',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...kotaNames.map((kota) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Constants.primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                          color: Constants.primaryColor,
+                        ),
+                      ),
+                      title: Text(
+                        kota,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PORTOFOLIO HEADER
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildPortofolioHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -509,7 +626,10 @@ class _VendorBioPageState extends State<VendorBioPage> {
     );
   }
 
-  // ─── Empty State ───────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // EMPTY STATE
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildEmptyPorto() {
     return Padding(
       padding: const EdgeInsets.only(top: 48),
@@ -532,9 +652,62 @@ class _VendorBioPageState extends State<VendorBioPage> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Grid Item Portofolio
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// STAT COLUMN WIDGET
+// ══════════════════════════════════════════════════════════════
+
+class _StatColumn extends StatelessWidget {
+  final String value;
+  final String label;
+  final bool isClickable;
+  final Widget? icon;
+
+  const _StatColumn({
+    required this.value,
+    required this.label,
+    this.isClickable = false,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              icon!,
+              const SizedBox(width: 3),
+            ],
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: isClickable ? Constants.primaryColor : Colors.grey.shade500,
+            fontWeight: isClickable ? FontWeight.w500 : FontWeight.w400,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// GRID ITEM PORTOFOLIO
+// ══════════════════════════════════════════════════════════════
 
 class _VendorPortoGridItem extends StatelessWidget {
   final PortofolioModel porto;
@@ -567,8 +740,6 @@ class _VendorPortoGridItem extends StatelessWidget {
             firstMedia != null
                 ? _BioMediaImage(media: firstMedia)
                 : _placeholder(),
-
-            // Gradient bawah
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -584,8 +755,6 @@ class _VendorPortoGridItem extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Badge video
             if (isVideo)
               const Positioned(
                 bottom: 8,
@@ -593,8 +762,6 @@ class _VendorPortoGridItem extends StatelessWidget {
                 child: Icon(Icons.play_circle_fill_rounded,
                     color: Colors.white, size: 24),
               ),
-
-            // Badge jumlah media
             if (hasMultiple)
               Positioned(
                 top: 8,
@@ -637,9 +804,9 @@ class _VendorPortoGridItem extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Media Image Loader
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// MEDIA IMAGE LOADER
+// ══════════════════════════════════════════════════════════════
 
 class _BioMediaImage extends StatelessWidget {
   final MediaUrlModel media;

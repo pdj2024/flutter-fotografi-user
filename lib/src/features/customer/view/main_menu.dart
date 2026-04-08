@@ -29,7 +29,6 @@ class MainMenu extends StatefulWidget {
 
 class _MainMenuState extends State<MainMenu> {
   bool _sudahCekLogin = false;
-  bool _chatInitialized = false;
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +36,9 @@ class _MainMenuState extends State<MainMenu> {
     final navigationProvider = context.watch<NavigationProvider>();
     final chatProvider = context.watch<ChatProvider>();
 
-    // ✅ Initialize providers once when user is logged in
+    // ✅ Initialize providers sekali saja saat user sudah login
     if (userProvider.customer != null && !_sudahCekLogin) {
       _sudahCekLogin = true;
-
       Future.microtask(() async {
         await _initializeProviders(context, userProvider, navigationProvider);
       });
@@ -58,7 +56,6 @@ class _MainMenuState extends State<MainMenu> {
           builder: (context, navigationProvider, child) {
             return Stack(
               children: [
-                // ✅ Offstage navigators with RouteObserver
                 _buildOffstageNavigator(0, (_) => CustomerHomePage()),
                 _buildOffstageNavigator(1, (_) => const ChatListPage()),
                 _buildOffstageNavigator(2, (_) => const MainOrderPage()),
@@ -169,6 +166,10 @@ class _MainMenuState extends State<MainMenu> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════════════════════════════
+
   Future<void> _initializeProviders(
     BuildContext context,
     UserProvider userProvider,
@@ -179,7 +180,32 @@ class _MainMenuState extends State<MainMenu> {
       debugPrint("[MainMenu] 🚀 INITIALIZING");
       debugPrint("═══════════════════════════════════════");
 
-      // ✅ Request notification permission
+      final customer = userProvider.customer;
+      if (customer == null) {
+        debugPrint("[MainMenu] ⚠️ customer null, skip init");
+        return;
+      }
+
+      final chatProv = context.read<ChatProvider>();
+      final historyOrderProv = context.read<HistoryOrderProvider>();
+      final pesananProv = context.read<PesananProvider>();
+
+      // ── FIX BUG: Pastikan ChatProvider ter-inisiasi ──────────────
+      // SplashLogicHandler hanya memanggil initialize() jika session
+      // berhasil di-restore. Jika user baru login, ChatProvider masih
+      // belum ter-inisiasi → semua method bailout karena _currentUserId=null.
+      if (!chatProv.isInitialized) {
+        debugPrint("[MainMenu] 🔄 ChatProvider belum init, initializing...");
+        await chatProv.initialize(
+          userId: customer.noId,
+          userType: Constants.customer,
+        );
+        debugPrint("[MainMenu] ✅ ChatProvider initialized");
+      } else {
+        debugPrint("[MainMenu] ℹ️ ChatProvider sudah init, skip");
+      }
+
+      // ── Request notification permission ──────────────────────────
       if (Platform.isAndroid) {
         final status = await Permission.notification.request();
         if (status.isDenied && mounted) {
@@ -218,15 +244,11 @@ class _MainMenuState extends State<MainMenu> {
         }
       }
 
-      // ✅ FIX: TIDAK perlu initialize() ChatProvider di sini
-      // Sudah dilakukan di SplashLogicHandler._loadInitialData()
-      // Memanggil ulang tidak akan error (idempotent) tapi tidak perlu
-
-      final chatProv = context.read<ChatProvider>();
-      final historyOrderProv = context.read<HistoryOrderProvider>();
-      final pesananProv = context.read<PesananProvider>();
-
       // ── Setup FCM callbacks ──────────────────────────────────────
+      // CATATAN: MyApp._setupFCMCallbacks() sudah di-set via
+      // addPostFrameCallback. Di sini kita OVERRIDE dengan versi
+      // yang punya akses ke context MainMenu (lebih fresh).
+      // Ini aman karena MainMenu hidup selama app aktif.
       debugPrint("[MainMenu] 🔧 Setting up FCM callbacks...");
 
       FCMService.instance.getSenderName = (roomId, senderId) {
@@ -261,10 +283,10 @@ class _MainMenuState extends State<MainMenu> {
 
       debugPrint("[MainMenu] ✅ FCM callbacks configured");
 
-      // ── Load initial data ────────────────────────────────────────
+      // ── Load initial data (paralel) ──────────────────────────────
       debugPrint("[MainMenu] 📥 Loading initial data...");
       await Future.wait([
-        context.read<PesananProvider>().loadOrder(context),
+        pesananProv.loadOrder(context),
         context.read<PortofolioProvider>().loadPortofolio(context),
       ]);
 
@@ -273,6 +295,10 @@ class _MainMenuState extends State<MainMenu> {
       debugPrint("[MainMenu] ❌ INITIALIZATION ERROR: $e\n$st");
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB HANDLING
+  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _handleTabTap(
     int index,
@@ -285,10 +311,9 @@ class _MainMenuState extends State<MainMenu> {
 
     debugPrint("🔘 [MainMenu] Tab $index tapped, current: $currentIndex");
 
-    // Call provider's tab handler
     navigationProvider.onItemTapped(index, context);
 
-    // Refresh if same tab tapped
+    // Refresh jika tap tab yang sama
     if (user != null && currentIndex == index) {
       await _handleTabRefresh(index, context, user);
     }
@@ -312,22 +337,17 @@ class _MainMenuState extends State<MainMenu> {
           await chatProv.loadRooms(forceRefresh: true);
           break;
 
-        case 2: // Order
+        case 2: // Order — kembali ke loadOrder (bukan loadOrderOnly)
           await context.read<PesananProvider>().loadOrder(context);
           break;
 
         case 3: // Profile
           final userProvider = context.read<UserProvider>();
-
-          // ✅ FIX BUG 2: silent: true — hanya refresh token di background
-          // tanpa trigger Google Sign-In dialog
-          // silent: false (default) → meminta user pilih akun Google lagi!
           await userProvider.checkLoginGoogle(
             role: Constants.customer,
-            silent: true, // ← KUNCI: tidak minta pilih akun
+            silent: true,
           );
 
-          // Pastikan active customer masih ter-set setelah refresh
           if (userProvider.customer != null) {
             LocalStorageService.instance.setActiveCustomer(
               userProvider.customer!.noId,
@@ -351,7 +371,10 @@ class _MainMenuState extends State<MainMenu> {
     }
   }
 
-  /// ✅ Offstage Navigator with RouteObserver
+  // ═══════════════════════════════════════════════════════════════
+  // NAVIGATOR
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildOffstageNavigator(int index, WidgetBuilder builder) {
     return Consumer<NavigationProvider>(
       builder: (context, provider, _) {
@@ -371,9 +394,10 @@ class _MainMenuState extends State<MainMenu> {
   }
 }
 
-// =========================================================
-// ✨ ROUTE OBSERVER - AUTO HIDE/SHOW BOTTOM NAV
-// =========================================================
+// ═══════════════════════════════════════════════════════════════
+// ROUTE OBSERVER — AUTO HIDE/SHOW BOTTOM NAV
+// ═══════════════════════════════════════════════════════════════
+
 class _BottomNavRouteObserver extends NavigatorObserver {
   final NavigationProvider provider;
   final int tabIndex;
@@ -408,21 +432,18 @@ class _BottomNavRouteObserver extends NavigatorObserver {
     debugPrint('📍 [Observer] Tab $tabIndex - REPLACE');
   }
 
-  /// ✅ AUTO UPDATE: Check route stack and update visibility
   void _updateVisibilityAfterPop() {
     if (provider.selectedIndex != tabIndex) return;
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndUpdateVisibility();
     });
   }
 
-  /// ✅ Accurate route counting using canPop
   void _checkAndUpdateVisibility() {
     if (navigator == null) return;
 
     final canPop = navigator!.canPop();
-    final shouldShow = !canPop; // At root = show bottom nav
+    final shouldShow = !canPop;
 
     debugPrint(
         '📊 [Observer] Tab $tabIndex: canPop=$canPop, shouldShow=$shouldShow');

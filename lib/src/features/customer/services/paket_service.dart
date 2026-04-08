@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
@@ -40,10 +41,10 @@ class PaketService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final dataRaw = jsonDecode(response.body);
@@ -81,10 +82,10 @@ class PaketService {
         },
       );
 
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final dataRaw = jsonDecode(response.body);
@@ -94,7 +95,7 @@ class PaketService {
         return data.first;
       } else if (response.statusCode == 204) {
         // Tidak ada data
-        print("Tidak ada data");
+        debugPrint("Tidak ada data");
         return null;
       } else {
         throw Exception('Gagal load $entity (${response.statusCode})');

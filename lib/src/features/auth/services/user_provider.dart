@@ -53,18 +53,18 @@ class UserProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     try {
-      print("🔧 [UserProvider] Initializing...");
+      debugPrint("🔧 [UserProvider] Initializing...");
 
       if (Hive.isBoxOpen(_userBoxName)) {
         await Hive.box(_userBoxName).close();
       }
 
       _userBox = await Hive.openBox(_userBoxName);
-      print("✅ [UserProvider] Hive box opened");
+      debugPrint("✅ [UserProvider] Hive box opened");
 
       await loadUserData();
     } catch (e) {
-      print("❌ [UserProvider] Hive init error: $e");
+      debugPrint("❌ [UserProvider] Hive init error: $e");
     }
   }
 
@@ -87,15 +87,16 @@ class UserProvider with ChangeNotifier {
 
       await _userBox!.flush();
 
-      print("💾 [UserProvider] Customer data saved: ${_customer!.namaDisplay}");
+      debugPrint(
+          "💾 [UserProvider] Customer data saved: ${_customer!.namaDisplay}");
     } catch (e) {
-      print("❌ [UserProvider] Save error: $e");
+      debugPrint("❌ [UserProvider] Save error: $e");
     }
   }
 
   Future<void> loadUserData() async {
     try {
-      print("🔄 [UserProvider] Loading user data...");
+      debugPrint("🔄 [UserProvider] Loading user data...");
 
       if (_userBox == null) await initialize();
 
@@ -104,14 +105,15 @@ class UserProvider with ChangeNotifier {
       if (customerJson != null && customerJson.isNotEmpty) {
         try {
           _customer = CustomerModel.fromJson(jsonDecode(customerJson));
-          print("✅ [UserProvider] Customer loaded: ${_customer?.namaDisplay}");
+          debugPrint(
+              "✅ [UserProvider] Customer loaded: ${_customer?.namaDisplay}");
         } catch (e) {
-          print("❌ [UserProvider] Parse error: $e");
+          debugPrint("❌ [UserProvider] Parse error: $e");
           await _userBox?.delete(_keyCustomer);
           _customer = null;
         }
       } else {
-        print("ℹ️  [UserProvider] No customer data in storage");
+        debugPrint("ℹ️  [UserProvider] No customer data in storage");
         _customer = null;
       }
 
@@ -119,14 +121,14 @@ class UserProvider with ChangeNotifier {
       if (savedRole != null && savedRole.isNotEmpty) {
         _role = savedRole;
         apiClient.setRole(_role);
-        print("✅ [UserProvider] Role loaded: $_role");
+        debugPrint("✅ [UserProvider] Role loaded: $_role");
       }
 
       _isInitialized = true;
       notifyListeners();
     } catch (e, stackTrace) {
-      print("❌ [UserProvider] Load error: $e");
-      print(stackTrace);
+      debugPrint("❌ [UserProvider] Load error: $e");
+      debugPrint(stackTrace.toString());
       _customer = null;
       _isInitialized = true;
       notifyListeners();
@@ -145,9 +147,9 @@ class UserProvider with ChangeNotifier {
     try {
       await _userBox?.clear();
       await _userBox?.flush();
-      print("🗑️  [UserProvider] User data cleared");
+      debugPrint("🗑️  [UserProvider] User data cleared");
     } catch (e) {
-      print("❌ [UserProvider] Clear error: $e");
+      debugPrint("❌ [UserProvider] Clear error: $e");
     }
   }
 
@@ -163,26 +165,26 @@ class UserProvider with ChangeNotifier {
     _error = null;
 
     try {
-      print(
+      debugPrint(
           "🔐 [UserProvider] checkLoginGoogle | Role: $role | Silent: $silent");
 
       if (silent) {
         // ── SILENT: restore dari storage ─────────────────
         final restored = await authService.restoreSession();
         if (!restored) {
-          print("❌ Silent restore failed");
+          debugPrint("❌ Silent restore failed");
           return GoogleLoginStatus.tokenInvalid;
         }
 
         await loadUserData();
 
         if (_customer == null) {
-          print("❌ No customer data after restore");
+          debugPrint("❌ No customer data after restore");
           return GoogleLoginStatus.tokenInvalid;
         }
 
         setRole(role);
-        print("✅ Silent restore success");
+        debugPrint("✅ Silent restore success");
         return GoogleLoginStatus.aktif;
       } else {
         // ── INTERACTIVE: Google sign-in ───────────────────
@@ -190,7 +192,7 @@ class UserProvider with ChangeNotifier {
         final accessToken = await authService.signIn();
 
         if (accessToken == null) {
-          print("❌ Sign-in failed");
+          debugPrint("❌ Sign-in failed");
           await _clearUserData();
           clear();
           return GoogleLoginStatus.tokenInvalid;
@@ -201,7 +203,7 @@ class UserProvider with ChangeNotifier {
         authService.clearLastLoginData();
 
         if (loginData == null) {
-          print("❌ No login data");
+          debugPrint("❌ No login data");
           return GoogleLoginStatus.error;
         }
 
@@ -209,7 +211,7 @@ class UserProvider with ChangeNotifier {
             (loginData['Status'] as String?)?.toLowerCase() ?? 'error';
         final noId = loginData['No_Id'] as String?;
 
-        print("📊 Status: $status, No_Id: $noId");
+        debugPrint("📊 Status: $status, No_Id: $noId");
 
         // Fetch customer detail pakai access_token yang sudah tersimpan
         if (noId != null) {
@@ -220,7 +222,7 @@ class UserProvider with ChangeNotifier {
               await _saveCustomerData();
             }
           } catch (e) {
-            print("⚠️ Fetch customer detail error: $e");
+            debugPrint("⚠️ Fetch customer detail error: $e");
           }
         }
 
@@ -239,8 +241,8 @@ class UserProvider with ChangeNotifier {
       }
     } catch (e, stackTrace) {
       _error = "Login gagal: $e";
-      print("❌ [UserProvider] checkLoginGoogle error: $e");
-      print(stackTrace);
+      debugPrint("❌ [UserProvider] checkLoginGoogle error: $e");
+      debugPrint(stackTrace.toString());
       notifyListeners();
       return GoogleLoginStatus.error;
     } finally {
@@ -254,27 +256,27 @@ class UserProvider with ChangeNotifier {
 
   Future<bool> restoreSession() async {
     try {
-      print("🔄 [UserProvider] Restoring session...");
+      debugPrint("🔄 [UserProvider] Restoring session...");
 
       final sessionRestored = await authService.restoreSession();
 
       if (!sessionRestored) {
-        print("❌ Auth session restore failed");
+        debugPrint("❌ Auth session restore failed");
         _customer = null;
         _isInitialized = true;
         notifyListeners();
         return false;
       }
 
-      print("✅ Auth session restored | Email: ${authService.email}");
+      debugPrint("✅ Auth session restored | Email: ${authService.email}");
 
       await loadUserData();
 
       if (_customer == null) {
-        print("⚠️ No local customer data, fetching from backend...");
+        debugPrint("⚠️ No local customer data, fetching from backend...");
         final fetched = await _refreshCustomerFromBackend();
         if (!fetched) {
-          print("❌ Failed to fetch customer data");
+          debugPrint("❌ Failed to fetch customer data");
           await authService.signOut();
           return false;
         }
@@ -285,13 +287,13 @@ class UserProvider with ChangeNotifier {
         try {
           final hoursSinceSync =
               DateTime.now().difference(DateTime.parse(lastSync)).inHours;
-          print("ℹ️ Last sync: ${hoursSinceSync}h ago");
+          debugPrint("ℹ️ Last sync: ${hoursSinceSync}h ago");
           if (hoursSinceSync > 24) {
-            print("🔄 Data stale, refreshing...");
+            debugPrint("🔄 Data stale, refreshing...");
             await _refreshCustomerFromBackend();
           }
         } catch (e) {
-          print("⚠️ Last sync parse error: $e");
+          debugPrint("⚠️ Last sync parse error: $e");
         }
       }
 
@@ -303,18 +305,18 @@ class UserProvider with ChangeNotifier {
         try {
           final deviceTokenService = DeviceTokenService();
           await deviceTokenService.addDeviceToken(userId, null);
-          print("✅ [UserProvider] Device token refreshed for: $userId");
+          debugPrint("✅ [UserProvider] Device token refreshed for: $userId");
         } catch (e) {
           // Non-fatal — notifikasi mungkin tidak jalan tapi app tetap bisa dipakai
-          print("⚠️ [UserProvider] Device token refresh failed: $e");
+          debugPrint("⚠️ [UserProvider] Device token refresh failed: $e");
         }
       }
 
-      print("✅ Session restored: ${_customer!.namaDisplay}");
+      debugPrint("✅ Session restored: ${_customer!.namaDisplay}");
       return true;
     } catch (e, stackTrace) {
-      print("❌ [UserProvider] Restore error: $e");
-      print(stackTrace);
+      debugPrint("❌ [UserProvider] Restore error: $e");
+      debugPrint(stackTrace.toString());
       _isInitialized = true;
       notifyListeners();
       return false;
@@ -323,18 +325,18 @@ class UserProvider with ChangeNotifier {
 
   Future<bool> _refreshCustomerFromBackend() async {
     try {
-      print("🔄 [UserProvider] Refreshing customer from backend...");
+      debugPrint("🔄 [UserProvider] Refreshing customer from backend...");
 
       final token = await authService.getIdToken();
       if (token == null) {
-        print("❌ No valid token");
+        debugPrint("❌ No valid token");
         return false;
       }
 
       // Gunakan getAll dengan email dari authService jika tersedia
       final email = authService.email;
       if (email == null) {
-        print("❌ No email available");
+        debugPrint("❌ No email available");
         return false;
       }
 
@@ -343,14 +345,14 @@ class UserProvider with ChangeNotifier {
         _customer = customers.first;
         await _saveCustomerData();
         notifyListeners();
-        print("✅ Customer refreshed: ${_customer!.namaDisplay}");
+        debugPrint("✅ Customer refreshed: ${_customer!.namaDisplay}");
         return true;
       }
 
-      print("❌ No customer data from backend");
+      debugPrint("❌ No customer data from backend");
       return false;
     } catch (e) {
-      print("❌ [UserProvider] Backend refresh error: $e");
+      debugPrint("❌ [UserProvider] Backend refresh error: $e");
       return false;
     }
   }
@@ -361,7 +363,7 @@ class UserProvider with ChangeNotifier {
 
   Future<void> logout() async {
     try {
-      print("🚪 [UserProvider] Logging out...");
+      debugPrint("🚪 [UserProvider] Logging out...");
 
       // Hapus token dari storage + disconnect Google
       await authService.signOut();
@@ -369,10 +371,10 @@ class UserProvider with ChangeNotifier {
       clear();
       apiClient.clearRole();
 
-      print("✅ [UserProvider] Logout complete");
+      debugPrint("✅ [UserProvider] Logout complete");
       notifyListeners();
     } catch (e) {
-      print("❌ [UserProvider] Logout error: $e");
+      debugPrint("❌ [UserProvider] Logout error: $e");
       clear();
       notifyListeners();
     }
@@ -380,7 +382,7 @@ class UserProvider with ChangeNotifier {
 
   Future<void> logoutAndSwitchAccount() async {
     try {
-      print("🔄 [UserProvider] Switching account...");
+      debugPrint("🔄 [UserProvider] Switching account...");
 
       // disconnect → user HARUS pilih akun lagi
       await authService.disconnect();
@@ -388,10 +390,10 @@ class UserProvider with ChangeNotifier {
       clear();
       apiClient.clearRole();
 
-      print("✅ [UserProvider] Account switch complete");
+      debugPrint("✅ [UserProvider] Account switch complete");
       notifyListeners();
     } catch (e) {
-      print("❌ [UserProvider] Switch account error: $e");
+      debugPrint("❌ [UserProvider] Switch account error: $e");
       clear();
       notifyListeners();
     }
@@ -405,7 +407,7 @@ class UserProvider with ChangeNotifier {
     _role = role;
     apiClient.setRole(role);
     _userBox?.put(_keyRole, role);
-    print("✅ [UserProvider] Role set: $role");
+    debugPrint("✅ [UserProvider] Role set: $role");
     notifyListeners();
   }
 
@@ -428,23 +430,23 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> refreshUserData() async {
-    print("🔄 [UserProvider] Force refresh...");
+    debugPrint("🔄 [UserProvider] Force refresh...");
     await _refreshCustomerFromBackend();
   }
 
   void printDebugState() {
-    print("═══ UserProvider State ═══");
-    print("Customer: ${_customer?.namaDisplay ?? 'null'}");
-    print("Role: $_role");
-    print("Is logged in: $isLoggedIn");
-    print("Is loading: $_isLoading");
-    print("Error: $_error");
-    print("Initialized: $_isInitialized");
+    debugPrint("═══ UserProvider State ═══");
+    debugPrint("Customer: ${_customer?.namaDisplay ?? 'null'}");
+    debugPrint("Role: $_role");
+    debugPrint("Is logged in: $isLoggedIn");
+    debugPrint("Is loading: $_isLoading");
+    debugPrint("Error: $_error");
+    debugPrint("Initialized: $_isInitialized");
     if (_userBox != null) {
-      print("Storage - Is logged in: ${_userBox!.get(_keyIsLoggedIn)}");
-      print("Storage - Role: ${_userBox!.get(_keyRole)}");
-      print("Storage - Last sync: ${_userBox!.get(_keyLastSync)}");
+      debugPrint("Storage - Is logged in: ${_userBox!.get(_keyIsLoggedIn)}");
+      debugPrint("Storage - Role: ${_userBox!.get(_keyRole)}");
+      debugPrint("Storage - Last sync: ${_userBox!.get(_keyLastSync)}");
     }
-    print("═══════════════════════════");
+    debugPrint("═══════════════════════════");
   }
 }

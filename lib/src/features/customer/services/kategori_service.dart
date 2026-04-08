@@ -1,16 +1,15 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/services/api_client.dart';
 import '../../../data/models/kategori_model.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 
 class KategoriService {
-
-
   final String entity = 'Kategori';
   final String controller = 'kategori';
- final ApiClient _client = apiClient; // ← pakai nama beda
- 
+  final ApiClient _client = apiClient; // ← pakai nama beda
 
   /// GET ALL
   Future<List<KategoriModel>> getAll({
@@ -23,7 +22,6 @@ class KategoriService {
   }) async {
     try {
       final response = await apiClient.get(
-        
         '/$controller/getAll',
         queryParameters: {
           if (noId != null) 'no_id': noId,
@@ -34,28 +32,24 @@ class KategoriService {
           if (orderDir != null) 'orderdir': orderDir,
         },
       );
-print('==============================');
-  print('Response Body: ${response.body}');
-  print('Status Code: ${response.statusCode}');
-  print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
-      
-  // print('==============================');
-  // print('Response Body: ${response.body}');
-  // print('Status Code: ${response.statusCode}');
-  // print('==============================');
-
+      // debugPrint('==============================');
+      // debugPrint('Response Body: ${response.body}');
+      // debugPrint('Status Code: ${response.statusCode}');
+      // debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
         final List<dynamic> data = json['Data'];
         return data.map((e) => KategoriModel.fromJson(e)).toList();
-      } 
-      else if (response.statusCode == 204) {
+      } else if (response.statusCode == 204) {
         // Tidak ada data
         return [];
-      }
-      else {
+      } else {
         throw Exception('Gagal load $entity (${response.statusCode})');
       }
     } catch (e) {

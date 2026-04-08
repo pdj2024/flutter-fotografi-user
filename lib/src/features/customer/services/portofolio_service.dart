@@ -36,7 +36,7 @@ class PortofolioService {
     String? orderDir,
   }) async {
     try {
-      print("============= PORTO GETT MIN: " + hargaPaketMin.toString());
+      debugPrint("============= PORTO GETT MIN: " + hargaPaketMin.toString());
 
       final response = await apiClient.get(
         '/$controller/getAll',
@@ -79,10 +79,10 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
@@ -115,10 +115,10 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
@@ -151,10 +151,10 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);

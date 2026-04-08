@@ -1,13 +1,15 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 class NotificationHelper {
-  /// Parse detail from FCM message
+  /// Parse detail from FCM messagee
   static Map<String, dynamic> parseDetail(dynamic detail) {
     if (detail is String) {
       try {
         return jsonDecode(detail) as Map<String, dynamic>;
       } catch (e) {
-        print('[NotificationHelper] ⚠️ Failed to parse detail: $e');
+        debugPrint('[NotificationHelper] ⚠️ Failed to parse detail: $e');
         return {};
       }
     } else if (detail is Map) {
@@ -28,7 +30,7 @@ class NotificationHelper {
     try {
       return jsonDecode(payload) as Map<String, dynamic>;
     } catch (e) {
-      print('[NotificationHelper] ⚠️ Failed to parse payload: $e');
+      debugPrint('[NotificationHelper] ⚠️ Failed to parse payload: $e');
       return null;
     }
   }

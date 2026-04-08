@@ -1417,7 +1417,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildPaymentSummary(PesananModel pesanan) {
-    final isPaid = pesanan.statusBayar == 'settlement';
+    final isPaid =
+        pesanan.statusBayar == 'settlement' || pesanan.statusBayar == 'capture';
     // ✅ Warna dari getStatus — bukan hardcode Colors.green / Colors.orange
     final payColor =
         isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
@@ -1459,14 +1460,21 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     final payColor =
         isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
 
+    final bool isInclPpn = pesanan.inclPpn == true;
+    final bool isExclPpn = pesanan.inclPpn == false;
+    final int ppnAmount = pesanan.totPpn ?? 0;
+    final int ppnPercent = pesanan.ppn ?? 0;
+    final int adminFee = metodePembayaran?.fee ?? 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildInfoRow(
-            label: 'Nomor Bukti',
-            value: pesanan.noTrackingPesanan ?? '-',
-            icon: Icons.receipt_long_outlined,
-            copyable: true),
+          label: 'Nomor Bukti',
+          value: pesanan.noTrackingPesanan ?? '-',
+          icon: Icons.receipt_long_outlined,
+          copyable: true,
+        ),
         const SizedBox(height: 8),
         _buildInfoRow(
           label: 'Metode Pembayaran',
@@ -1477,24 +1485,66 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         ),
         const SizedBox(height: 8),
         _buildInfoRow(
-            label: 'Status Pembayaran',
-            icon: Icons.schedule_outlined,
-            value: isPaid ? 'Sudah Bayar' : 'Belum Bayar',
-            valueColor: payColor), // ✅ warna dari cfg
+          label: 'Status Pembayaran',
+          icon: Icons.schedule_outlined,
+          value: isPaid ? 'Sudah Bayar' : 'Belum Bayar',
+          valueColor: payColor,
+        ),
         const SizedBox(height: 16),
         const Divider(),
         const SizedBox(height: 12),
-        const Text('Ringkasan Pembayaran',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+
+        // ── Header Ringkasan ─────────────────────────────
+        const Text(
+          'Ringkasan Pembayaran',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 12),
+
+        // ── Subtotal ─────────────────────────────────────
         _buildPriceRow(
-            'Subtotal',
-            Helper.formatCurrency(
-                pesanan.subtotal - (metodePembayaran?.fee ?? 0))),
-        const SizedBox(height: 6),
+          'Subtotal',
+          Helper.formatCurrency(pesanan.subtotal - adminFee),
+        ),
+
+        if (!isInclPpn) const SizedBox(height: 6),
+
+        // ── Keterangan PPN (include) ─────────────────────
+        if (isInclPpn)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 6),
+            child: Text(
+              ppnPercent > 0
+                  ? 'Harga sudah termasuk PPN $ppnPercent%'
+                  : 'Harga sudah termasuk PPN',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade500,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+
+        // ── Biaya Admin ──────────────────────────────────
         _buildPriceRow(
-            'Biaya admin', Helper.formatCurrency(metodePembayaran?.fee ?? 0)),
+          'Biaya admin',
+          Helper.formatCurrency(adminFee),
+        ),
+
+        if (!isInclPpn) const SizedBox(height: 6),
+
+        // ── Baris PPN (exclude) ──────────────────────────
+        if (isExclPpn) ...[
+          _buildPriceRow(
+            ppnPercent > 0 ? 'PPN $ppnPercent%' : 'PPN',
+            Helper.formatCurrency(ppnAmount),
+          ),
+          const SizedBox(height: 6),
+        ],
+
         const Divider(height: 20),
+
+        // ── Total ────────────────────────────────────────
         _buildPriceRow(
           'Total Pembayaran',
           Helper.formatCurrency(pesanan.grandTotal),

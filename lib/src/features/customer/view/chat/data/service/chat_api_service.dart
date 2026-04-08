@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
+import 'package:mpjnew/src/data/isar/service/chat_sync_service.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
@@ -14,7 +15,6 @@ class ChatApiService {
   // ROOMS
   // =========================================
 
-  /// Fetch rooms untuk user
   Future<List<RoomChatModel>> fetchRooms({
     required String userId,
     String? roomId,
@@ -60,7 +60,6 @@ class ChatApiService {
   // MESSAGES
   // =========================================
 
-  /// Fetch messages untuk room
   Future<List<ChatModel>> fetchMessages({
     required String roomId,
     DateTime? since,
@@ -103,12 +102,45 @@ class ChatApiService {
     }
   }
 
-  /// Send message
+  // ─────────────────────────────────────────────────────────────────────────
+  // sendMessage — legacy, tetap ada agar tidak break code lain.
+  // Untuk flow room baru, gunakan sendMessageWithResult().
+  // ─────────────────────────────────────────────────────────────────────────
   Future<ChatModel?> sendMessage({
     required ChatModel message,
   }) async {
+    final result = await sendMessageWithResult(message: message);
+    if (result == null) return null;
+
+    // Return ChatModel dengan messageId + roomId asli dari server
+    return message.copyWith(
+      messageId: result.messageId,
+      roomId: result.roomId.isNotEmpty ? result.roomId : message.roomId,
+      sendStatus: 'sent',
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // sendMessageWithResult — method utama yang dipakai ChatSyncService.
+  //
+  // Parse Message_Id dan Room_Id dari response:
+  // {
+  //   "StatusCode": 200,
+  //   "Message": "Chat berhasil ditambahkan",
+  //   "Message_Id": "room_137_1",
+  //   "Room_Id": "room_137"
+  // }
+  //
+  // Dua skenario:
+  //   A. Room sudah ada  → roomId di response == roomId yang dikirim
+  //   B. Room baru       → roomId di response berbeda / kosong saat kirim
+  //      Server assign roomId baru → ChatSyncService buat room di Isar.
+  // ─────────────────────────────────────────────────────────────────────────
+  Future<SendMessageResult?> sendMessageWithResult({
+    required ChatModel message,
+  }) async {
     try {
-      // Temp roomId (format 'temp-...') hanya dipakai lokal — kirim '' ke backend
+      // Temp roomId (format 'temp-...') hanya dipakai lokal — kirim '' ke API
       final apiRoomId =
           message.roomId.startsWith('temp-') ? '' : message.roomId;
 
@@ -118,6 +150,11 @@ class ChatApiService {
         'user_ids': message.userIds,
       };
 
+      debugPrint('[ChatApi] 📤 sendMessageWithResult: '
+          'localId=${message.localId} '
+          'roomId="$apiRoomId" '
+          'jenis=${message.jenisPesan}');
+
       final response = await _client.post(
         '/$_controller/create',
         body: jsonEncode(payload),
@@ -125,37 +162,74 @@ class ChatApiService {
       );
 
       if (response.statusCode != 200 && response.statusCode != 201) {
-        debugPrint('[ChatApi] ❌ sendMessage failed: ${response.statusCode}');
+        debugPrint('[ChatApi] ❌ sendMessageWithResult failed: '
+            '${response.statusCode} — ${response.body}');
         return null;
       }
 
-      debugPrint('[ChatApi] ✅ Message sent');
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
 
-      // Parse response jika backend return data
-      final body = jsonDecode(response.body);
-      final data = body['Data'];
+      // ── Parse Message_Id dan Room_Id ──────────────────────────────────
+      final messageId = body['Message_Id']?.toString() ?? '';
+      final roomId = body['Room_Id']?.toString() ?? '';
 
-      if (data != null && data is Map<String, dynamic>) {
-        return ChatModel.fromJson(data);
+      if (messageId.isEmpty) {
+        debugPrint('[ChatApi] ⚠️ sendMessageWithResult: '
+            'Message_Id kosong dari response. Body: $body');
+        // Fallback: jika backend tidak return Message_Id,
+        // coba parse dari Data.Message_Id
+        final data = body['Data'];
+        if (data is Map<String, dynamic>) {
+          final fallbackId = data['Message_Id']?.toString() ??
+              data['message_id']?.toString() ??
+              '';
+          final fallbackRoomId = data['Room_Id']?.toString() ??
+              data['room_id']?.toString() ??
+              message.roomId;
+          if (fallbackId.isNotEmpty) {
+            debugPrint('[ChatApi] ✅ sendMessageWithResult fallback: '
+                'messageId=$fallbackId roomId=$fallbackRoomId');
+            return SendMessageResult(
+              messageId: fallbackId,
+              roomId: fallbackRoomId.isNotEmpty ? fallbackRoomId : message.roomId,
+            );
+          }
+        }
+        // Tidak bisa dapat messageId → return null, local echo tetap di Isar
+        return null;
       }
 
-      // Return message dengan status sent
-      return message.copyWith(sendStatus: 'sent');
+      // ── Gunakan roomId dari response, fallback ke roomId yang dikirim ──
+      final finalRoomId =
+          roomId.isNotEmpty ? roomId : message.roomId;
+
+      debugPrint('[ChatApi] ✅ sendMessageWithResult: '
+          'messageId=$messageId roomId=$finalRoomId '
+          '(${message.roomId.isEmpty ? "new room" : "existing room"})');
+
+      return SendMessageResult(
+        messageId: messageId,
+        roomId: finalRoomId,
+      );
     } catch (e, st) {
-      debugPrint('[ChatApi] ❌ sendMessage error: $e\n$st');
+      debugPrint('[ChatApi] ❌ sendMessageWithResult error: $e\n$st');
       return null;
     }
   }
 
-  /// Update message status
+  // =========================================
+  // STATUS
+  // =========================================
+
   Future<bool> updateMessageStatus({
     required String messageId,
     required String status,
   }) async {
     try {
-      print("Customer updaatteee statuss ${messageId} ${status}");
+      debugPrint('[ChatApi] 📤 updateMessageStatus: $messageId → $status');
       final response = await _client.put(
-        '/$_controller/update-send-status?message_id=$messageId&send_status=$status',
+        '/$_controller/update-send-status'
+        '?message_id=$messageId&send_status=$status',
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -171,7 +245,8 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      print("Customer updaatteee statuss ${model.messageId} ${status}");
+      debugPrint(
+          '[ChatApi] 📤 updateMessage: ${model.messageId} → $status');
       final response = await _client.put(
         '/$_controller/update?message_id=${model.messageId}',
         headers: {'Content-Type': 'application/json'},
@@ -179,7 +254,7 @@ class ChatApiService {
 
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint('[ChatApi] ❌ updateMessageStatus error: $e');
+      debugPrint('[ChatApi] ❌ updateMessage error: $e');
       return false;
     }
   }
@@ -195,7 +270,6 @@ class ChatApiService {
         headers: {'Content-Type': 'application/json'},
       );
 
-      // Handle success responses
       if (response.statusCode >= 200 && response.statusCode < 300) {
         try {
           final responseData = jsonDecode(response.body);
@@ -203,20 +277,20 @@ class ChatApiService {
               ? responseData
               : {'success': true, 'data': responseData};
         } catch (e) {
-          debugPrint('Error parsing response: $e');
+          debugPrint('[ChatApi] ⚠️ update parse error: $e');
           return {'success': true, 'message': 'Update berhasil'};
         }
       } else {
-        debugPrint('Update failed with status code: ${response.statusCode}');
+        debugPrint(
+            '[ChatApi] ❌ update failed: ${response.statusCode}');
         return jsonDecode(response.body);
       }
     } catch (e) {
-      debugPrint('Update error: $e');
+      debugPrint('[ChatApi] ❌ update error: $e');
       rethrow;
     }
   }
 
-  /// Clear unread untuk room
   Future<bool> clearRoomUnread({
     required String roomId,
     required String userId,

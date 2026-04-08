@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/models/kota_model.dart';
@@ -29,10 +30,10 @@ class KotaService {
           if (orderDir != null) 'orderdir': orderDir,
         },
       );
-      print('==============================');
-      print('Response Body: ${response.body}');
-      print('Status Code: ${response.statusCode}');
-      print('==============================');
+      debugPrint('==============================');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);

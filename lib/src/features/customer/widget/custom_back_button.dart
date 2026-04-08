@@ -16,7 +16,7 @@ class CustomBackButton extends StatelessWidget {
     final navProvider = context.read<NavigationProvider>();
     final didPop = await navProvider.onWillPop(context);
 
-    print("bisa back? $didPop");
+    debugPrint("bisa back? $didPop");
 
     if (!didPop) {
       // Fallback jika tidak bisa pop

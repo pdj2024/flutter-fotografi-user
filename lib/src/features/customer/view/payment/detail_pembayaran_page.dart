@@ -74,7 +74,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   bool get inclPpn => estimasi?.inclPpn ?? false;
 
   /// Total yang dibayar customer = totalCustomer dari estimasi + biaya metode
-  int get totalPembayaran => (estimasi?.totalCustomer ?? 0) + biayaPembayaran;
+  int get totalPembayaran => estimasi?.totalCustomer ?? 0;
 
   // ─────────────────────────────────────────────────────────────
 
@@ -171,7 +171,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   void _hitungHarga() {
     if (penawaran == null || ppnModel == null) return;
 
-    estimasi = ppnModel!.hitungEstimasi(penawaran!.harga);
+    // ✅ Pass adminFee agar PPN mencakup biaya admin juga
+    estimasi = ppnModel!.hitungEstimasi(
+      penawaran!.harga,
+      adminFee: biayaPembayaran,
+    );
     setState(() {});
   }
 
@@ -186,7 +190,31 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         errorMessage = null;
       });
 
-      if (penawaran == null) return;
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('📦 [createPesanan] START');
+      debugPrint('═══════════════════════════════════════');
+
+      if (penawaran == null) {
+        debugPrint('❌ [createPesanan] penawaran == null → early return');
+        return;
+      }
+
+      debugPrint('📋 [createPesanan] Penawaran data:');
+      debugPrint('   noId         : ${penawaran!.noId}');
+      debugPrint('   idVendor     : ${penawaran!.idVendor}');
+      debugPrint('   idCustomer   : ${penawaran!.idCustomer}');
+      debugPrint('   idPaket      : ${penawaran!.idPaket}');
+      debugPrint('   namaPaket    : ${penawaran!.namaPaket}');
+      debugPrint('   kota         : ${penawaran!.kota}');
+      debugPrint('   lokasi       : ${penawaran!.lokasi}');
+      debugPrint('   tglRealisasi : ${penawaran!.tglRealisasi}');
+      debugPrint('   incld PPN    : $inclPpn - ${ppnModel!.ppn}%}');
+      debugPrint('   harga raw    : ${penawaran!.harga}');
+      debugPrint(
+          '💰 [createPesanan] Estimasi totalPembayaran : $totalPembayaran');
+      debugPrint(
+          '💰 [createPesanan] Estimasi total harga create pesanan : ${penawaran!.harga}');
+      debugPrint('💳 [createPesanan] kodeMetode      : $kodeMetode');
 
       final newPesanan = PesananModel(
         noBukti: "new",
@@ -196,7 +224,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         idPaket: penawaran!.idPaket,
         namaPaket: penawaran!.namaPaket,
         kota: penawaran!.kota,
-        harga: totalPembayaran, // sudah termasuk biaya metode + PPN (jika excl)
+        harga: inclPpn ? totalPembayaran : penawaran!.harga,
         lokasi: penawaran!.lokasi,
         tglRealisasi: penawaran!.tglRealisasi,
         status: "aktif",
@@ -207,43 +235,80 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         grandTotal: 0,
       );
 
-      final result = await pesananService.create(newPesanan);
-      final pesanan = await pesananService.getAll(noBukti: result.noBukti);
+      debugPrint(
+          '✅ [createPesanan] PesananModel dibuat, memanggil service.create...');
 
+      final result = await pesananService.create(newPesanan);
+      debugPrint('✅ [createPesanan] service.create selesai');
+      debugPrint('   result.noBukti : ${result.noBukti}');
+
+      debugPrint(
+          '🔍 [createPesanan] Memanggil service.getAll(noBukti: ${result.noBukti})...');
+      final pesanan = await pesananService.getAll(noBukti: result.noBukti);
+      debugPrint(
+          '✅ [createPesanan] getAll selesai, jumlah data: ${pesanan.length}');
+
+      if (pesanan.isEmpty) {
+        debugPrint(
+            '❌ [createPesanan] pesanan kosong setelah getAll → kemungkinan bug di service');
+      } else {
+        debugPrint('📄 [createPesanan] pesanan.first:');
+        debugPrint('   noBukti    : ${pesanan.first.noBukti}');
+        debugPrint('   idCustomer : ${pesanan.first.idCustomer}');
+        debugPrint('   linkSnap   : ${pesanan.first.linkSnap}');
+      }
+
+      debugPrint('📝 [createPesanan] Membuat history menunggu bayar...');
       final historyMenungguBayar = HistoryOrderService.createMenungguPembayaran(
         noOrder: result.noBukti,
         senderId: pesanan.first.idCustomer,
       );
+      debugPrint('   history.noOrder  : ${historyMenungguBayar.noOrder}');
+      debugPrint('   history.senderId : ${historyMenungguBayar.senderId}');
 
       await historyOrderService.create(historyMenungguBayar);
+      debugPrint('✅ [createPesanan] historyOrderService.create selesai');
 
       try {
+        debugPrint('💬 [createPesanan] Mengupdate chat penawaran → pesanan...');
+        debugPrint('   message.id  : ${widget.message.messageId}');
+        debugPrint('   pesananId   : ${pesanan.first.noBukti}');
         final chatUpdated =
             await context.read<ChatProvider>().updatePenawaranToPesanan(
                   message: widget.message,
                   pesananId: pesanan.first.noBukti,
                 );
-        if (!chatUpdated) {
-          debugPrint('Warning: Chat message tidak berhasil diupdate');
-        }
+        debugPrint(chatUpdated
+            ? '✅ [createPesanan] Chat berhasil diupdate'
+            : '⚠️  [createPesanan] Chat tidak berhasil diupdate');
       } catch (e) {
-        debugPrint('Error updating chat: $e');
+        debugPrint('❌ [createPesanan] Error updating chat: $e');
       }
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        debugPrint(
+            '⚠️  [createPesanan] context tidak mounted setelah chat update');
+        return;
+      }
 
       CustomSnackbar.showSuccessSnackbar(
         context,
         "Pesanan berhasil dibuat, segera selesaikan pembayaran",
       );
 
+      context.read<NavigationProvider>().popAllToRoot();
+
       if (pesanan.first.linkSnap == null) {
+        debugPrint(
+            '🧭 [createPesanan] linkSnap null → navigasi ke WaitingPaymentPage');
         context.read<NavigationProvider>().navigateToPage(
               context,
               targetTabIndex: 2,
               WaitingPaymentPage(paymentData: pesanan.first),
             );
       } else {
+        debugPrint('🧭 [createPesanan] linkSnap ada → navigasi ke WebviewPage');
+        debugPrint('   url: ${pesanan.first.linkSnap}');
         context.read<NavigationProvider>().navigateToPage(
               context,
               targetTabIndex: 2,
@@ -253,17 +318,24 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
               ),
             );
       }
-    } catch (e) {
+
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('✅ [createPesanan] END SUCCESS');
+      debugPrint('═══════════════════════════════════════');
+    } catch (e, stackTrace) {
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('❌ [createPesanan] ERROR: $e');
+      debugPrint('📍 StackTrace:\n$stackTrace');
+      debugPrint('═══════════════════════════════════════');
       errorMessage = e.toString();
       if (context.mounted) {
         CustomSnackbar.showErrorSnackbar(context, errorMessage!);
       }
     } finally {
       if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
+        setState(() => isLoading = false);
       }
+      debugPrint('🏁 [createPesanan] FINALLY — isLoading = false');
     }
   }
 
@@ -800,6 +872,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildExpandableBottomBar() {
+    // Untuk label, gunakan admin fee yang belum kena PPN (DPP admin)
+    // agar customer paham berapa fee asli sebelum pajak
+    final displayAdminFee = biayaPembayaran;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -862,33 +938,43 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
-                // Baris harga paket — label berubah sesuai kondisi PPN
+                // ── Harga Paket ──────────────────────────────
                 _buildPriceRow(
                   hasPpn
-                      ? (inclPpn
-                          ? "Harga Paket (sudah termasuk PPN)"
-                          : "Harga Paket (belum termasuk PPN)")
+                      ? (inclPpn ? "Harga Paket (termasuk PPN)" : "Harga Paket")
                       : "Harga Paket",
                   Helper.formatCurrency(hargaPaket),
                 ),
 
-                // Baris PPN — hanya tampil jika ada PPN
-                if (!inclPpn && hasPpn) ...[
-                  const SizedBox(height: 8),
-                  _buildPriceRow(
-                    "PPN (${estimasi!.ppnPersen}%)",
-                    Helper.formatCurrency(biayaPPN),
-                    labelColor: null,
-                    valueColor: null,
-                  )
-                ],
-
-                // Biaya metode pembayaran — hanya tampil jika sudah dipilih
+                // ── Biaya Pembayaran (admin fee) ─────────────
                 if (kodeMetode != null) ...[
                   const SizedBox(height: 8),
                   _buildPriceRow(
-                    "Biaya Pembayaran",
-                    Helper.formatCurrency(biayaPembayaran),
+                    "Biaya Admin",
+                    Helper.formatCurrency(displayAdminFee),
+                  ),
+                ],
+
+                // ── PPN ──────────────────────────────────────
+                if (hasPpn && !inclPpn) ...[
+                  const SizedBox(height: 8),
+                  _buildPriceRow(
+                    "PPN ${estimasi!.ppnPersen}%",
+                    Helper.formatCurrency(biayaPPN),
+                  ),
+                ],
+
+                // ── Keterangan incl PPN ──────────────────────
+                if (hasPpn && inclPpn) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Harga sudah termasuk PPN ${estimasi!.ppnPersen}%'
+                    '${kodeMetode != null ? ' (termasuk biaya pembayaran)' : ''}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ],
 
@@ -896,6 +982,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
+                // ── Total ────────────────────────────────────
                 _buildPriceRow(
                   "Total Pembayaran",
                   Helper.formatCurrency(totalPembayaran),
@@ -924,11 +1011,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: kodeMetode == null ? 0 : 2,
               ),
-              onPressed: penawaran!.noPesanan.isNotEmpty
+              onPressed: isLoading ||
+                      kodeMetode == null ||
+                      penawaran!.noPesanan.isNotEmpty
                   ? null
-                  : kodeMetode == null
-                      ? null
-                      : () async => await createPesanan(),
+                  : () async => await createPesanan(),
               child: Text(
                 penawaran!.noPesanan.isNotEmpty
                     ? "Penawaran Sudah Ditutup"
