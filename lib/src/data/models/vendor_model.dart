@@ -1,3 +1,5 @@
+import 'package:mpjnew/src/data/models/kota_model.dart';
+
 class VendorModel {
   final String noId;
   final String username;
@@ -5,6 +7,7 @@ class VendorModel {
   final String email;
   final String kota;
   final String namaKota;
+  final List<KotaModel>? kotaLayananObject;
   final double rating;
   final List<String>
       portofolio; // ID portofolio, bisa digunakan untuk fetch detail
@@ -23,6 +26,7 @@ class VendorModel {
     required this.email,
     required this.kota,
     required this.namaKota,
+    this.kotaLayananObject,
     required this.rating,
     required this.portofolio,
     required this.paket,
@@ -40,6 +44,9 @@ class VendorModel {
         email: json['Email'] ?? '',
         kota: json['Kota'] ?? '',
         namaKota: json['Nama_Kota'] ?? '',
+        kotaLayananObject: (json["Kota_Layanan_Object"] as List?)
+            ?.map((e) => KotaModel.fromKotaObject(e))
+            .toList(),
         rating: (json['Rating'] ?? 0).toDouble(),
         portofolio: (json['Portofolio'] as List? ?? [])
             .map((e) => e.toString())
@@ -61,6 +68,8 @@ class VendorModel {
       'Email': email,
       'Kota': kota,
       "Nama_Kota": namaKota,
+            "Kota_Layanan_Object":
+          kotaLayananObject?.map((e) => e.toJson()).toList() ?? [],
       'Rating': rating,
       'Portofolio': portofolio,
       'Paket': paket,

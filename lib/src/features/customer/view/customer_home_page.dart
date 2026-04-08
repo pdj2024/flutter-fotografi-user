@@ -22,38 +22,28 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     with WidgetsBindingObserver {
   final RefreshController _refreshController =
       RefreshController(initialRefresh: false);
-  final ScrollController _scrollController = ScrollController();
-
-  bool isScrolled = false;
-  bool firstBuild = true;
 
   int _lastPreloadIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadCustomerId();
-
       if (!mounted) return;
-
       final userId = context.read<UserProvider>().userId;
       if (userId == null || userId.isEmpty) {
         debugPrint("⚠️ Belum login, skip loadData()");
         return;
       }
-
       await loadData();
     });
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _cancelPreloads();
     super.dispose();
@@ -64,11 +54,9 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     final portofolioProvider = context.read<PortofolioProvider>();
     switch (state) {
       case AppLifecycleState.paused:
-        debugPrint("[HomePage] ⏸️ App paused - pausing preloads");
         portofolioProvider.pausePreloads();
         break;
       case AppLifecycleState.resumed:
-        debugPrint("[HomePage] ▶️ App resumed - resuming preloads");
         portofolioProvider.resumePreloads();
         break;
       default:
@@ -83,10 +71,10 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     }
     try {
       await loadData();
-      _refreshController.refreshCompleted();
+      if (mounted) _refreshController.refreshCompleted();
     } catch (e) {
       debugPrint('[HomePage] ❌ Refresh error: $e');
-      _refreshController.refreshFailed();
+      if (mounted) _refreshController.refreshFailed();
     }
   }
 
@@ -106,6 +94,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       final kategoriProvider = context.read<KategoriProvider>();
       final portofolioProvider = context.read<PortofolioProvider>();
 
+      _lastPreloadIndex = 0;
+
       debugPrint("═══════════════════════════════════════════════════");
       debugPrint("[HomePage] 🔄 Loading data...");
 
@@ -117,26 +107,17 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       if (!mounted) return;
 
       debugPrint("[HomePage] ✅ Data loaded successfully");
-
       final stats = portofolioProvider.getPreloadStats();
       debugPrint("[HomePage] 📊 Preload stats: $stats");
       debugPrint("═══════════════════════════════════════════════════");
     } catch (e, st) {
       debugPrint("[HomePage] ❌ Error loading data: $e");
       debugPrintStack(stackTrace: st);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Gagal memuat ulang data")),
         );
       }
-    }
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _preloadNextBatch();
     }
   }
 
@@ -167,7 +148,6 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     try {
       final portofolioProvider = context.read<PortofolioProvider>();
       portofolioProvider.cancelPreloads();
-      debugPrint("[HomePage] 🛑 Preloads cancelled");
     } catch (e) {
       debugPrint("[HomePage] ⚠️ Error cancelling preloads: $e");
     }
@@ -178,66 +158,63 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
-        child: Column(
-          children: [
-            // ══════════════════════════════════════════════
-            // HEADER — Fixed, tidak ikut scroll/refresh
-            // ══════════════════════════════════════════════
-            _ModernSearchBar(
-              onTap: () {
-                context.read<NavigationProvider>().navigateToPage(
-                      context,
-                      SearchPage(
-                        id_category: "",
-                        nama_category: '',
-                        search: "",
-                        autoOpenFilter: true,
-                      ),
-                      targetTabIndex: 0,
-                      targetPage: 'SearchPage',
-                    );
-              },
-            ),
-
-            // ══════════════════════════════════════════════
-            // KONTEN — SmartRefresher hanya di sini
-            // ══════════════════════════════════════════════
-            Expanded(
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (notification) {
-                  if (notification is ScrollUpdateNotification) {
-                    final metrics = notification.metrics;
-                    if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-                      _preloadNextBatch();
-                    }
-                  }
-                  return false;
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollUpdateNotification) {
+              final metrics = notification.metrics;
+              if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+                _preloadNextBatch();
+              }
+            }
+            return false;
+          },
+          child: Column(
+            children: [
+              // ── Search bar sticky (di luar SmartRefresher) ────────────
+              _ModernSearchBar(
+                onTap: () {
+                  context.read<NavigationProvider>().navigateToPage(
+                        context,
+                        SearchPage(
+                          id_category: "",
+                          nama_category: '',
+                          search: "",
+                          autoOpenFilter: true,
+                        ),
+                        targetTabIndex: 0,
+                        targetPage: 'SearchPage',
+                      );
                 },
+              ),
+
+              // ── SmartRefresher hanya kelola area di bawah search ─────
+              Expanded(
                 child: SmartRefresher(
                   controller: _refreshController,
                   onRefresh: _onRefresh,
                   physics: const AlwaysScrollableScrollPhysics(),
                   header: buildRefreshHeader(),
                   child: CustomScrollView(
-                    physics: AlwaysScrollableScrollPhysics(),
                     slivers: [
-                      // KATEGORI DINAMIS
+                      // ── Kategori ─────────────────────────────────────
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10),
                           child: KategoriSection(),
                         ),
                       ),
 
-                      // DAFTAR PORTOFOLIO
+                      // ── Portofolio ───────────────────────────────────
                       PortofolioSection(),
 
-                      // Loading indicator preload
+                      // ── Preload indicator ─────────────────────────────
                       SliverToBoxAdapter(
                         child: Consumer<PortofolioProvider>(
                           builder: (context, provider, child) {
                             final stats = provider.getPreloadStats();
-                            final isPreloading = stats['isPreloading'] as bool;
+                            final isPreloading =
+                                stats['isPreloading'] as bool;
                             final queueLength = stats['queueLength'] as int;
 
                             if (!isPreloading || queueLength == 0) {
@@ -279,8 +256,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -294,7 +271,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// _ModernSearchBar
+// _ModernSearchBar — tidak ada perubahan dari versi asli
 // ═══════════════════════════════════════════════════════════════════════
 
 class _ModernSearchBar extends StatefulWidget {
@@ -420,8 +397,7 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SliverHeaderDelegate — tidak dipakai lagi, tapi dipertahankan
-// untuk kompatibilitas jika dipakai di tempat lain
+// SliverHeaderDelegate — dipertahankan untuk kompatibilitas
 // ═══════════════════════════════════════════════════════════════════════
 
 class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {

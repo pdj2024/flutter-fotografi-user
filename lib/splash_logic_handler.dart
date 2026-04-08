@@ -278,18 +278,18 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
                   const SizedBox(height: 24),
 
                   // ── App name ───────────────────────────
-                  FadeTransition(
-                    opacity: _textOpacity,
-                    child: const Text(
-                      'Fotografi',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
+                  // FadeTransition(
+                  //   opacity: _textOpacity,
+                  //   child: const Text(
+                  //     'Fotografi',
+                  //     style: TextStyle(
+                  //       fontSize: 24,
+                  //       fontWeight: FontWeight.w700,
+                  //       color: Colors.white,
+                  //       letterSpacing: -0.5,
+                  //     ),
+                  //   ),
+                  // ),
 
                   const Spacer(flex: 2),
 

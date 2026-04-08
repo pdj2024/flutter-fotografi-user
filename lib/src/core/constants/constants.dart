@@ -7,7 +7,7 @@ class Constants {
   // versi minimum tertentu.
 
   /// Versi app customer (index 0 dari "customer_ver, vendor_ver")
-  static const String versionApp = '1.0.1';
+  static const String versionApp = '1.0.3';
 
   /// Versi API minimum yang kompatibel dengan app ini
   static const String versionApi = '1.0.0';

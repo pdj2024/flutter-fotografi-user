@@ -13,7 +13,18 @@ class HistoryOrderProvider extends ChangeNotifier {
   final Map<String, bool> _loadingStates = {};
   final Map<String, String?> _errors = {};
   final Map<String, String> _orderStatuses = {};
+
+  // ✅ Bug C fix: hapus _trackedOrders sebagai filter FCM —
+  //    handleProgressFromFCM sekarang proses semua order yang ada di cache,
+  //    bukan hanya yang di-track. Ini cegah FCM loss.
   final Set<String> _trackedOrders = {};
+
+  // ✅ Bug B fix: set untuk track fetch yang sedang berjalan
+  final Set<String> _fetchingOrders = {};
+
+  // ✅ Bug A fix: set untuk track createPersiapan yang sedang berjalan
+  final Set<String> _creatingPersiapan = {};
+
   bool _isInitialized = false;
 
   void Function(String noOrder, String newStatus)? onOrderStatusChanged;
@@ -54,11 +65,14 @@ class HistoryOrderProvider extends ChangeNotifier {
   // FCM INTEGRATION
   // =========================================
 
+  // ✅ Bug C fix: tidak lagi filter berdasarkan _trackedOrders.
+  //    Jika order ada di _orderHistories (sudah pernah di-fetch),
+  //    langsung proses. Ini cegah FCM notification hilang karena
+  //    order belum sempat di-track.
   void handleProgressFromFCM(HistoryOrderModel progress) {
     debugPrint('[HistoryOrderProvider] 📨 FCM'
         ' — order: ${progress.noOrder}'
         ' — status: ${progress.statusProgressPesanan}');
-    if (!_trackedOrders.contains(progress.noOrder)) return;
     _handleNewProgress(progress);
   }
 
@@ -115,8 +129,20 @@ class HistoryOrderProvider extends ChangeNotifier {
   // DATA FETCHING
   // =========================================
 
+  // ✅ Bug B fix: guard concurrent fetch untuk noBukti yang sama.
+  //    Jika fetch sedang berjalan, skip — tidak overwrite dengan
+  //    result yang mungkin stale atau bentrok.
   Future<void> fetchHistoryForOrder(String noOrder,
       {bool silent = false}) async {
+    // Guard: jika fetch untuk order ini sudah berjalan, skip
+    if (_fetchingOrders.contains(noOrder)) {
+      debugPrint(
+          '[HistoryOrderProvider] ⚠️ Fetch already in progress for $noOrder — skipped');
+      return;
+    }
+
+    _fetchingOrders.add(noOrder);
+
     if (!silent) {
       _loadingStates[noOrder] = true;
       _errors[noOrder] = null;
@@ -139,6 +165,7 @@ class HistoryOrderProvider extends ChangeNotifier {
       debugPrint('[HistoryOrderProvider] ❌ Fetch error: $e\n$st');
       _errors[noOrder] = e.toString();
     } finally {
+      _fetchingOrders.remove(noOrder);
       _loadingStates[noOrder] = false;
       notifyListeners();
     }
@@ -170,10 +197,6 @@ class HistoryOrderProvider extends ChangeNotifier {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  // createProgressWithStatus — tanpa validasi alur
-  // Gunakan untuk: dibatalkan, menunggu bayar, dan status non-linear.
-  // ─────────────────────────────────────────────────────────────────
   Future<bool> createProgressWithStatus({
     required String noOrder,
     required String senderId,
@@ -189,13 +212,6 @@ class HistoryOrderProvider extends ChangeNotifier {
     return createProgress(progress);
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  // createProgressLinear — dengan validasi alur
-  // Gunakan untuk semua transisi di alur fotografi:
-  //   persiapan → pengerjaan → review → [revisi] → selesai
-  //
-  // Otomatis menolak jika transisi tidak ada di tabel OrderStatusFlow.
-  // ─────────────────────────────────────────────────────────────────
   Future<bool> createProgressLinear({
     required String noOrder,
     required String currentStatus,
@@ -255,13 +271,59 @@ class HistoryOrderProvider extends ChangeNotifier {
   // QUICK-CREATE HELPERS
   // =========================================
 
+  // ✅ Bug A fix: createPersiapan sekarang idempoten.
+  //    Sebelum hit API, cek apakah history 'persiapan' sudah ada
+  //    di cache lokal. Jika sudah ada → skip (return true).
+  //    Juga ada lock (_creatingPersiapan) untuk cegah double-call
+  //    concurrent (misal dari WaitingPayment + MainOrderPage sekaligus).
+  Future<bool> createPersiapan(String noOrder, String senderId) async {
+    // ── Lock: cegah concurrent call untuk noBukti yang sama ──
+    if (_creatingPersiapan.contains(noOrder)) {
+      debugPrint(
+          '[HistoryOrderProvider] ⚠️ createPersiapan already in progress for $noOrder — skipped');
+      return true;
+    }
+    _creatingPersiapan.add(noOrder);
+
+    try {
+      // ── Cek cache lokal dulu ──────────────────────────────
+      final cached = _orderHistories[noOrder] ?? [];
+      final hasPersiapan =
+          cached.any((h) => h.statusProgressPesanan == 'persiapan');
+
+      if (hasPersiapan) {
+        debugPrint(
+            '[HistoryOrderProvider] ✅ createPersiapan skipped — already exists in cache for $noOrder');
+        return true;
+      }
+
+      // ── Jika cache kosong, fetch dulu dari server ─────────
+      if (cached.isEmpty) {
+        await fetchHistoryForOrder(noOrder, silent: true);
+        final fresh = _orderHistories[noOrder] ?? [];
+        if (fresh.any((h) => h.statusProgressPesanan == 'persiapan')) {
+          debugPrint(
+              '[HistoryOrderProvider] ✅ createPersiapan skipped — exists on server for $noOrder');
+          return true;
+        }
+      }
+
+      // ── Benar-benar belum ada → buat ─────────────────────
+      debugPrint(
+          '[HistoryOrderProvider] 📝 createPersiapan — creating for $noOrder');
+      return await createProgressWithStatus(
+        noOrder: noOrder,
+        senderId: senderId,
+        status: 'persiapan',
+      );
+    } finally {
+      _creatingPersiapan.remove(noOrder);
+    }
+  }
+
   Future<bool> createMenungguPembayaran(String noOrder, String senderId) =>
       createProgressWithStatus(
           noOrder: noOrder, senderId: senderId, status: 'menunggu bayar');
-
-  Future<bool> createPersiapan(String noOrder, String senderId) =>
-      createProgressWithStatus(
-          noOrder: noOrder, senderId: senderId, status: 'persiapan');
 
   Future<bool> createProses(String noOrder, String senderId) =>
       createProgressWithStatus(
@@ -326,6 +388,8 @@ class HistoryOrderProvider extends ChangeNotifier {
     _errors.clear();
     _orderStatuses.clear();
     _trackedOrders.clear();
+    _fetchingOrders.clear();
+    _creatingPersiapan.clear();
     onOrderStatusChanged = null;
     onProgressReceived = null;
     super.dispose();

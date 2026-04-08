@@ -9,7 +9,6 @@ import 'package:mpjnew/src/features/customer/view/account/edit_account_page.dart
 import 'package:mpjnew/src/features/customer/view/account/portofolio_account_section.dart';
 import 'package:mpjnew/src/features/customer/view/account/setting_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/avatar_circle.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -111,6 +110,10 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
     }
   }
 
+  // ════════════════════════════════════════════════════════════
+  // Switch Account — logout dulu, lalu arahkan ke login
+  // sehingga user bisa pilih akun Google yang berbeda
+  // ════════════════════════════════════════════════════════════
   void _showSwitchAccountSheet(BuildContext context) {
     final userProvider = context.read<UserProvider>();
     final customer = userProvider.customer;
@@ -152,7 +155,6 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
                     ),
                     child: Row(
                       children: [
-                        // ✅ Initial avatar, tidak ada foto untuk customer
                         CircleAvatar(
                           radius: 20,
                           backgroundColor:
@@ -204,20 +206,70 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
 
                 const SizedBox(height: 14),
 
-                // Switch account button (placeholder)
+                // ✅ Switch account: logout dulu → tampilkan login page
+                //    Google sign-in akan muncul dan user bisa pilih akun lain
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () {
+                    onPressed: () async {
+                      // Tutup bottom sheet dulu
                       Navigator.pop(ctx);
-                      // TODO: Implementasi switch account
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Fitur switch akun sedang dalam pengembangan'),
-                          behavior: SnackBarBehavior.floating,
+
+                      // Tampilkan dialog konfirmasi singkat
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogCtx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: const Text(
+                            'Ganti Akun?',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          content: const Text(
+                            'Anda akan keluar dari akun ini dan diarahkan '
+                            'ke halaman login untuk memilih akun lain.',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dialogCtx, false),
+                              child: Text(
+                                'Batal',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(dialogCtx, true),
+                              child: Text(
+                                'Ganti Akun',
+                                style: TextStyle(
+                                  color: Constants.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
+
+                      if (confirmed != true) return;
+                      if (!context.mounted) return;
+
+                      // ✅ Logout menggunakan NavigationProvider.handleLogout
+                      //    yang sudah handle: unregister FCM, clear providers,
+                      //    clear local storage, signOut dari Google.
+                      //    Setelah logout, popAllToRoot() dipanggil di dalam
+                      //    handleLogout sehingga app kembali ke halaman utama.
+                      //    Google sign-in picker akan muncul saat user tap login.
+                      await context
+                          .read<NavigationProvider>()
+                          .handleLogout(context);
                     },
                     icon: const Icon(Icons.swap_horiz_rounded, size: 20),
                     label: const Text('Ganti Akun'),
@@ -357,7 +409,7 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
   }
 
   // ════════════════════════════════════════════════════════════
-  // Profile Section — IG-style
+  // Profile Section
   // ════════════════════════════════════════════════════════════
 
   Widget _buildProfileSection(
@@ -365,10 +417,7 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
     CustomerModel? customer,
     bool isProfileComplete,
   ) {
-    // ✅ Semua data dari CustomerModel, bukan VendorModel
     final namaDisplay = _resolveDisplayName(customer);
-    final namaKota = customer?.namaKota ?? '';
-
     final portofolioProvider = context.read<PortofolioProvider>();
     final totalLikes = portofolioProvider.portofolioLikelist.length;
     final totalSaves = portofolioProvider.portofolioSaveList.length;
@@ -381,7 +430,6 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
           // ── Avatar + Stats row ─────────────────────────
           Row(
             children: [
-              // ── Avatar ─────────────────────────────────
               // ── Avatar ─────────────────────────────────
               GestureDetector(
                 onTap: () {
@@ -413,12 +461,10 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
 
               const SizedBox(width: 16),
 
-              // ── Nama + Kota + Stats ────────────────────
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Nama Display
                     Text(
                       namaDisplay,
                       style: const TextStyle(
@@ -429,50 +475,34 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-
-                    // ✅ Nama kota di bawah nama display
-                    // if (namaKota.isNotEmpty)
-                    //   Padding(
-                    //     padding: const EdgeInsets.only(top: 2),
-                    //     child: Row(
-                    //       children: [
-                    //         Icon(
-                    //           Icons.location_on_outlined,
-                    //           size: 11,
-                    //           color: Colors.grey.shade500,
-                    //         ),
-                    //         const SizedBox(width: 2),
-                    //         Flexible(
-                    //           child: Text(
-                    //             namaKota,
-                    //             style: TextStyle(
-                    //               fontSize: 11,
-                    //               color: Colors.grey.shade500,
-                    //               height: 1.3,
-                    //             ),
-                    //             maxLines: 1,
-                    //             overflow: TextOverflow.ellipsis,
-                    //           ),
-                    //         ),
-                    //       ],
-                    //     ),
-                    //   ),
-
                     const SizedBox(height: 8),
 
-                    // Stats row
+                    // ── Stats cards ────────────────────────────────
                     Row(
                       children: [
                         Expanded(
-                          child: _StatColumn(
+                          child: _StatCard(
                             value: _formatCount(totalLikes),
-                            label: 'disukai',
+                            label: 'Disukai',
+                            icon: Icons.favorite_rounded,
+                            isActive: _currentTab == 0,
+                            onTap: () {
+                              _tabController.animateTo(0);
+                              setState(() => _currentTab = 0);
+                            },
                           ),
                         ),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: _StatColumn(
+                          child: _StatCard(
                             value: _formatCount(totalSaves),
-                            label: 'disimpan',
+                            label: 'Disimpan',
+                            icon: Icons.bookmark_rounded,
+                            isActive: _currentTab == 1,
+                            onTap: () {
+                              _tabController.animateTo(1);
+                              setState(() => _currentTab = 1);
+                            },
                           ),
                         ),
                       ],
@@ -623,10 +653,6 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
     );
   }
 
-  // ════════════════════════════════════════════════════════════
-  // Format count helper
-  // ════════════════════════════════════════════════════════════
-
   String _formatCount(int count) {
     if (count < 1000) return count.toString();
     if (count < 10000) {
@@ -644,56 +670,83 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
 }
 
 // ══════════════════════════════════════════════════════════════
-// STAT COLUMN WIDGET
+// STAT CARD — Card yang bisa di-tap untuk switch tab
+// Clean dengan accent primaryColor saat aktif
 // ══════════════════════════════════════════════════════════════
 
-class _StatColumn extends StatelessWidget {
+class _StatCard extends StatelessWidget {
   final String value;
   final String label;
-  final bool isText;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
 
-  const _StatColumn({
+  const _StatCard({
     required this.value,
     required this.label,
-    this.isText = false,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isText)
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          )
-        else
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive
+              ? Constants.primaryColor.withOpacity(0.08)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isActive
+                ? Constants.primaryColor.withOpacity(0.35)
+                : Colors.grey.shade200,
+            width: isActive ? 1.5 : 1,
           ),
-        const SizedBox(height: 1),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey.shade500,
-            fontWeight: FontWeight.w400,
-          ),
-          textAlign: TextAlign.center,
         ),
-      ],
+        child: Row(
+          children: [
+            // Icon
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? Constants.primaryColor : Colors.grey.shade400,
+            ),
+            const SizedBox(width: 7),
+            // Count + label
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Constants.primaryColor : Colors.black87,
+                    height: 1.1,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isActive
+                        ? Constants.primaryColor.withOpacity(0.7)
+                        : Colors.grey.shade500,
+                    fontWeight: FontWeight.w400,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

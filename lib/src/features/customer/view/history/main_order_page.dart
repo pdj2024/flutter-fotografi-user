@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/empty_order.dart';
@@ -43,6 +44,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
   bool _isInitialized = false;
   String? _lastUserId;
 
+  /// Hanya dijalankan sekali per sesi — cek history yang hilang
+  bool _paymentCheckDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,15 +64,115 @@ class _MainOrderPageState extends State<MainOrderPage> {
     if (userProvider.customer == null) return;
 
     final userId = userProvider.customer!.noId;
+
+    // ✅ Reset flag jika user berbeda
+    if (_lastUserId != null && _lastUserId != userId) {
+      _paymentCheckDone = false;
+    }
+    
     if (_isInitialized && _lastUserId == userId) return;
 
     await context.read<PesananProvider>().loadOrder(context);
+    await _handleSettledPayments();
 
     if (mounted) {
       setState(() {
         _isInitialized = true;
         _lastUserId = userId;
       });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CEK HISTORY YANG HILANG
+  //
+  // Dijalankan sekali per sesi setelah loadOrder.
+  //
+  // Skenario yang ditangani:
+  //   A. statusBayar == 'capture' atau 'settlement' TAPI masih di
+  //      pesananUnpaid (statusProgresPesanan masih 'menunggu bayar')
+  //      → buat history 'persiapan' jika belum ada.
+  //
+  //   B. statusProgresPesanan sudah 'persiapan' (server sudah geser)
+  //      TAPI history 'persiapan' belum pernah dibuat di sisi lokal
+  //      (misal app ditutup sebelum _handleSuccess selesai).
+  //
+  // Guard: deduplikasi per noBukti agar tidak double-create.
+  // Guard: cek hasPersiapan sebelum createPersiapan → idempoten.
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _handleSettledPayments() async {
+    if (_paymentCheckDone || !mounted) return;
+    _paymentCheckDone = true;
+
+    final pesananProvider = context.read<PesananProvider>();
+    final historyProvider = context.read<HistoryOrderProvider>();
+    final customer = context.read<UserProvider>().customer;
+    if (customer == null) return;
+
+    // ── Skenario A: statusBayar sudah capture / settlement,
+    //               tapi statusProgresPesanan masih 'menunggu bayar'
+    //               (pesananUnpaid). ─────────────────────────────────
+    final unpaidSettled = pesananProvider.pesananUnpaid
+        .where((o) => PesananProvider.isPaymentSettled(o.statusBayar))
+        .toList();
+
+    // ── Skenario B: statusProgresPesanan sudah 'persiapan' di server,
+    //               tapi history belum dibuat. ─────────────────────────
+    final persiapanOrders = pesananProvider.pesananProgress
+        .where((o) => o.statusProgresPesanan == 'persiapan')
+        .toList();
+
+    final toCheck = [...unpaidSettled, ...persiapanOrders];
+    if (toCheck.isEmpty) return;
+
+    // ── Deduplikasi: satu noBukti hanya diproses sekali ──────────────
+    final seen = <String>{};
+    final uniqueOrders = toCheck.where((o) => seen.add(o.noBukti)).toList();
+
+    bool needsReload = false;
+
+    for (final order in uniqueOrders) {
+      try {
+        // Ambil history terkini dari server (silent = tanpa loading state)
+        await historyProvider.fetchHistoryForOrder(
+          order.noBukti,
+          silent: true,
+        );
+        final histories = historyProvider.getHistoryForOrder(order.noBukti);
+
+        final hasPersiapan =
+            histories.any((h) => h.statusProgressPesanan == 'persiapan');
+
+        if (!hasPersiapan) {
+          // ✅ History 'persiapan' belum ada → buat
+          debugPrint(
+            '[MainOrderPage] 📝 Missing persiapan history — '
+            'creating for ${order.noBukti} '
+            '(statusBayar: ${order.statusBayar}, '
+            'statusProgres: ${order.statusProgresPesanan})',
+          );
+          await historyProvider.createPersiapan(
+            order.noBukti,
+            customer.noId,
+          );
+          needsReload = true;
+        } else {
+          // ✅ Sudah ada → skip, tidak perlu create ulang
+          debugPrint(
+            '[MainOrderPage] ✅ History persiapan already exists '
+            'for ${order.noBukti} — skip',
+          );
+        }
+      } catch (e) {
+        debugPrint(
+          '[MainOrderPage] ⚠️ History check error for '
+          '${order.noBukti}: $e',
+        );
+      }
+    }
+
+    if (needsReload && mounted) {
+      await context.read<PesananProvider>().loadOrder(context);
     }
   }
 
@@ -93,7 +197,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
       return;
     }
     try {
+      // Reset flag agar _handleSettledPayments jalan ulang saat refresh
+      _paymentCheckDone = false;
       await context.read<PesananProvider>().loadOrder(context);
+      await _handleSettledPayments();
       _refreshController.refreshCompleted();
     } catch (e) {
       debugPrint('[MainOrderPage] ❌ Refresh error: $e');
@@ -208,7 +315,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
     final unpaid = provider.pesananUnpaid.length;
     final inProgress = provider.pesananProgress.length;
 
-    // ✅ Warna dari getStatus — tidak hardcode
     final cfgUnpaid = getStatus('menunggu bayar');
     final cfgProgress = getStatus('proses');
 
@@ -230,9 +336,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
             child: SummaryCard(
               label: 'Belum Bayar',
               value: unpaid,
-              color: cfgUnpaid.color, // ✅ dari getStatus
-              bgColor: cfgUnpaid.bgColor, // ✅ dari getStatus
-              icon: cfgUnpaid.icon, // ✅ dari getStatus
+              color: cfgUnpaid.color,
+              bgColor: cfgUnpaid.bgColor,
+              icon: cfgUnpaid.icon,
               onTap: () => setState(() => _selectedFilter = 'menunggu bayar'),
             ),
           ),
@@ -241,9 +347,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
             child: SummaryCard(
               label: 'Diproses',
               value: inProgress,
-              color: cfgProgress.color, // ✅ dari getStatus
-              bgColor: cfgProgress.bgColor, // ✅ dari getStatus
-              icon: cfgProgress.icon, // ✅ dari getStatus
+              color: cfgProgress.color,
+              bgColor: cfgProgress.bgColor,
+              icon: cfgProgress.icon,
               onTap: () => setState(() => _selectedFilter = null),
             ),
           ),
@@ -254,11 +360,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   // ─────────────────────────────────────────────────────────────
   // FILTER CHIPS
-  // ✅ Chip definition pakai _ChipItem agar value tidak ambigu String?
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFilterChips() {
-    // ✅ Gunakan label dari OrderStatusFlow.displayLabel — satu sumber kebenaran
     final chips = <_ChipItem>[
       _ChipItem(value: null, label: 'Semua'),
       _ChipItem(
@@ -283,7 +387,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
           final chip = chips[i];
           final isSelected = _selectedFilter == chip.value;
 
-          // ✅ cfg hanya diambil jika value bukan null — tidak ada null-check error
           final StatusConfig? cfg =
               chip.value != null ? getStatus(chip.value!) : null;
 
@@ -338,24 +441,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildOrderList() {
-    final provider = context.read<PesananProvider>();
-    // final isLoading = provider.isLoadingOrder;
-
-    // if (isLoading) {
-    //   return Padding(
-    //     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-    //     child: Column(
-    //       children: List.generate(
-    //         3,
-    //         (_) => const Padding(
-    //           padding: EdgeInsets.only(bottom: 12),
-    //           child: SkeletonCard(),
-    //         ),
-    //       ),
-    //     ),
-    //   );
-    // }
-
     final orders = _filteredOrders;
 
     if (orders.isEmpty) {
@@ -471,7 +556,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
   }
 }
 
-// ── Helper class untuk chip definition ────────────────────────────────────────
+// ── Helper class untuk chip definition ──────────────────────────────────────
 class _ChipItem {
   final String? value;
   final String label;

@@ -231,19 +231,17 @@ class RoomChatProvider extends ChangeNotifier {
       List<String> resolvedUserIds;
 
       if (_activeRoomId != null && _activeRoomId!.isNotEmpty) {
-        // ── Room sudah diketahui (dari initChat atau resolveRoom) ─────────
+        // ── Room sudah diketahui ───────────────────────────────────────
         resolvedRoomId = _activeRoomId!;
         resolvedUserIds = roomInfo?.userIds ?? [currentUserId, vendorId!];
       } else {
-        // ── Room belum diketahui — cek ke backend/cache dulu ─────────────
+        // ── Room belum diketahui — cek ke backend/cache dulu ──────────
         debugPrint('[RoomChatProv] 🔍 Cek existing room dengan: $vendorId');
 
         final existingRoom = await chatProv.findOrCreateRoom(vendorId!);
 
         if (existingRoom != null) {
-          // ✅ Room sudah ada — setup dan gunakan roomId-nya
-          debugPrint(
-              '[RoomChatProv] ✅ Room ditemukan: ${existingRoom.roomId}');
+          debugPrint('[RoomChatProv] ✅ Room ditemukan: ${existingRoom.roomId}');
           _activeRoomId = existingRoom.roomId;
           roomInfo = existingRoom;
           await _setupRoom(existingRoom.roomId);
@@ -251,13 +249,19 @@ class RoomChatProvider extends ChangeNotifier {
           resolvedRoomId = existingRoom.roomId;
           resolvedUserIds = existingRoom.userIds;
         } else {
-          // ✅ Belum ada room sama sekali — biarkan backend buat baru
-          debugPrint('[RoomChatProv] ℹ️ Belum ada room — akan dibuat baru');
+          // ── Room belum ada sama sekali ─────────────────────────────
+          debugPrint('[RoomChatProv] ℹ️ Belum ada room — akan dibuat server');
           resolvedRoomId = '';
           resolvedUserIds = [currentUserId, vendorId!];
 
-          // Daftarkan callback untuk tangkap roomId dari FCM/API response
+          // ✅ PENTING: Set listener SEBELUM kirim ke API.
+          //    ChatSyncService._handleNewRoomFromApi() akan call onRoomResolved()
+          //    setelah dapat roomId dari response — bukan dari FCM.
+          //    Ini fix race condition: FCM mungkin belum datang saat
+          //    response API sudah ada.
           _listenForRoomResolution();
+          debugPrint(
+              '[RoomChatProv] 📡 onRoomResolved listener set (sebelum send)');
         }
       }
 
@@ -274,8 +278,9 @@ class RoomChatProvider extends ChangeNotifier {
         tawaranPaket = null;
         notifyListeners();
         debugPrint('[RoomChatProv] ✅ Message sent '
-            '(${resolvedRoomId.isEmpty ? "awaiting room from FCM" : resolvedRoomId})');
+            '(${resolvedRoomId.isEmpty ? "new room — awaiting roomId" : resolvedRoomId})');
       } else {
+        // Jika gagal, bersihkan listener agar tidak trigger di send berikutnya
         ChatStorageService.instance.onRoomResolved = null;
         debugPrint('[RoomChatProv] ❌ Send failed');
       }
@@ -376,9 +381,14 @@ class RoomChatProvider extends ChangeNotifier {
     ChatStorageService.instance.onRoomResolved = (String newRoomId) async {
       debugPrint('[RoomChatProv] 📣 Room resolved: $newRoomId');
 
+      // Clear callback segera — cegah dipanggil dua kali
       ChatStorageService.instance.onRoomResolved = null;
 
       if (_disposed) return;
+
+      // ✅ Reset _mergedStream agar rebuild dengan roomId asli
+      // Tanpa ini, StreamBuilder masih subscribe ke stream roomId=''
+      _mergedStream = null;
 
       _activeRoomId = newRoomId;
       roomInfo = chatProv.getRoom(newRoomId);
@@ -386,6 +396,7 @@ class RoomChatProvider extends ChangeNotifier {
       await _setupRoom(newRoomId);
 
       debugPrint('[RoomChatProv] ✅ Room setup selesai: $newRoomId');
+      notifyListeners();
     };
   }
 

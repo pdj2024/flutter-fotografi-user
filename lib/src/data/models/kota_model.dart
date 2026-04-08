@@ -21,6 +21,15 @@ class KotaModel {
     );
   }
 
+  factory KotaModel.fromKotaObject(Map<String, dynamic> json) {
+    return KotaModel(
+      noId: json["Kota"] ?? "",
+      namaKota: json["Nama_Kota"] ?? "",
+      keterangan: json["Keterangan"] ?? "",
+      status: json["Status"] ?? "",
+    );
+  }
+
   /// Convert ke JSON
   Map<String, dynamic> toJson() {
     return {

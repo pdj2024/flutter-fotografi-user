@@ -1011,11 +1011,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: kodeMetode == null ? 0 : 2,
               ),
-              onPressed: penawaran!.noPesanan.isNotEmpty
+              onPressed: isLoading ||
+                      kodeMetode == null ||
+                      penawaran!.noPesanan.isNotEmpty
                   ? null
-                  : kodeMetode == null
-                      ? null
-                      : () async => await createPesanan(),
+                  : () async => await createPesanan(),
               child: Text(
                 penawaran!.noPesanan.isNotEmpty
                     ? "Penawaran Sudah Ditutup"

@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mpjnew/splash_logic_handler.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
@@ -14,7 +15,6 @@ import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
 import 'package:mpjnew/src/core/services/fcm/utils/notification_channel_manager.dart';
 import 'package:mpjnew/src/core/services/fcm/utils/notification_helper.dart';
-import 'package:mpjnew/src/core/services/version_check_service.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
@@ -28,7 +28,6 @@ import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
-import 'package:mpjnew/src/features/customer/services/local_storage_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -54,14 +53,6 @@ import 'package:collection/collection.dart';
 import 'src/core/routing/navigation_provider.dart';
 
 var companyNameGlobal = 'PT. ABC';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BACKGROUND HANDLER — TOP-LEVEL (wajib public, bukan method class)
-//
-// ⚠️  Berjalan di background isolate terpisah.
-//     BOLEH akses  : SharedPreferences, http (via ChatStorageService.enqueue*)
-//     TIDAK BOLEH  : Provider, BuildContext, Isar (main isolate only)
-// ═══════════════════════════════════════════════════════════════════════════
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -244,6 +235,9 @@ class MyApp extends StatelessWidget {
       ],
       theme: ThemeData(
         useMaterial3: true,
+        textTheme: GoogleFonts.nunitoTextTheme(
+          Theme.of(context).textTheme,
+        ),
         scaffoldBackgroundColor: const Color(0xFFF9F9F9),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
@@ -429,8 +423,6 @@ class MyApp extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 // SPLASH LOGIC HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
-
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BACKGROUND NOTIFICATION HELPERS

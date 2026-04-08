@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mpjnew/src/core/constants/custom_button.dart';
 import 'package:mpjnew/src/core/constants/text_style.dart';
-import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
-import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_card.dart';
 import 'package:provider/provider.dart';
@@ -71,155 +68,115 @@ class _PortofolioSectionState extends State<PortofolioSection> {
     }
     debugPrint("═══════════════════════════════════════════════════");
 
-    return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ===== Header =====
-          // Padding(
-          //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          //   child: Row(
-          //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          //     children: [
-          //       const Text(
-          //         "Jelajah",
-          //         style: AppTextStyle.subtitle1,
-          //       ),
-          //       // CustomButton.textButton(
-          //       //     onTap: () {
-          //       //       context.read<NavigationProvider>().navigateToPage(
-          //       //             context,
-          //       //             SearchPage(
-          //       //               id_category: '',
-          //       //               nama_category: '',
-          //       //               search: "",
-          //       //             ),
-          //       //             targetTabIndex: 0,
-          //       //             targetPage: "SearchPage",
-          //       //             hrsLogin: false,
-          //       //           );
-          //       //     },
-          //       //     text: "Lihat Semua"),
-          //     ],
-          //   ),
-          // ),
-
-          const SizedBox(height: 15),
-
-          // ===== Kondisi Loading =====
-          if (isLoadingPorto)
+    // ===== Kondisi Loading =====
+    if (isLoadingPorto) {
+      return SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 15),
             ...List.generate(5, (index) => _buildShimmerCard()),
+          ],
+        ),
+      );
+    }
 
-          // ===== Kondisi Error =====
-          if (!isLoadingPorto && error != null)
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Gagal memuat portofolio',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      error.toString(),
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => context
-                          .read<PortofolioProvider>()
-                          .loadPortofolio(context),
-                      child: const Text('Coba Lagi'),
-                    ),
-                  ],
+    // ===== Kondisi Error =====
+    if (error != null) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Center(
+            child: Column(
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 12),
+                const Text(
+                  'Gagal memuat portofolio',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              ),
-            ),
-
-          // ===== Kondisi Kosong =====
-          if (!isLoadingPorto && error == null && portofolioList.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.photo_library_outlined,
-                        size: 48, color: Colors.grey),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Belum ada portofolio',
-                      style: AppTextStyle.body1,
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: const TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () =>
+                      context.read<PortofolioProvider>().loadPortofolio(context),
+                  child: const Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ===== Kondisi Kosong =====
+    if (portofolioList.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Center(
+            child: Column(
+              children: [
+                const Icon(Icons.photo_library_outlined,
+                    size: 48, color: Colors.grey),
+                const SizedBox(height: 12),
+                const Text('Belum ada portofolio', style: AppTextStyle.body1),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ===== Daftar Portofolio — SliverList proper, tanpa shrinkWrap =====
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          try {
+            final p = portofolioList[index];
+            final String? mediaUrl = _getMediaUrl(p);
+            return PortofolioCard(
+              portofolio: p,
+              photographerIcon: p.idMediaVendor ?? '',
+              imageUrl: mediaUrl,
+              name: p.usernameVendor ?? "",
+              rating: p.ratingVendor,
+              noId: p.noId,
+              idVendor: p.idVendor,
+            );
+          } catch (e, stackTrace) {
+            debugPrint(
+                "[PortofolioSection] ❌ Error rendering item $index: $e");
+            debugPrint("[PortofolioSection] Stack: $stackTrace");
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade200),
               ),
-            ),
-
-          // ===== Daftar Portofolio =====
-          if (!isLoadingPorto && error == null && portofolioList.isNotEmpty)
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: portofolioList.length,
-              itemBuilder: (context, index) {
-                try {
-                  final p = portofolioList[index];
-
-                  // ✅ FIXED: Safely get media URL
-                  final String? mediaUrl = _getMediaUrl(p);
-                  return PortofolioCard(
-                    portofolio: p,
-                    photographerIcon: p.idMediaVendor ?? '',
-                    imageUrl:
-                        mediaUrl, // Bisa null, PortofolioCard harus handle ini
-                    name: p.usernameVendor ?? "",
-                    rating: p.ratingVendor,
-                    noId: p.noId,
-                    idVendor: p.idVendor,
-                  );
-                } catch (e, stackTrace) {
-                  // ✅ Catch error untuk single item, jangan crash seluruh list
-                  debugPrint(
-                      "[PortofolioSection] ❌ Error rendering item $index: $e");
-                  debugPrint("[PortofolioSection] Stack: $stackTrace");
-
-                  // Return error card untuk item yang bermasalah
-                  return Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Error memuat item portofolio',
+                      style: TextStyle(color: Colors.red.shade700),
                     ),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline, color: Colors.red),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Error memuat item portofolio',
-                            style: TextStyle(color: Colors.red.shade700),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-            ),
-        ],
+                  ),
+                ],
+              ),
+            );
+          }
+        },
+        childCount: portofolioList.length,
       ),
     );
   }

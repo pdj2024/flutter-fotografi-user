@@ -266,11 +266,10 @@ class _FilterOverlayState extends State<FilterOverlay>
   Future<void> fetchPhotographersFromApi(String? noId, String? query) async {
     setState(() => isPhotographerLoading = true);
     try {
-      final res = await VendorService().getAll(
+      final res = await VendorService().searchVendor(
         orderBy: 'username',
         status: 'aktif',
-        username: query,
-        namaDisplay: query,
+        filter: query,
         no_id: noId,
       );
       final list = res

@@ -165,7 +165,7 @@ class _PortofolioAccountSectionState extends State<PortofolioAccountSection>
                 ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 50)),
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         );
       },

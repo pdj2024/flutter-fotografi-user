@@ -1417,7 +1417,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildPaymentSummary(PesananModel pesanan) {
-    final isPaid = pesanan.statusBayar == 'settlement';
+    final isPaid =
+        pesanan.statusBayar == 'settlement' || pesanan.statusBayar == 'capture';
     // ✅ Warna dari getStatus — bukan hardcode Colors.green / Colors.orange
     final payColor =
         isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
@@ -1505,7 +1506,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           'Subtotal',
           Helper.formatCurrency(pesanan.subtotal - adminFee),
         ),
-        
+
         if (!isInclPpn) const SizedBox(height: 6),
 
         // ── Keterangan PPN (include) ─────────────────────

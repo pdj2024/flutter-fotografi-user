@@ -244,13 +244,14 @@ class _WebviewPageState extends State<WebviewPage>
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
           if (mounted) setState(() => _isLoading = true);
-          if (_isPaymentMode) _checkSnapCallbackUrl(url);
         },
         onPageFinished: (url) {
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) setState(() => _isLoading = false);
           });
-          if (_isPaymentMode) _checkSnapCallbackUrl(url);
+          if (_isPaymentMode) {
+            _checkSnapCallbackUrl(url);
+          }
         },
         onHttpError: (err) {
           if (mounted) {

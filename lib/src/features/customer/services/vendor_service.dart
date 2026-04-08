@@ -57,6 +57,7 @@ class VendorService {
 
   Future<List<VendorModel>> searchVendor({
     String? no_id,
+    String? filter,
     String? namaDisplay,
     String? username,
     String? id_media,
@@ -69,8 +70,7 @@ class VendorService {
         '/$controller/getAll/search',
         queryParameters: {
           if (no_id != null) 'no_id': no_id,
-          if (namaDisplay != null) 'Nama_Display': namaDisplay,
-          if (username != null) 'username': username,
+          if (filter != null) 'filter': filter,
           if (id_media != null) 'id_media': id_media,
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
