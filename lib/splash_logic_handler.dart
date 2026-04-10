@@ -159,12 +159,21 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
         ]);
         debugPrint('✅ ChatProvider + FCM token ready');
 
-        // 4️⃣ Master data (background, non-blocking)
-        _updateMessage('Memuat data...');
+        // 4️⃣ Load liked/saved dari Hive dulu sebelum navigasi (fast, no network)
+        _updateMessage('Memuat data tersimpan...');
+        final portoProvider = context.read<PortofolioProvider>();
+        await Future.wait([
+          portoProvider.loadLikedPortofolio(
+              context: context, syncFromApi: false),
+          portoProvider.loadSavedPortofolio(
+              context: context, syncFromApi: false),
+        ]);
+        debugPrint('✅ Local liked/saved loaded');
+
+        // 5️⃣ Background: API sync + master data (non-blocking)
         Future.microtask(() async {
           if (!mounted) return;
           try {
-            final portoProvider = context.read<PortofolioProvider>();
             await Future.wait([
               portoProvider.loadLikedPortofolio(
                   context: context, syncFromApi: true),
@@ -173,9 +182,9 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
               context.read<KotaProvider>().getAllKotaList(),
               context.read<KategoriProvider>().loadKategori(),
             ]);
-            debugPrint('✅ Master data loaded');
+            debugPrint('✅ Master data synced');
           } catch (e) {
-            debugPrint('⚠️ Master data error: $e');
+            debugPrint('⚠️ Master data sync error: $e');
           }
         });
       } else {

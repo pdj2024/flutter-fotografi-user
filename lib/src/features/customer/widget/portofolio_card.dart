@@ -42,27 +42,32 @@ class PortofolioCard extends StatefulWidget {
 }
 
 class _PortofolioCardState extends State<PortofolioCard> {
-  // ── Carousel ─────────────────────────────────────────────
   late final PageController _pageController;
   int _currentIndex = 0;
-
-  // ── Dynamic image height ──────────────────────────────────
-  double? _imageHeight;
-  bool _isImageLoaded = false;
-
-  // ── Caption ──────────────────────────────────────────────
   bool _isCaptionExpanded = false;
-  bool _captionHasOverflow = true;
-  static const int _captionMaxLines = 2;
+
+  // Aspect ratio ditentukan dari gambar pertama portofolio.
+  // Cache global (per URL) agar tidak re-resolve saat card di-scroll ulang.
+  static final Map<String, double> _ratioCache = {};
+  static const double _defaultRatio = 4 / 3;
+  double? _resolvedRatio;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _measureCaption();
-    });
+
+    // Baca cache secara SINKRON — tidak perlu setState, tidak ganggu animasi.
+    // Async resolve hanya dipanggil jika URL belum pernah dilihat sebelumnya.
+    final media = _validMedia;
+    if (media.isNotEmpty) {
+      final url = media[0].idMedia!;
+      if (_ratioCache.containsKey(url)) {
+        _resolvedRatio = _ratioCache[url]; // langsung, tanpa setState
+      } else {
+        _resolveAspectRatioAsync(url);     // async hanya untuk URL baru
+      }
+    }
   }
 
   @override
@@ -71,25 +76,37 @@ class _PortofolioCardState extends State<PortofolioCard> {
     super.dispose();
   }
 
-  // ── Caption helpers ───────────────────────────────────────
+  /// Hanya dipanggil untuk URL yang belum pernah dilihat (tidak ada di cache).
+  /// setState dipanggil tepat sekali per URL baru — tidak pernah saat scroll
+  /// atau saat animasi refresh SmartRefresher sedang berjalan.
+  Future<void> _resolveAspectRatioAsync(String url) async {
+    try {
+      final provider = CachedNetworkImageProvider(url);
+      final stream = provider.resolve(const ImageConfiguration());
+      final completer = Completer<double>();
 
-  void _measureCaption() {
-    final caption = _plainCaption;
-    if (caption == null || caption.isEmpty) return;
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (ImageInfo info, bool _) {
+          final ratio = info.image.width / info.image.height;
+          _ratioCache[url] = ratio;
+          if (!completer.isCompleted) completer.complete(ratio);
+          stream.removeListener(listener);
+        },
+        onError: (_, __) {
+          if (!completer.isCompleted) completer.complete(_defaultRatio);
+          stream.removeListener(listener);
+        },
+      );
 
-    final maxWidth = MediaQuery.of(context).size.width - 40;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: caption,
-        style:
-            const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
-      ),
-      maxLines: _captionMaxLines,
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: maxWidth);
+      stream.addListener(listener);
 
-    if (tp.didExceedMaxLines != _captionHasOverflow) {
-      if (mounted) setState(() => _captionHasOverflow = tp.didExceedMaxLines);
+      final ratio = await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () => _defaultRatio);
+
+      if (mounted) setState(() => _resolvedRatio = ratio);
+    } catch (_) {
+      if (mounted) setState(() => _resolvedRatio = _defaultRatio);
     }
   }
 
@@ -99,61 +116,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
     return c.replaceAll(RegExp(r'<[^>]*>'), '').trim();
   }
 
-  // ── Image dimension detection ─────────────────────────────
-
-  Future<void> _loadImageDimensions(ImageProvider imageProvider) async {
-    if (!mounted || _isImageLoaded) return;
-
-    final stream = imageProvider.resolve(const ImageConfiguration());
-    final completer = Completer<void>();
-    late ImageStreamListener listener;
-
-    listener = ImageStreamListener(
-      (ImageInfo info, bool _) {
-        if (!mounted) return;
-        final screenWidth = MediaQuery.of(context).size.width;
-        final ar = info.image.width / info.image.height;
-        setState(() {
-          _imageHeight = screenWidth / ar;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        if (!completer.isCompleted) completer.complete();
-      },
-      onError: (_, __) {
-        if (!mounted) return;
-        setState(() {
-          _imageHeight = 300;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        if (!completer.isCompleted) completer.complete();
-      },
-    );
-
-    stream.addListener(listener);
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!completer.isCompleted && mounted) {
-        setState(() {
-          _imageHeight = 300;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        completer.complete();
-      }
-    });
-  }
-
-  // ── Media helpers ─────────────────────────────────────────
-
   List<MediaUrlModel> get _validMedia => widget.portofolio.mediaUrls
       .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
       .toList();
-
-  // ═══════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -191,19 +156,22 @@ class _PortofolioCardState extends State<PortofolioCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Gambar carousel ──────────────────────────────
+            // ── Gambar carousel ───────────────────────────────────────
+            // Ratio dikunci ke gambar pertama portofolio (bukan per-gambar).
+            // Saat ratio belum resolve: pakai defaultRatio (4:3) sebagai placeholder.
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: SizedBox(
-                width: double.infinity,
-                height: _imageHeight ?? 300,
+              child: AspectRatio(
+                aspectRatio: _resolvedRatio ?? _defaultRatio,
                 child: Stack(
                   children: [
                     PageView.builder(
                       controller: _pageController,
                       itemCount: media.isEmpty ? 1 : media.length,
-                      physics: const ClampingScrollPhysics(),
+                      // PageScrollPhysics: horizontal swipe ke PageView,
+                      // vertical drag diteruskan ke parent ListView tanpa konflik
+                      physics: const PageScrollPhysics(),
                       onPageChanged: (index) =>
                           setState(() => _currentIndex = index),
                       itemBuilder: (context, index) {
@@ -222,13 +190,13 @@ class _PortofolioCardState extends State<PortofolioCard> {
               ),
             ),
 
-            // ── Dot indicator ────────────────────────────────
+            // ── Dot indicator ──────────────────────────────────────────
             if (media.length > 1) ...[
               const SizedBox(height: 8),
               Center(child: _buildDotIndicator(media.length)),
             ],
 
-            // ── Like / Save row ───────────────────────────────
+            // ── Like / Save row ────────────────────────────────────────
             Selector<PortofolioProvider, _LikeSaveState>(
               selector: (_, provider) => _LikeSaveState(
                 isLiked: provider.isLiked(porto.noId),
@@ -278,13 +246,15 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
-                                          widget.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
+                                        Flexible(
+                                          child: Text(
+                                            widget.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 16,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         if (widget.rating != null &&
                                             widget.rating! > 0) ...[
@@ -306,15 +276,17 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
-                                        Text(
-                                          Helper.formatTanggal(
-                                              widget.portofolio.lastUpdated ??
-                                                  widget.portofolio.tglCreated),
-                                          style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 12,
+                                        Flexible(
+                                          child: Text(
+                                            Helper.formatTanggal(
+                                                widget.portofolio.lastUpdated ??
+                                                    widget.portofolio.tglCreated),
+                                            style: const TextStyle(
+                                              color: Colors.black54,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         Container(
                                           margin: const EdgeInsets.symmetric(
@@ -326,13 +298,15 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                             shape: BoxShape.circle,
                                           ),
                                         ),
-                                        Text(
-                                          widget.portofolio.namaKategori!,
-                                          style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 12,
+                                        Flexible(
+                                          child: Text(
+                                            widget.portofolio.namaKategori ?? '',
+                                            style: const TextStyle(
+                                              color: Colors.black54,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ],
                                     ),
@@ -386,7 +360,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
               },
             ),
 
-            // ── Caption ────────────────────────────────────────
+            // ── Caption ────────────────────────────────────────────────
             if (caption != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -415,7 +389,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
                           ),
                           "b": Style(fontWeight: FontWeight.bold),
                           "i": Style(fontStyle: FontStyle.italic),
-                          "u": Style(textDecoration: TextDecoration.underline),
+                          "u": Style(
+                              textDecoration: TextDecoration.underline),
                           "a": Style(
                             color: Colors.blue,
                             textDecoration: TextDecoration.none,
@@ -429,38 +404,36 @@ class _PortofolioCardState extends State<PortofolioCard> {
                         },
                       ),
                     ),
-                    if (_captionHasOverflow) ...[
-                      const SizedBox(height: 2),
-                      GestureDetector(
-                        onTap: () => setState(
-                            () => _isCaptionExpanded = !_isCaptionExpanded),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _isCaptionExpanded
-                                  ? 'Lebih sedikit'
-                                  : 'Selengkapnya',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade500,
-                              ),
+                    const SizedBox(height: 2),
+                    GestureDetector(
+                      onTap: () => setState(
+                          () => _isCaptionExpanded = !_isCaptionExpanded),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _isCaptionExpanded
+                                ? 'Lebih sedikit'
+                                : 'Selengkapnya',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade500,
                             ),
-                            const SizedBox(width: 2),
-                            AnimatedRotation(
-                              turns: _isCaptionExpanded ? 0.5 : 0,
-                              duration: const Duration(milliseconds: 220),
-                              child: Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 15,
-                                color: Colors.grey.shade500,
-                              ),
+                          ),
+                          const SizedBox(width: 2),
+                          AnimatedRotation(
+                            turns: _isCaptionExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 220),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 15,
+                              color: Colors.grey.shade500,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -473,38 +446,21 @@ class _PortofolioCardState extends State<PortofolioCard> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // IMAGE ITEM
-  // ═══════════════════════════════════════════════════════════
+  // ── Image item ────────────────────────────────────────────────────────
 
   Widget _buildImageItem(MediaUrlModel media) {
     return CachedNetworkImage(
       imageUrl: media.idMedia!,
       fit: BoxFit.cover,
       width: double.infinity,
-      placeholder: (_, __) => _buildShimmerPlaceholder(),
-      errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
       memCacheWidth: 1080,
       maxWidthDiskCache: 1080,
-      imageBuilder: (context, imageProvider) {
-        if (!_isImageLoaded) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _loadImageDimensions(imageProvider);
-          });
-        }
-        return Image(
-          image: imageProvider,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: _imageHeight,
-        );
-      },
+      placeholder: (_, __) => const _ImageShimmer(),
+      errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // INDICATOR & BADGE
-  // ═══════════════════════════════════════════════════════════
+  // ── Indicators ────────────────────────────────────────────────────────
 
   Widget _buildDotIndicator(int count) {
     return Row(
@@ -519,7 +475,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
           height: 6,
           width: isActive ? 20 : 6,
           decoration: BoxDecoration(
-            color: isActive ? Constants.primaryColor : Colors.grey.shade300,
+            color:
+                isActive ? Constants.primaryColor : Colors.grey.shade300,
             borderRadius: BorderRadius.circular(3),
           ),
         );
@@ -553,18 +510,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // PLACEHOLDER WIDGETS
-  // ═══════════════════════════════════════════════════════════
-
-  Widget _buildShimmerPlaceholder() => ShimmerPlaceholder(
-        width: double.infinity,
-        height: _imageHeight ?? 300,
-      );
+  // ── Placeholders ──────────────────────────────────────────────────────
 
   Widget _buildErrorPlaceholder() => Container(
-        width: double.infinity,
-        height: _imageHeight ?? 300,
         color: Colors.grey.shade100,
         child: Center(
           child: Icon(Icons.broken_image_outlined,
@@ -573,8 +521,6 @@ class _PortofolioCardState extends State<PortofolioCard> {
       );
 
   Widget _buildNoImagePlaceholder() => Container(
-        width: double.infinity,
-        height: 300,
         color: Colors.grey.shade200,
         child: Center(
           child: Icon(Icons.image_not_supported_outlined,
@@ -589,9 +535,23 @@ class _PortofolioCardState extends State<PortofolioCard> {
       );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ── Image shimmer (stateless, tidak perlu setState) ───────────────────────
+
+class _ImageShimmer extends StatelessWidget {
+  const _ImageShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ShimmerPlaceholder(
+      width: double.infinity,
+      height: double.infinity,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // STATE MODEL untuk Selector
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 
 class _LikeSaveState {
   final bool isLiked;
@@ -619,9 +579,9 @@ class _LikeSaveState {
       Object.hash(isLiked, isSaved, isLikeInProgress, isSaveInProgress);
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 // ACTION BUTTON
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 
 class _ActionButton extends StatelessWidget {
   final IconData icon;
