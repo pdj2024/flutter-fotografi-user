@@ -12,7 +12,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "app.pacificdatajaya.fotograficustomer"
-    compileSdk = 36 // Bagus, tetap gunakan 35 atau 36
+    compileSdk = 36
+    ndkVersion = "30.0.14904198"
 
     // 2. Tambahkan blok signingConfigs agar aplikasi punya "tanda tangan" resmi
     signingConfigs {
@@ -40,6 +41,12 @@ android {
         targetSdk 35
         versionCode flutter.versionCode
         versionName flutter.versionName
+        ndk {
+            // Exclude x86_64: libisar.so for x86_64 is broken (missing DT_HASH) and
+            // does not meet the 16 KB memory page size requirement from Google Play.
+            // Real Android devices use arm64-v8a; armeabi-v7a covers older 32-bit devices.
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
     }
 
     buildTypes {
@@ -54,6 +61,13 @@ android {
     }
 
     packagingOptions {
+        jniLibs {
+            // Load .so directly from APK/AAB (no extraction).
+            // AGP 8.5+ uses this to align JNI libs to 16 KB in the ZIP,
+            // satisfying Google Play's 16 KB memory page size requirement.
+            useLegacyPackaging = false
+        }
+
         exclude 'META-INF/DEPENDENCIES'
         exclude 'META-INF/LICENSE'
         exclude 'META-INF/LICENSE.txt'

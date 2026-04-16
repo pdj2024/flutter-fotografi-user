@@ -10,7 +10,6 @@ import 'package:mpjnew/src/features/auth/view/user_login.dart';
 import 'package:mpjnew/src/features/customer/services/portofolio_service.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/paket_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 
 class PortofolioProvider with ChangeNotifier {

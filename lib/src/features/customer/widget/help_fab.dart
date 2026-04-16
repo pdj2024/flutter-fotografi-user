@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HelpFab extends StatefulWidget {
@@ -250,13 +251,16 @@ class _AnimatedFabState extends State<_AnimatedFab>
               ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                child: Icon(
-                  widget.isOpen ? Icons.close_rounded : Icons.chat_rounded,
+                child: FaIcon(
+                  widget.isOpen
+                      ? FontAwesomeIcons.xmark
+                      : FontAwesomeIcons.whatsapp,
                   key: ValueKey(widget.isOpen),
                   color: widget.isOpen
                       ? Colors.grey.shade700
                       : const Color(0xFF25D366),
                   size: 24,
+                  weight: 2,
                 ),
               ),
             ),

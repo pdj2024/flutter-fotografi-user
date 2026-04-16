@@ -80,9 +80,10 @@ class PortofolioLocalService {
 
     try {
       final existing = _likedBox!.get(portfolio.noId);
-      final toSave = existing != null
-          ? _mergeMedia(portfolio, existing)
-          : portfolio;
+      final toSave = (existing != null
+              ? _mergeMedia(portfolio, existing)
+              : portfolio)
+          .copyWith(likedAt: DateTime.now());
 
       await _likedBox!.put(portfolio.noId, toSave);
       debugPrint('[CustomerPortoLocal] ❤️  saveLiked: ${portfolio.noId}');
@@ -126,9 +127,10 @@ class PortofolioLocalService {
 
     try {
       final existing = _savedBox!.get(portfolio.noId);
-      final toSave = existing != null
-          ? _mergeMedia(portfolio, existing)
-          : portfolio;
+      final toSave = (existing != null
+              ? _mergeMedia(portfolio, existing)
+              : portfolio)
+          .copyWith(savedAt: DateTime.now());
 
       await _savedBox!.put(portfolio.noId, toSave);
       debugPrint('[CustomerPortoLocal] 🔖 saveSaved: ${portfolio.noId}');
@@ -165,7 +167,8 @@ class PortofolioLocalService {
     await _ensureReady();
     try {
       return _likedBox!.values.toList()
-        ..sort((a, b) => b.tglCreated.compareTo(a.tglCreated));
+        ..sort((a, b) =>
+            (b.likedAt ?? b.tglCreated).compareTo(a.likedAt ?? a.tglCreated));
     } catch (e) {
       debugPrint('❌ [CustomerPortoLocal] getLiked: $e');
       return [];
@@ -176,7 +179,8 @@ class PortofolioLocalService {
     await _ensureReady();
     try {
       return _savedBox!.values.toList()
-        ..sort((a, b) => b.tglCreated.compareTo(a.tglCreated));
+        ..sort((a, b) =>
+            (b.savedAt ?? b.tglCreated).compareTo(a.savedAt ?? a.tglCreated));
     } catch (e) {
       debugPrint('❌ [CustomerPortoLocal] getSaved: $e');
       return [];
@@ -244,6 +248,7 @@ class PortofolioLocalService {
 
   /// Sync liked list dari API.
   /// Porto yang tidak ada di API → dihapus dari lokal.
+  /// likedAt di-assign berdasarkan posisi di API (index 0 = paling baru liked).
   Future<void> syncLiked(List<PortofolioModel> apiList) async {
     await _ensureReady();
     debugPrint('[CustomerPortoLocal] 🔄 syncLiked (${apiList.length})');
@@ -255,15 +260,25 @@ class PortofolioLocalService {
     for (final id in localIds.difference(apiIds)) {
       await removeLiked(id);
     }
-    // Tambah / update
-    for (final porto in apiList) {
-      await saveLiked(porto);
+
+    // Simpan dengan likedAt berdasarkan posisi API
+    // API urut dari terlama → terbaru, jadi index terakhir = paling baru liked
+    final baseTime = DateTime.now();
+    final total = apiList.length;
+    for (int i = 0; i < total; i++) {
+      final existing = _likedBox!.get(apiList[i].noId);
+      final porto = (existing != null
+              ? _mergeMedia(apiList[i], existing)
+              : apiList[i])
+          .copyWith(likedAt: baseTime.subtract(Duration(seconds: total - 1 - i)));
+      await _likedBox!.put(porto.noId, porto);
     }
 
     debugPrint('[CustomerPortoLocal] ✅ syncLiked done');
   }
 
   /// Sync saved list dari API.
+  /// savedAt di-assign berdasarkan posisi di API (index 0 = paling baru saved).
   Future<void> syncSaved(List<PortofolioModel> apiList) async {
     await _ensureReady();
     debugPrint('[CustomerPortoLocal] 🔄 syncSaved (${apiList.length})');
@@ -274,8 +289,18 @@ class PortofolioLocalService {
     for (final id in localIds.difference(apiIds)) {
       await removeSaved(id);
     }
-    for (final porto in apiList) {
-      await saveSaved(porto);
+
+    // Simpan dengan savedAt berdasarkan posisi API
+    // API urut dari terlama → terbaru, jadi index terakhir = paling baru saved
+    final baseTime = DateTime.now();
+    final total = apiList.length;
+    for (int i = 0; i < total; i++) {
+      final existing = _savedBox!.get(apiList[i].noId);
+      final porto = (existing != null
+              ? _mergeMedia(apiList[i], existing)
+              : apiList[i])
+          .copyWith(savedAt: baseTime.subtract(Duration(seconds: total - 1 - i)));
+      await _savedBox!.put(porto.noId, porto);
     }
 
     debugPrint('[CustomerPortoLocal] ✅ syncSaved done');

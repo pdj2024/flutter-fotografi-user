@@ -107,6 +107,12 @@ class PortofolioModel extends Equatable {
   @HiveField(30)
   final DateTime? lastSynced;
 
+  @HiveField(31)
+  final DateTime? likedAt;   // kapan user like portfolio ini (untuk sorting)
+
+  @HiveField(32)
+  final DateTime? savedAt;   // kapan user save portfolio ini (untuk sorting)
+
   const PortofolioModel({
     required this.noId,
     required this.idVendor,
@@ -139,6 +145,8 @@ class PortofolioModel extends Equatable {
     required this.mediaUrls,
     this.lastUpdated,
     this.lastSynced,
+    this.likedAt,
+    this.savedAt,
   });
 
   @override
@@ -174,6 +182,8 @@ class PortofolioModel extends Equatable {
         mediaUrls,
         lastUpdated,
         lastSynced,
+        likedAt,
+        savedAt,
       ];
 
   // =====================================
@@ -451,6 +461,8 @@ class PortofolioModel extends Equatable {
     List<MediaUrlModel>? mediaUrls,
     DateTime? lastUpdated,
     DateTime? lastSynced,
+    DateTime? likedAt,
+    DateTime? savedAt,
   }) {
     return PortofolioModel(
       noId: noId ?? this.noId,
@@ -484,6 +496,8 @@ class PortofolioModel extends Equatable {
       mediaUrls: mediaUrls ?? this.mediaUrls,
       lastUpdated: lastUpdated ?? this.lastUpdated,
       lastSynced: lastSynced ?? this.lastSynced,
+      likedAt: likedAt ?? this.likedAt,
+      savedAt: savedAt ?? this.savedAt,
     );
   }
 

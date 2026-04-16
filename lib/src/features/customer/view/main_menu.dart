@@ -63,12 +63,15 @@ class _MainMenuState extends State<MainMenu> {
                 _buildOffstageNavigator(3, (_) => const CustomerAccountPage()),
                 Consumer<NavigationProvider>(
                   builder: (context, nav, _) {
-                    final hideOn = [1]; // sembunyikan di tab Chat & Profile
-                    if (hideOn.contains(nav.selectedIndex)) {
+                    final isHiddenTab = nav.selectedIndex == 1;
+                    final isNestedPage = !nav.isBottomNavVisible;
+
+                    if (isHiddenTab || isNestedPage) {
                       return const SizedBox.shrink();
                     }
+
                     return const Positioned(
-                      bottom: 20, // di atas bottom nav
+                      bottom: 20,
                       right: 16,
                       child: HelpFab(),
                     );

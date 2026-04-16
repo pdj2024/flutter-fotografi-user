@@ -21,7 +21,8 @@
         android:theme="@style/Theme.AppCompat.Light.NoActionBar"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
-        tools:replace="android:label,android:usesCleartextTraffic">
+        android:extractNativeLibs="false"
+        tools:replace="android:label,android:usesCleartextTraffic,android:extractNativeLibs">
 
         <receiver
             android:exported="false"

@@ -1,15 +1,11 @@
-import 'package:isar/isar.dart';
+import 'dart:convert';
+
 import 'package:mpjnew/src/data/models/room_chat_model.dart';
 
-part 'room_chat_entity.g.dart';
-
-@collection
 class RoomChatEntity {
-  Id id = Isar.autoIncrement;
+  int id = 0;
 
-  @Index(unique: true, replace: true)
   late String roomId;
-
   late String roomType;
 
   String? usernameLawan;
@@ -32,23 +28,18 @@ class RoomChatEntity {
   // HELPER GETTERS
   // =========================================
 
-  @ignore
   bool get hasUnread => countStatusReceived > 0;
 
-  @ignore
   int get actualUnreadCount => countStatusReceived;
 
-  @ignore
   String get displayName => usernameLawan ?? 'Unknown';
 
-  @ignore
   String get previewMessage {
     if (lastMessage.isEmpty) return 'Belum ada pesan';
     if (lastMessage.length > 50) return '${lastMessage.substring(0, 50)}...';
     return lastMessage;
   }
 
-  @ignore
   String getPartnerId(String currentUserId) {
     if (userIds.length != 2) return '';
     return userIds.firstWhere(
@@ -82,6 +73,55 @@ class RoomChatEntity {
   }
 
   // =========================================
+  // SQFLITE SERIALIZATION
+  // =========================================
+
+  Map<String, dynamic> toMap() => {
+        'room_id': roomId,
+        'room_type': roomType,
+        'username_lawan': usernameLawan,
+        'id_lawan': idLawan,
+        'id_media_lawan': idMediaLawan,
+        'tipe_user_lawan': tipeUserLawan,
+        'last_message_at': lastMessageAt.millisecondsSinceEpoch,
+        'last_message': lastMessage,
+        'unread': unread,
+        'user_ids': jsonEncode(userIds),
+        'count_status_sent': countStatusSent,
+        'list_id_message_sent': jsonEncode(listIdMessageSent),
+        'count_status_received': countStatusReceived,
+        'list_id_message_received': jsonEncode(listIdMessageReceived),
+      };
+
+  factory RoomChatEntity.fromMap(Map<String, dynamic> map) {
+    return RoomChatEntity()
+      ..id = (map['id'] as int?) ?? 0
+      ..roomId = map['room_id'] as String
+      ..roomType = map['room_type'] as String
+      ..usernameLawan = map['username_lawan'] as String?
+      ..idLawan = map['id_lawan'] as String
+      ..idMediaLawan = map['id_media_lawan'] as String?
+      ..tipeUserLawan = map['tipe_user_lawan'] as String?
+      ..lastMessageAt = DateTime.fromMillisecondsSinceEpoch(
+          map['last_message_at'] as int)
+      ..lastMessage = map['last_message'] as String
+      ..unread = (map['unread'] as int?) ?? 0
+      ..userIds = map['user_ids'] != null
+          ? List<String>.from(jsonDecode(map['user_ids'] as String))
+          : []
+      ..countStatusSent = (map['count_status_sent'] as int?) ?? 0
+      ..listIdMessageSent = map['list_id_message_sent'] != null
+          ? List<String>.from(
+              jsonDecode(map['list_id_message_sent'] as String))
+          : []
+      ..countStatusReceived = (map['count_status_received'] as int?) ?? 0
+      ..listIdMessageReceived = map['list_id_message_received'] != null
+          ? List<String>.from(
+              jsonDecode(map['list_id_message_received'] as String))
+          : [];
+  }
+
+  // =========================================
   // CONVERTERS
   // =========================================
 
@@ -105,24 +145,13 @@ class RoomChatEntity {
     );
   }
 
-  /// ✅ FIX: copyWith support semua field.
-  ///
-  /// Field yang ditambahkan vs versi lama:
-  ///   - usernameLawan, idMediaLawan: untuk update nama/avatar dari API
-  ///   - userIds, idLawan, roomType, tipeUserLawan: data lengkap dari API
-  ///
-  /// Diperlukan saat drainPendingRoomFetch update minimal room
-  /// (yang hanya punya roomId + idLawan + preview dari FCM)
-  /// dengan data lengkap dari API response.
   RoomChatEntity copyWith({
-    // Field dari API (sebelumnya tidak ada di copyWith)
     String? roomType,
     String? usernameLawan,
     String? idLawan,
     String? idMediaLawan,
     String? tipeUserLawan,
     List<String>? userIds,
-    // Field yang sudah ada sebelumnya
     String? lastMessage,
     DateTime? lastMessageAt,
     int? unread,

@@ -7,33 +7,9 @@ import 'package:mpjnew/src/core/services/default_value_service.dart';
 import 'package:mpjnew/src/data/models/default_value_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// ═══════════════════════════════════════════════════════════════
-// VERSION CHECK SERVICE
-//
-// Membandingkan versi lokal (Constants) dengan versi dari server.
-//
-// Format Version_App dari server: "customer_ver, vendor_ver"
-//   → ambil index 0 untuk customer app
-//
-// Logika komparasi (Semantic Versioning — MAJOR.MINOR.PATCH):
-//   - Parse tiap segment menjadi int
-//   - Bandingkan MAJOR dulu, lalu MINOR, lalu PATCH
-//   - Jika server > lokal → tidak kompatibel → harus update
-//
-// Contoh:
-//   lokal  = "1.0.0"
-//   server = "1.1.0"  → tidak kompatibel (server lebih baru)
-//   server = "1.0.0"  → kompatibel
-//   server = "0.9.0"  → kompatibel (lokal lebih baru)
-// ═══════════════════════════════════════════════════════════════
-
 class VersionCheckService {
   final DefaultValueService _defaultValueService = DefaultValueService();
 
-  // ── Cek semua versi ──────────────────────────────────────────
-
-  /// Fetch versi dari server dan cek kompatibilitas.
-  /// Mengembalikan [VersionCheckResult] berisi detail ketidakcocokan (jika ada).
   Future<VersionCheckResult> checkVersion() async {
     try {
       final serverVersion = await _defaultValueService.getVersionApp();
@@ -47,16 +23,14 @@ class VersionCheckService {
 
   /// Bandingkan versi lokal dengan versi server.
   VersionCheckResult _compare(VersionModel server) {
-    // ── Version_App: "customer_ver, vendor_ver" ──────────────
-    // Ambil bagian pertama (customer)
-    final appVersionRaw = server.versionApp;
-    final appParts = appVersionRaw.split(',');
-    final serverAppVersion = appParts.first.trim();
+    // Gunakan Version_App_Customer (field khusus customer)
+    final serverAppVersion = server.versionAppCustomer.trim();
 
     final incompatibilities = <_VersionMismatch>[];
 
-    // Cek Version_App
-    if (_isServerNewer(Constants.versionApp, serverAppVersion)) {
+    // Cek Version_App_Customer
+    if (serverAppVersion.isNotEmpty &&
+        _isServerNewer(Constants.versionApp, serverAppVersion)) {
       incompatibilities.add(_VersionMismatch(
         label: 'Versi Aplikasi',
         local: Constants.versionApp,
@@ -92,7 +66,10 @@ class VersionCheckService {
           '[VersionCheck] ⚠️ ${m.label} tidak kompatibel — lokal: ${m.local}, server: ${m.server}');
     }
 
-    return VersionCheckResult.incompatible(incompatibilities);
+    return VersionCheckResult.incompatible(
+      incompatibilities,
+      linkPlaystore: server.linkPlaystoreCustomer,
+    );
   }
 
   /// Kembalikan true jika versi server LEBIH BARU dari versi lokal.
@@ -145,17 +122,26 @@ class VersionCheckService {
 class VersionCheckResult {
   final bool isCompatible;
   final List<_VersionMismatch> mismatches;
+  final String linkPlaystore;
 
   const VersionCheckResult._({
     required this.isCompatible,
     required this.mismatches,
+    this.linkPlaystore = '',
   });
 
   factory VersionCheckResult.compatible() =>
       const VersionCheckResult._(isCompatible: true, mismatches: []);
 
-  factory VersionCheckResult.incompatible(List<_VersionMismatch> mismatches) =>
-      VersionCheckResult._(isCompatible: false, mismatches: mismatches);
+  factory VersionCheckResult.incompatible(
+    List<_VersionMismatch> mismatches, {
+    String linkPlaystore = '',
+  }) =>
+      VersionCheckResult._(
+        isCompatible: false,
+        mismatches: mismatches,
+        linkPlaystore: linkPlaystore,
+      );
 }
 
 class _VersionMismatch {
@@ -309,12 +295,15 @@ class _UpdateDialog extends StatelessWidget {
   }
 
   Future<void> _openPlayStore() async {
-    final uri = Uri.parse(Constants.playStoreUrl);
+    // Gunakan link dari server, fallback ke Constants jika kosong
+    final url = result.linkPlaystore.isNotEmpty
+        ? result.linkPlaystore
+        : Constants.playStoreUrl;
+    final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      debugPrint(
-          '[VersionCheck] Gagal buka Play Store: ${Constants.playStoreUrl}');
+      debugPrint('[VersionCheck] Gagal buka Play Store: $url');
     }
   }
 

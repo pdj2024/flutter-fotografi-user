@@ -29,13 +29,21 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     _scrollController.addListener(_onScroll);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Silent login restore — no-op untuk guest, tidak memblokir load data.
       await _loadCustomerId();
       if (!mounted) return;
-      final userId = context.read<UserProvider>().userId;
-      if (userId == null || userId.isEmpty) {
-        debugPrint("⚠️ Belum login, skip loadData()");
+
+      // Portofolio bersifat publik — guest pun boleh melihat feed.
+      // Cukup skip fetch jika data sudah di-pre-fetch saat splash.
+      // Pull-to-refresh (_onRefresh) tetap memanggil loadData() penuh.
+      final kategori = context.read<KategoriProvider>();
+      final porto = context.read<PortofolioProvider>();
+      if (kategori.kategoriList.isNotEmpty && porto.portofolioList.isNotEmpty) {
+        debugPrint(
+            "[HomePage] ✅ Data pre-loaded from splash, skip initial fetch");
         return;
       }
+
       await loadData();
     });
   }
@@ -198,6 +206,10 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: KategoriSection(),
+                    ),
+                    
+                    SizedBox(
+                      height: 5,
                     ),
 
                     // ── Portofolio ────────────────────────────────────

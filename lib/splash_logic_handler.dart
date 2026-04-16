@@ -136,6 +136,10 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
       final sessionRestored = await userProvider.restoreSession();
       if (!mounted) return;
 
+      // portoProvider dideklarasikan di luar blok auth agar bisa digunakan
+      // baik untuk user yang sudah login maupun guest.
+      final portoProvider = context.read<PortofolioProvider>();
+
       if (sessionRestored && userProvider.customer != null) {
         final customer = userProvider.customer!;
         debugPrint('✅ Session: ${customer.namaDisplay}');
@@ -159,9 +163,9 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
         ]);
         debugPrint('✅ ChatProvider + FCM token ready');
 
-        // 4️⃣ Load liked/saved dari Hive dulu sebelum navigasi (fast, no network)
+        // 4️⃣ Load liked/saved dari Hive dulu (fast, no network)
+        //    Harus sebelum loadPortofolio agar status like/save ter-merge.
         _updateMessage('Memuat data tersimpan...');
-        final portoProvider = context.read<PortofolioProvider>();
         await Future.wait([
           portoProvider.loadLikedPortofolio(
               context: context, syncFromApi: false),
@@ -169,8 +173,26 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
               context: context, syncFromApi: false),
         ]);
         debugPrint('✅ Local liked/saved loaded');
+      } else {
+        // Guest mode: hanya simpan role, tidak ada liked/saved
+        debugPrint('ℹ️ No session — guest mode');
+        await context.read<NavigationProvider>().saveRole(Constants.customer);
+        apiClient.setRole(Constants.customer);
+      }
 
-        // 5️⃣ Background: API sync + master data (non-blocking)
+      // 5️⃣ Pre-fetch konten halaman utama — untuk SEMUA user (termasuk guest).
+      //    Portofolio bersifat publik; tidak perlu login untuk melihat feed.
+      //    Logged-in: loadPortofolio sudah tahu userId & merge liked/saved dari Hive.
+      //    Guest     : userId null → API return data publik tanpa status like/save.
+      _updateMessage('Memuat konten...');
+      await Future.wait([
+        context.read<KategoriProvider>().loadKategori(),
+        portoProvider.loadPortofolio(context, preloadImages: true),
+      ]);
+      debugPrint('✅ Home page content pre-loaded');
+
+      // 6️⃣ Background: sync API liked/saved + kota — hanya untuk user login
+      if (sessionRestored && userProvider.customer != null) {
         Future.microtask(() async {
           if (!mounted) return;
           try {
@@ -180,17 +202,12 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
               portoProvider.loadSavedPortofolio(
                   context: context, syncFromApi: true),
               context.read<KotaProvider>().getAllKotaList(),
-              context.read<KategoriProvider>().loadKategori(),
             ]);
-            debugPrint('✅ Master data synced');
+            debugPrint('✅ Background sync complete');
           } catch (e) {
-            debugPrint('⚠️ Master data sync error: $e');
+            debugPrint('⚠️ Background sync error: $e');
           }
         });
-      } else {
-        debugPrint('ℹ️ No session — guest mode');
-        await context.read<NavigationProvider>().saveRole(Constants.customer);
-        apiClient.setRole(Constants.customer);
       }
 
       _updateMessage('Hampir selesai...');

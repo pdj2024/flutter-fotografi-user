@@ -30,6 +30,13 @@ class NavigationProvider with ChangeNotifier {
   bool _isBottomNavVisible = true;
   bool get isBottomNavVisible => _isBottomNavVisible;
 
+  /// Prevents handleLogout from running concurrently (double-tap / race condition).
+  bool _isLoggingOut = false;
+
+  /// Prevents UserLogin from being pushed twice on the root navigator.
+  /// Shared by handleLogout, onItemTapped, and navigateToPage.
+  bool _isShowingLoginPage = false;
+
   // 🔑 Storage keys
   static const String _keyStatusUser = 'status_user';
   static const String _keyRole = 'user_role';
@@ -156,6 +163,15 @@ class NavigationProvider with ChangeNotifier {
     BuildContext context, {
     bool showLoginPage = true,
   }) async {
+    // Guard: prevent concurrent / duplicate logout calls.
+    // This stops the double-UserLogin stack when two triggers fire at the same time
+    // (e.g. tab-auth-check race + explicit logout button).
+    if (_isLoggingOut) {
+      debugPrint("[handleLogout] ⚠️ Already logging out, skipping duplicate call");
+      return;
+    }
+    _isLoggingOut = true;
+
     debugPrint("[handleLogout] 🚪 Starting... showLoginPage=$showLoginPage");
 
     try {
@@ -202,46 +218,54 @@ class NavigationProvider with ChangeNotifier {
       debugPrint("[handleLogout] ✅ Logout complete");
 
       // ── 7. Arahkan ke UserLogin ────────────────────────────────────────
-      // Dilakukan setelah popAllToRoot() agar stack bersih.
-      // UserLogin ditampilkan dengan rootNavigator sehingga muncul
-      // di atas semua tab navigator — tidak terjebak di navigator tab tertentu.
-      if (showLoginPage && context.mounted) {
-        Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(
-            builder: (_) => const UserLogin(),
-            settings: const RouteSettings(
-              // targetPage kosong → UserLogin redirect ke home setelah login
-              arguments: {
-                'targetPage': 'Tab0',
-                'tabIndex': 0,
-              },
-            ),
-          ),
-        );
+      if (showLoginPage) {
+        _pushLoginPage(context);
         debugPrint("[handleLogout] ✅ Navigated to UserLogin");
       }
     } catch (e) {
       debugPrint("❌ [handleLogout] Error: $e");
       if (context.mounted) {
         popAllToRoot();
-        // Tetap coba arahkan ke login meskipun ada error
         if (showLoginPage) {
-          Navigator.of(context, rootNavigator: true).push(
-            MaterialPageRoute(
-              builder: (_) => const UserLogin(),
-              settings: const RouteSettings(
-                arguments: {'targetPage': 'Tab0', 'tabIndex': 0},
-              ),
-            ),
-          );
+          _pushLoginPage(context);
         }
       }
+    } finally {
+      _isLoggingOut = false;
     }
   }
 
   Future<bool> isAuthenticated() async {
     final token = await authService.getIdToken();
     return token != null && token.isNotEmpty;
+  }
+
+  /// Centralized helper to push UserLogin on the root navigator.
+  /// Guards against stacking multiple UserLogin pages simultaneously.
+  void _pushLoginPage(
+    BuildContext context, {
+    String targetPage = 'Tab0',
+    int tabIndex = 0,
+    String searchPageArg = '',
+    String? noIdPortofolio,
+    String? noIdVendor,
+  }) {
+    if (_isShowingLoginPage || !context.mounted) return;
+    _isShowingLoginPage = true;
+    Navigator.of(context, rootNavigator: true)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => const UserLogin(),
+            settings: RouteSettings(arguments: {
+              'targetPage': targetPage,
+              'tabIndex': tabIndex,
+              if (searchPageArg.isNotEmpty) 'searchPageArg': searchPageArg,
+              if (noIdPortofolio != null) 'noIdPortofolio': noIdPortofolio,
+              if (noIdVendor != null) 'noIdVendor': noIdVendor,
+            }),
+          ),
+        )
+        .then((_) => _isShowingLoginPage = false);
   }
 
   // =========================================================
@@ -306,20 +330,14 @@ class NavigationProvider with ChangeNotifier {
       final isAuth = await isAuthenticated();
       if (!isAuth) {
         debugPrint("[navigateToPage] 🔒 Redirect to login");
-        if (context.mounted) {
-          Navigator.of(context, rootNavigator: true).push(
-            MaterialPageRoute(
-              builder: (_) => const UserLogin(),
-              settings: RouteSettings(arguments: {
-                'targetPage': targetPage,
-                'tabIndex': targetTabIndex,
-                'searchPageArg': searchPageArg,
-                if (noIdPortofolio != null) 'noIdPortofolio': noIdPortofolio,
-                if (noIdVendor != null) 'noIdVendor': noIdVendor,
-              }),
-            ),
-          );
-        }
+        _pushLoginPage(
+          context,
+          targetPage: targetPage,
+          tabIndex: targetTabIndex,
+          searchPageArg: searchPageArg,
+          noIdPortofolio: noIdPortofolio,
+          noIdVendor: noIdVendor,
+        );
         return;
       }
     }
@@ -437,17 +455,7 @@ class NavigationProvider with ChangeNotifier {
 
     if (!isAuth && index != 0) {
       debugPrint("🔒 [NavProvider] Redirect to login");
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(
-            builder: (_) => const UserLogin(),
-            settings: RouteSettings(arguments: {
-              'targetPage': 'Tab$index',
-              'tabIndex': index,
-            }),
-          ),
-        );
-      }
+      _pushLoginPage(context, targetPage: 'Tab$index', tabIndex: index);
       return;
     }
 

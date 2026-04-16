@@ -46,10 +46,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
   int _currentIndex = 0;
   bool _isCaptionExpanded = false;
 
-  // Aspect ratio ditentukan dari gambar pertama portofolio.
-  // Cache global (per URL) agar tidak re-resolve saat card di-scroll ulang.
+  // ── Aspect ratio cache ──────────────────────────────────────────────────
+  // Cache GLOBAL per URL — sekali resolve, tidak pernah resolve lagi.
   static final Map<String, double> _ratioCache = {};
-  static const double _defaultRatio = 4 / 3;
+
+  // null = belum diketahui → tampilkan _AdaptiveImage (shimmer → gambar)
+  // >0   = sudah diketahui → langsung render AspectRatio + PageView
   double? _resolvedRatio;
 
   @override
@@ -57,17 +59,18 @@ class _PortofolioCardState extends State<PortofolioCard> {
     super.initState();
     _pageController = PageController();
 
-    // Baca cache secara SINKRON — tidak perlu setState, tidak ganggu animasi.
-    // Async resolve hanya dipanggil jika URL belum pernah dilihat sebelumnya.
     final media = _validMedia;
-    if (media.isNotEmpty) {
-      final url = media[0].idMedia!;
-      if (_ratioCache.containsKey(url)) {
-        _resolvedRatio = _ratioCache[url]; // langsung, tanpa setState
-      } else {
-        _resolveAspectRatioAsync(url);     // async hanya untuk URL baru
-      }
+    if (media.isEmpty) {
+      _resolvedRatio = 4 / 3;
+      return;
     }
+
+    final url = media[0].idMedia!;
+    // Cache HIT: assign sinkron sebelum build pertama — tidak ada shimmer
+    if (_ratioCache.containsKey(url)) {
+      _resolvedRatio = _ratioCache[url];
+    }
+    // Cache MISS: biarkan null → _AdaptiveImage yang akan callback
   }
 
   @override
@@ -76,37 +79,14 @@ class _PortofolioCardState extends State<PortofolioCard> {
     super.dispose();
   }
 
-  /// Hanya dipanggil untuk URL yang belum pernah dilihat (tidak ada di cache).
-  /// setState dipanggil tepat sekali per URL baru — tidak pernah saat scroll
-  /// atau saat animasi refresh SmartRefresher sedang berjalan.
-  Future<void> _resolveAspectRatioAsync(String url) async {
-    try {
-      final provider = CachedNetworkImageProvider(url);
-      final stream = provider.resolve(const ImageConfiguration());
-      final completer = Completer<double>();
-
-      late ImageStreamListener listener;
-      listener = ImageStreamListener(
-        (ImageInfo info, bool _) {
-          final ratio = info.image.width / info.image.height;
-          _ratioCache[url] = ratio;
-          if (!completer.isCompleted) completer.complete(ratio);
-          stream.removeListener(listener);
-        },
-        onError: (_, __) {
-          if (!completer.isCompleted) completer.complete(_defaultRatio);
-          stream.removeListener(listener);
-        },
-      );
-
-      stream.addListener(listener);
-
-      final ratio = await completer.future
-          .timeout(const Duration(seconds: 5), onTimeout: () => _defaultRatio);
-
-      if (mounted) setState(() => _resolvedRatio = ratio);
-    } catch (_) {
-      if (mounted) setState(() => _resolvedRatio = _defaultRatio);
+  /// Dipanggil oleh _AdaptiveImage tepat saat pixel gambar pertama selesai
+  /// di-decode. Karena sumber datanya adalah ImageInfo dari gambar yang sudah
+  /// ada di Flutter image cache, tidak ada jeda antara gambar muncul dan
+  /// ukuran card berubah.
+  void _onRatioResolved(String url, double ratio) {
+    _ratioCache[url] = ratio;
+    if (mounted && _resolvedRatio != ratio) {
+      setState(() => _resolvedRatio = ratio);
     }
   }
 
@@ -127,6 +107,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
     final media = _validMedia;
     final bool isAvatarValid = widget.photographerIcon.trim().isNotEmpty;
     final String? caption = _plainCaption;
+    final String? firstUrl = media.isNotEmpty ? media[0].idMedia : null;
 
     return GestureDetector(
       onTap: () {
@@ -156,47 +137,61 @@ class _PortofolioCardState extends State<PortofolioCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Gambar carousel ───────────────────────────────────────
-            // Ratio dikunci ke gambar pertama portofolio (bukan per-gambar).
-            // Saat ratio belum resolve: pakai defaultRatio (4:3) sebagai placeholder.
+            // ── Gambar carousel ─────────────────────────────────────────
+            //
+            // FLOW:
+            // 1. Cache MISS → _resolvedRatio null
+            //    → tampilkan _AdaptiveImage (shimmer → gambar natural size)
+            //    → saat gambar decode, callback _onRatioResolved dipanggil
+            //    → setState → _resolvedRatio terisi → rebuild ke mode 2
+            //
+            // 2. Cache HIT atau setelah callback
+            //    → langsung render AspectRatio dengan ratio yang benar
+            //    → PageView aktif untuk multi-gambar
+            //
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: AspectRatio(
-                aspectRatio: _resolvedRatio ?? _defaultRatio,
-                child: Stack(
-                  children: [
-                    PageView.builder(
-                      controller: _pageController,
-                      itemCount: media.isEmpty ? 1 : media.length,
-                      // PageScrollPhysics: horizontal swipe ke PageView,
-                      // vertical drag diteruskan ke parent ListView tanpa konflik
-                      physics: const PageScrollPhysics(),
-                      onPageChanged: (index) =>
-                          setState(() => _currentIndex = index),
-                      itemBuilder: (context, index) {
-                        if (media.isEmpty) return _buildNoImagePlaceholder();
-                        return _buildImageItem(media[index]);
-                      },
-                    ),
-                    if (media.length > 1)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: _buildCounterBadge(media.length),
+              child: _resolvedRatio == null
+                  ? (firstUrl != null
+                      ? _AdaptiveImage(
+                          url: firstUrl,
+                          onRatioResolved: (r) => _onRatioResolved(firstUrl, r),
+                        )
+                      : _NoImageBox(height: 220))
+                  : AspectRatio(
+                      aspectRatio: _resolvedRatio!,
+                      child: Stack(
+                        children: [
+                          PageView.builder(
+                            controller: _pageController,
+                            itemCount: media.isEmpty ? 1 : media.length,
+                            physics: const PageScrollPhysics(),
+                            onPageChanged: (i) =>
+                                setState(() => _currentIndex = i),
+                            itemBuilder: (context, index) {
+                              if (media.isEmpty) return const _NoImageBox();
+                              return _buildImageItem(media[index]);
+                            },
+                          ),
+                          if (media.length > 1)
+                            Positioned(
+                              top: 10,
+                              right: 10,
+                              child: _buildCounterBadge(media.length),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
+                    ),
             ),
 
-            // ── Dot indicator ──────────────────────────────────────────
-            if (media.length > 1) ...[
+            // ── Dot indicator ───────────────────────────────────────────
+            if (_resolvedRatio != null && media.length > 1) ...[
               const SizedBox(height: 8),
               Center(child: _buildDotIndicator(media.length)),
             ],
 
-            // ── Like / Save row ────────────────────────────────────────
+            // ── Like / Save row ─────────────────────────────────────────
             Selector<PortofolioProvider, _LikeSaveState>(
               selector: (_, provider) => _LikeSaveState(
                 isLiked: provider.isLiked(porto.noId),
@@ -212,14 +207,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () {
-                            nav.navigateToPage(
-                              context,
-                              VendorBioPage(idVendor: widget.idVendor),
-                              targetTabIndex: 0,
-                              targetPage: 'VendorBioPage',
-                            );
-                          },
+                          onTap: () => nav.navigateToPage(
+                            context,
+                            VendorBioPage(idVendor: widget.idVendor),
+                            targetTabIndex: 0,
+                            targetPage: 'VendorBioPage',
+                          ),
                           child: Row(
                             children: [
                               ClipOval(
@@ -234,9 +227,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                               const ShimmerPlaceholder(
                                                   radius: 15),
                                           errorWidget: (_, __, ___) =>
-                                              _defaultAvatar(),
+                                              _DefaultAvatar(),
                                         )
-                                      : _defaultAvatar(),
+                                      : _DefaultAvatar(),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -273,14 +266,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                       ],
                                     ),
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
                                       children: [
                                         Flexible(
                                           child: Text(
-                                            Helper.formatTanggal(
-                                                widget.portofolio.lastUpdated ??
-                                                    widget.portofolio.tglCreated),
+                                            Helper.formatTanggal(widget
+                                                    .portofolio.lastUpdated ??
+                                                widget.portofolio.tglCreated),
                                             style: const TextStyle(
                                               color: Colors.black54,
                                               fontSize: 12,
@@ -300,7 +291,8 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                         ),
                                         Flexible(
                                           child: Text(
-                                            widget.portofolio.namaKategori ?? '',
+                                            widget.portofolio.namaKategori ??
+                                                '',
                                             style: const TextStyle(
                                               color: Colors.black54,
                                               fontSize: 12,
@@ -328,12 +320,10 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isLikeInProgress,
                             onTap: state.isLikeInProgress
                                 ? null
-                                : () async {
-                                    await provider.toggleLike(
+                                : () async => provider.toggleLike(
                                       context: context,
                                       porto: porto,
-                                    );
-                                  },
+                                    ),
                           ),
                           const SizedBox(width: 4),
                           _ActionButton(
@@ -345,12 +335,10 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isSaveInProgress,
                             onTap: state.isSaveInProgress
                                 ? null
-                                : () async {
-                                    await provider.toggleSave(
+                                : () async => provider.toggleSave(
                                       context: context,
                                       porto: porto,
-                                    );
-                                  },
+                                    ),
                           ),
                         ],
                       ),
@@ -360,7 +348,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
               },
             ),
 
-            // ── Caption ────────────────────────────────────────────────
+            // ── Caption ─────────────────────────────────────────────────
             if (caption != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -389,8 +377,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
                           ),
                           "b": Style(fontWeight: FontWeight.bold),
                           "i": Style(fontStyle: FontStyle.italic),
-                          "u": Style(
-                              textDecoration: TextDecoration.underline),
+                          "u": Style(textDecoration: TextDecoration.underline),
                           "a": Style(
                             color: Colors.blue,
                             textDecoration: TextDecoration.none,
@@ -446,8 +433,6 @@ class _PortofolioCardState extends State<PortofolioCard> {
     );
   }
 
-  // ── Image item ────────────────────────────────────────────────────────
-
   Widget _buildImageItem(MediaUrlModel media) {
     return CachedNetworkImage(
       imageUrl: media.idMedia!,
@@ -456,11 +441,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
       memCacheWidth: 1080,
       maxWidthDiskCache: 1080,
       placeholder: (_, __) => const _ImageShimmer(),
-      errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
+      errorWidget: (_, __, ___) => _ErrorBox(),
     );
   }
-
-  // ── Indicators ────────────────────────────────────────────────────────
 
   Widget _buildDotIndicator(int count) {
     return Row(
@@ -475,8 +458,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
           height: 6,
           width: isActive ? 20 : 6,
           decoration: BoxDecoration(
-            color:
-                isActive ? Constants.primaryColor : Colors.grey.shade300,
+            color: isActive ? Constants.primaryColor : Colors.grey.shade300,
             borderRadius: BorderRadius.circular(3),
           ),
         );
@@ -509,49 +491,142 @@ class _PortofolioCardState extends State<PortofolioCard> {
       ),
     );
   }
+}
 
-  // ── Placeholders ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// _AdaptiveImage
+//
+// Menampilkan gambar DAN mendeteksi ratio pada saat gambar selesai di-decode.
+// Teknik: CachedNetworkImage.imageBuilder dipanggil tepat saat ImageInfo
+// tersedia di memori → resolve ratio dari sana → tidak ada race condition.
+// ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildErrorPlaceholder() => Container(
-        color: Colors.grey.shade100,
-        child: Center(
-          child: Icon(Icons.broken_image_outlined,
-              size: 40, color: Colors.grey.shade400),
+class _AdaptiveImage extends StatefulWidget {
+  final String url;
+  final void Function(double ratio) onRatioResolved;
+
+  const _AdaptiveImage({
+    required this.url,
+    required this.onRatioResolved,
+  });
+
+  @override
+  State<_AdaptiveImage> createState() => _AdaptiveImageState();
+}
+
+class _AdaptiveImageState extends State<_AdaptiveImage> {
+  bool _reported = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      imageUrl: widget.url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      memCacheWidth: 1080,
+      maxWidthDiskCache: 1080,
+      // imageBuilder dipanggil HANYA saat gambar sudah di-decode sempurna.
+      // Di sini kita baca dimensi asli → callback ke parent → parent setState.
+      imageBuilder: (context, imageProvider) {
+        if (!_reported) {
+          _reported = true;
+          _readRatio(imageProvider);
+        }
+        return Image(
+          image: imageProvider,
+          fit: BoxFit.cover,
+          width: double.infinity,
+        );
+      },
+      placeholder: (_, __) => const SizedBox(
+        height: 220,
+        width: double.infinity,
+        child: ShimmerPlaceholder(width: double.infinity, height: 220),
+      ),
+      errorWidget: (_, __, ___) => _ErrorBox(height: 220),
+    );
+  }
+
+  /// Baca width/height dari ImageProvider yang sudah ada di Flutter image cache.
+  /// Karena imageBuilder sudah dipanggil, gambar PASTI ada di cache → listener
+  /// akan fire hampir seketika (synchronous-like).
+  void _readRatio(ImageProvider provider) {
+    final stream = provider.resolve(const ImageConfiguration());
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        final w = info.image.width.toDouble();
+        final h = info.image.height.toDouble();
+        if (h > 0) widget.onRatioResolved(w / h);
+        stream.removeListener(listener);
+      },
+      onError: (_, __) {
+        widget.onRatioResolved(4 / 3);
+        stream.removeListener(listener);
+      },
+    );
+    stream.addListener(listener);
+  }
+}
+
+// ── Reusable small widgets ─────────────────────────────────────────────────
+
+class _ImageShimmer extends StatelessWidget {
+  const _ImageShimmer();
+
+  @override
+  Widget build(BuildContext context) => const ShimmerPlaceholder(
+        width: double.infinity,
+        height: double.infinity,
+      );
+}
+
+class _NoImageBox extends StatelessWidget {
+  final double? height;
+  const _NoImageBox({this.height});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: height,
+        child: Container(
+          color: Colors.grey.shade200,
+          child: Center(
+            child: Icon(Icons.image_not_supported_outlined,
+                size: 40, color: Colors.grey.shade400),
+          ),
         ),
       );
+}
 
-  Widget _buildNoImagePlaceholder() => Container(
-        color: Colors.grey.shade200,
-        child: Center(
-          child: Icon(Icons.image_not_supported_outlined,
-              size: 40, color: Colors.grey.shade400),
+class _ErrorBox extends StatelessWidget {
+  final double? height;
+  const _ErrorBox({this.height});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: height,
+        child: Container(
+          color: Colors.grey.shade100,
+          child: Center(
+            child: Icon(Icons.broken_image_outlined,
+                size: 40, color: Colors.grey.shade400),
+          ),
         ),
       );
+}
 
-  Widget _defaultAvatar() => Container(
+class _DefaultAvatar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
         color: Colors.grey.shade200,
         alignment: Alignment.center,
         child: Icon(Icons.person, size: 16, color: Colors.grey.shade400),
       );
 }
 
-// ── Image shimmer (stateless, tidak perlu setState) ───────────────────────
-
-class _ImageShimmer extends StatelessWidget {
-  const _ImageShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return const ShimmerPlaceholder(
-      width: double.infinity,
-      height: double.infinity,
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // STATE MODEL untuk Selector
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _LikeSaveState {
   final bool isLiked;
@@ -579,9 +654,9 @@ class _LikeSaveState {
       Object.hash(isLiked, isSaved, isLikeInProgress, isSaveInProgress);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ACTION BUTTON
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _ActionButton extends StatelessWidget {
   final IconData icon;
