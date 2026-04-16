@@ -333,10 +333,11 @@ class UserProvider with ChangeNotifier {
         return false;
       }
 
-      // Gunakan getAll dengan email dari authService jika tersedia
-      final email = authService.email;
-      if (email == null) {
-        debugPrint("❌ No email available");
+      // Gunakan email dari Google session, fallback ke stored email / CustomerModel
+      final email =
+          authService.email ?? authService.storedEmail ?? _customer?.email;
+      if (email == null || email.isEmpty) {
+        debugPrint("❌ No email available for backend refresh");
         return false;
       }
 

@@ -9,6 +9,8 @@ import 'package:mpjnew/src/features/customer/view/account/edit_account_page.dart
 import 'package:mpjnew/src/features/customer/view/account/portofolio_account_section.dart';
 import 'package:mpjnew/src/features/customer/view/account/setting_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -212,64 +214,13 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      // Tutup bottom sheet dulu
                       Navigator.pop(ctx);
-
-                      // Tampilkan dialog konfirmasi singkat
-                      final confirmed = await showDialog<bool>(
+                      CustomDialog.showSwitchAccountDialog(
                         context: context,
-                        builder: (dialogCtx) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          title: const Text(
-                            'Ganti Akun?',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          content: const Text(
-                            'Anda akan keluar dari akun ini dan diarahkan '
-                            'ke halaman login untuk memilih akun lain.',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dialogCtx, false),
-                              child: Text(
-                                'Batal',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(dialogCtx, true),
-                              child: Text(
-                                'Ganti Akun',
-                                style: TextStyle(
-                                  color: Constants.primaryColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        onConfirm: () => context
+                            .read<NavigationProvider>()
+                            .handleLogout(context),
                       );
-
-                      if (confirmed != true) return;
-                      if (!context.mounted) return;
-
-                      // ✅ Logout menggunakan NavigationProvider.handleLogout
-                      //    yang sudah handle: unregister FCM, clear providers,
-                      //    clear local storage, signOut dari Google.
-                      //    Setelah logout, popAllToRoot() dipanggil di dalam
-                      //    handleLogout sehingga app kembali ke halaman utama.
-                      //    Google sign-in picker akan muncul saat user tap login.
-                      await context
-                          .read<NavigationProvider>()
-                          .handleLogout(context);
                     },
                     icon: const Icon(Icons.swap_horiz_rounded, size: 20),
                     label: const Text('Ganti Akun'),

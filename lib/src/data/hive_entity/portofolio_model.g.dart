@@ -48,13 +48,15 @@ class PortofolioModelAdapter extends TypeAdapter<PortofolioModel> {
       mediaUrls: (fields[28] as List).cast<MediaUrlModel>(),
       lastUpdated: fields[29] as DateTime?,
       lastSynced: fields[30] as DateTime?,
+      likedAt: fields[31] as DateTime?,
+      savedAt: fields[32] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PortofolioModel obj) {
     writer
-      ..writeByte(31)
+      ..writeByte(33)
       ..writeByte(0)
       ..write(obj.noId)
       ..writeByte(1)
@@ -116,7 +118,11 @@ class PortofolioModelAdapter extends TypeAdapter<PortofolioModel> {
       ..writeByte(29)
       ..write(obj.lastUpdated)
       ..writeByte(30)
-      ..write(obj.lastSynced);
+      ..write(obj.lastSynced)
+      ..writeByte(31)
+      ..write(obj.likedAt)
+      ..writeByte(32)
+      ..write(obj.savedAt);
   }
 
   @override

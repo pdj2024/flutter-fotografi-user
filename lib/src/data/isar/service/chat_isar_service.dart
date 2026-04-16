@@ -1,55 +1,91 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/isar/data/room_chat_entity.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mpjnew/src/data/sqflite/chat_database.dart';
+import 'package:sqflite/sqflite.dart';
 
-/// Low-level Isar service.
+/// Low-level sqflite service.
 /// Bertanggung jawab HANYA untuk operasi database (CRUD + stream).
-/// Tidak boleh ada business logic di sini.
+/// API publik identik dengan versi Isar sebelumnya — tidak ada perubahan
+/// di ChatStorageService, ChatSyncService, atau provider.
 class ChatIsarService {
   static final ChatIsarService instance = ChatIsarService._internal();
   factory ChatIsarService() => instance;
   ChatIsarService._internal();
 
-  Isar? _isar;
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
+  bool get _isAvailable => _initialized;
 
-  Isar get _db {
-    assert(
-      _isar != null && _isar!.isOpen,
-      'ChatIsarService belum di-initialize. Panggil initialize() dulu.',
+  Future<Database> get _db => ChatDatabase.instance.db;
+
+  // ─── Stream controllers ───────────────────────────────────────────────────
+
+  final StreamController<List<RoomChatEntity>> _roomsController =
+      StreamController<List<RoomChatEntity>>.broadcast();
+
+  final Map<String, StreamController<List<ChatMessageEntity>>>
+      _messageControllers = {};
+
+  final Map<String, StreamController<void>> _roomWatchControllers = {};
+
+  StreamController<List<ChatMessageEntity>> _msgCtrl(String roomId) {
+    return _messageControllers.putIfAbsent(
+      roomId,
+      () => StreamController<List<ChatMessageEntity>>.broadcast(),
     );
-    return _isar!;
+  }
+
+  StreamController<void> _roomWatchCtrl(String roomId) {
+    return _roomWatchControllers.putIfAbsent(
+      roomId,
+      () => StreamController<void>.broadcast(),
+    );
   }
 
   // ─── Initialization ────────────────────────────────────────────────────────
 
   Future<void> initialize() async {
-    if (_initialized && (_isar?.isOpen ?? false)) return;
-
+    if (_initialized) return;
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      _isar = await Isar.open(
-        [ChatMessageEntitySchema, RoomChatEntitySchema],
-        directory: dir.path,
-        name: 'chat_db',
-        inspector: kDebugMode,
-      );
+      await ChatDatabase.instance.db; // trigger open
       _initialized = true;
-      debugPrint('[ChatIsarService] ✅ Database initialized at ${dir.path}');
+      debugPrint('[ChatIsarService] ✅ Database initialized (sqflite)');
     } catch (e, st) {
-      debugPrint('[ChatIsarService] ❌ Init error: $e\n$st');
-      rethrow;
+      _initialized = false;
+      debugPrint('[ChatIsarService] ⚠️ DB unavailable (${e.runtimeType}): $e\n$st');
     }
   }
 
   Future<void> close() async {
-    await _isar?.close();
+    await ChatDatabase.instance.close();
     _initialized = false;
     debugPrint('[ChatIsarService] 🔒 Database closed');
+  }
+
+  // ─── Notify helpers ───────────────────────────────────────────────────────
+
+  Future<void> _notifyRoomsChanged() async {
+    if (_roomsController.isClosed) return;
+    final rooms = await getAllRooms();
+    _roomsController.add(rooms);
+  }
+
+  Future<void> _notifyMessagesChanged(String roomId) async {
+    final ctrl = _messageControllers[roomId];
+    if (ctrl == null || ctrl.isClosed) return;
+    final msgs = await getMessagesByRoom(roomId);
+    ctrl.add(msgs);
+  }
+
+  void _notifyRoomWatch(String roomId) {
+    final ctrl = _roomWatchControllers[roomId];
+    if (ctrl == null || ctrl.isClosed) return;
+    ctrl.add(null);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -57,72 +93,608 @@ class ChatIsarService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<List<RoomChatEntity>> getAllRooms() async {
-    return _db.roomChatEntitys.where().sortByLastMessageAtDesc().findAll();
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'rooms',
+      orderBy: 'last_message_at DESC',
+    );
+    return maps.map(RoomChatEntity.fromMap).toList();
   }
 
   Future<RoomChatEntity?> getRoomById(String roomId) async {
-    return _db.roomChatEntitys.filter().roomIdEqualTo(roomId).findFirst();
+    if (!_isAvailable) return null;
+    final db = await _db;
+    final maps = await db.query(
+      'rooms',
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return RoomChatEntity.fromMap(maps.first);
   }
 
   Future<List<RoomChatEntity>> getRoomsWithUnread() async {
-    return _db.roomChatEntitys
-        .filter()
-        .countStatusReceivedGreaterThan(0)
-        .findAll();
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'rooms',
+      where: 'count_status_received > 0',
+    );
+    return maps.map(RoomChatEntity.fromMap).toList();
   }
 
   Future<void> saveRoom(RoomChatEntity entity) async {
-    await _db.writeTxn(() => _db.roomChatEntitys.put(entity));
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.insert(
+      'rooms',
+      entity.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     debugPrint('[ChatIsarService] 💾 Room saved: ${entity.roomId}');
+    await _notifyRoomsChanged();
+    _notifyRoomWatch(entity.roomId);
   }
 
   Future<void> saveAllRooms(List<RoomChatEntity> entities) async {
-    if (entities.isEmpty) return;
-    await _db.writeTxn(() => _db.roomChatEntitys.putAll(entities));
+    if (!_isAvailable || entities.isEmpty) return;
+    final db = await _db;
+    final batch = db.batch();
+    for (final e in entities) {
+      batch.insert('rooms', e.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
     debugPrint('[ChatIsarService] 💾 ${entities.length} rooms saved');
+    await _notifyRoomsChanged();
   }
 
   /// ✅ REPLACE semua rooms — hapus yang tidak ada di API response.
-  ///
-  /// Dipakai saat pull-to-refresh ChatListPage.
-  /// Unread count lokal dipertahankan untuk room yang masih ada di API,
-  /// agar badge tidak hilang saat refresh.
-  ///
-  /// Room yang sudah tidak ada di API response → ikut terhapus.
   Future<void> replaceAllRooms(List<RoomChatEntity> newEntities) async {
-    await _db.writeTxn(() async {
-      // 1️⃣ Ambil semua room yang ada saat ini untuk preserve unread
-      final existingRooms = await _db.roomChatEntitys.where().findAll();
+    if (!_isAvailable) return;
+    final db = await _db;
+
+    await db.transaction((txn) async {
+      // 1️⃣ Ambil semua room yang ada untuk preserve unread
+      final existingMaps = await txn.query('rooms');
       final existingMap = {
-        for (final r in existingRooms) r.roomId: r,
+        for (final m in existingMaps)
+          (m['room_id'] as String): RoomChatEntity.fromMap(m),
       };
 
       // 2️⃣ Hapus SEMUA room lama
-      await _db.roomChatEntitys.where().deleteAll();
+      await txn.delete('rooms');
 
       // 3️⃣ Simpan room baru — merge dengan unread count lokal
-      final mergedEntities = newEntities.map((newRoom) {
+      final batch = txn.batch();
+      for (final newRoom in newEntities) {
         final existing = existingMap[newRoom.roomId];
         if (existing != null) {
-          // Room masih ada di API — pertahankan unread count lokal
-          // API tidak tahu pesan mana yang sudah dibaca di device ini
-          return newRoom
+          newRoom
             ..countStatusReceived = existing.countStatusReceived
             ..listIdMessageReceived =
                 List<String>.from(existing.listIdMessageReceived)
             ..unread = existing.unread;
         }
-        // Room baru dari API — unread = 0 (belum ada data lokal)
-        return newRoom;
-      }).toList();
-
-      if (mergedEntities.isNotEmpty) {
-        await _db.roomChatEntitys.putAll(mergedEntities);
+        batch.insert('rooms', newRoom.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace);
       }
+      await batch.commit(noResult: true);
     });
 
     debugPrint(
         '[ChatIsarService] 🔄 All rooms replaced: ${newEntities.length}');
+    await _notifyRoomsChanged();
+  }
+
+  Future<void> updateRoomLastMessage({
+    required String roomId,
+    required String lastMessage,
+    required DateTime lastMessageAt,
+  }) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.update(
+      'rooms',
+      {
+        'last_message': lastMessage,
+        'last_message_at': lastMessageAt.millisecondsSinceEpoch,
+      },
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+    );
+    await _notifyRoomsChanged();
+    _notifyRoomWatch(roomId);
+  }
+
+  Future<void> updateRoomUnread({
+    required String roomId,
+    required int countStatusReceived,
+    required List<String> listIdMessageReceived,
+    required int countStatusSent,
+    required List<String> listIdMessageSent,
+  }) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.update(
+      'rooms',
+      {
+        'count_status_received': countStatusReceived,
+        'list_id_message_received':
+            _encodeList(listIdMessageReceived),
+        'count_status_sent': countStatusSent,
+        'list_id_message_sent': _encodeList(listIdMessageSent),
+      },
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+    );
+    await _notifyRoomsChanged();
+    _notifyRoomWatch(roomId);
+  }
+
+  Future<void> clearRoomUnread(String roomId) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.update(
+      'rooms',
+      {
+        'unread': 0,
+        'count_status_received': 0,
+        'list_id_message_received': '[]',
+      },
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+    );
+    debugPrint('[ChatIsarService] 🧹 Unread cleared: $roomId');
+    await _notifyRoomsChanged();
+    _notifyRoomWatch(roomId);
+  }
+
+  Future<void> deleteRoom(String roomId) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.delete('rooms', where: 'room_id = ?', whereArgs: [roomId]);
+    await _notifyRoomsChanged();
+  }
+
+  // ─── Room Streams ─────────────────────────────────────────────────────────
+
+  Stream<List<RoomChatEntity>> watchAllRooms() {
+    if (!_isAvailable) return const Stream.empty();
+    // Fire immediately dengan data saat ini
+    Future.microtask(() async {
+      final rooms = await getAllRooms();
+      if (!_roomsController.isClosed) _roomsController.add(rooms);
+    });
+    return _roomsController.stream;
+  }
+
+  Stream<void> watchRoom(String roomId) {
+    if (!_isAvailable) return const Stream.empty();
+    final ctrl = _roomWatchCtrl(roomId);
+    // Fire immediately
+    Future.microtask(() {
+      if (!ctrl.isClosed) ctrl.add(null);
+    });
+    return ctrl.stream;
+  }
+
+  void disposeRoomStream(String roomId) {
+    _messageControllers.remove(roomId)?.close();
+    _roomWatchControllers.remove(roomId)?.close();
+  }
+
+  void resetStreamCache() {
+    for (final ctrl in _messageControllers.values) {
+      ctrl.close();
+    }
+    _messageControllers.clear();
+    for (final ctrl in _roomWatchControllers.values) {
+      ctrl.close();
+    }
+    _roomWatchControllers.clear();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MESSAGE OPERATIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<List<ChatMessageEntity>> getMessagesByRoom(String roomId) async {
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+      orderBy: 'sent_at ASC',
+    );
+    return maps.map(ChatMessageEntity.fromMap).toList();
+  }
+
+  Future<List<ChatMessageEntity>> getMessagesByRoomPaged({
+    required String roomId,
+    required int offset,
+    int limit = 30,
+  }) async {
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: 'room_id = ?',
+      whereArgs: [roomId],
+      orderBy: 'sent_at DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map(ChatMessageEntity.fromMap).toList();
+  }
+
+  Future<ChatMessageEntity?> getMessageById(String messageId) async {
+    if (!_isAvailable) return null;
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return ChatMessageEntity.fromMap(maps.first);
+  }
+
+  Future<bool> messageExists(String messageId) async {
+    if (!_isAvailable) return false;
+    final db = await _db;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM messages WHERE message_id = ?',
+      [messageId],
+    );
+    return (result.first['cnt'] as int) > 0;
+  }
+
+  Future<List<ChatMessageEntity>> getPendingMessages(String roomId) async {
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: 'room_id = ? AND send_status = ?',
+      whereArgs: [roomId, 'pending'],
+      orderBy: 'sent_at ASC',
+    );
+    return maps.map(ChatMessageEntity.fromMap).toList();
+  }
+
+  Future<List<ChatMessageEntity>> getUnreadMessages(
+    String roomId, {
+    String? currentUserId,
+  }) async {
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where:
+          "room_id = ? AND send_status != 'read' AND send_status != 'failed'",
+      whereArgs: [roomId],
+    );
+    final all = maps.map(ChatMessageEntity.fromMap).toList();
+    return all.where((e) {
+      if (e.messageId.startsWith('local-')) return false;
+      if (currentUserId != null && e.senderId == currentUserId) return false;
+      return true;
+    }).toList();
+  }
+
+  Future<void> saveMessage(ChatMessageEntity entity) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.insert(
+      'messages',
+      entity.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _notifyMessagesChanged(entity.roomId);
+  }
+
+  Future<void> saveAllMessages(List<ChatMessageEntity> entities) async {
+    if (!_isAvailable || entities.isEmpty) return;
+    final db = await _db;
+    final batch = db.batch();
+    for (final e in entities) {
+      batch.insert('messages', e.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+    debugPrint('[ChatIsarService] 💾 ${entities.length} messages saved');
+
+    // Notify per unique roomId
+    final roomIds = entities.map((e) => e.roomId).toSet();
+    for (final roomId in roomIds) {
+      await _notifyMessagesChanged(roomId);
+    }
+  }
+
+  /// ✅ REPLACE — hapus semua pesan di room lalu simpan data baru.
+  Future<void> replaceRoomMessages({
+    required String roomId,
+    required List<ChatMessageEntity> newEntities,
+  }) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+
+    await db.transaction((txn) async {
+      await txn.delete('messages',
+          where: 'room_id = ?', whereArgs: [roomId]);
+      if (newEntities.isNotEmpty) {
+        final batch = txn.batch();
+        for (final e in newEntities) {
+          batch.insert('messages', e.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    });
+
+    debugPrint('[ChatIsarService] 🔄 Room messages replaced: $roomId '
+        '(${newEntities.length} messages)');
+    await _notifyMessagesChanged(roomId);
+  }
+
+  Future<bool> updateMessageStatus(String messageId, String newStatus) async {
+    if (!_isAvailable) return false;
+    final entity = await getMessageById(messageId);
+    if (entity == null) {
+      debugPrint(
+          '[ChatIsarService] ⚠️ updateMessageStatus: not found ($messageId)');
+      return false;
+    }
+
+    final now = DateTime.now();
+    final updates = <String, dynamic>{'send_status': newStatus};
+    if (newStatus == 'received' && entity.receivedAt == null) {
+      updates['received_at'] = now.millisecondsSinceEpoch;
+    } else if (newStatus == 'read' && entity.readAt == null) {
+      updates['read_at'] = now.millisecondsSinceEpoch;
+    }
+
+    final db = await _db;
+    await db.update(
+      'messages',
+      updates,
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+
+    debugPrint('[ChatIsarService] 🔄 Status updated: $messageId → $newStatus');
+    await _notifyMessagesChanged(entity.roomId);
+    return true;
+  }
+
+  /// Update status hanya jika status baru lebih tinggi (cegah downgrade).
+  Future<bool> updateMessageStatusIfHigher(
+    String messageId,
+    String newStatus,
+    Map<String, int> priority,
+  ) async {
+    if (!_isAvailable) return false;
+    final entity = await getMessageById(messageId);
+    if (entity == null) return false;
+
+    final currentPriority = priority[entity.sendStatus] ?? 0;
+    final newPriority = priority[newStatus] ?? 0;
+
+    if (newPriority <= currentPriority) {
+      debugPrint('[ChatIsarService] ⏭️ Status not upgraded: '
+          '${entity.sendStatus}($currentPriority) → $newStatus($newPriority) skipped');
+      return false;
+    }
+
+    final now = DateTime.now();
+    final updates = <String, dynamic>{'send_status': newStatus};
+    if (newStatus == 'received' && entity.receivedAt == null) {
+      updates['received_at'] = now.millisecondsSinceEpoch;
+    } else if (newStatus == 'read' && entity.readAt == null) {
+      updates['read_at'] = now.millisecondsSinceEpoch;
+      updates['received_at'] ??= now.millisecondsSinceEpoch;
+    }
+
+    final db = await _db;
+    await db.update(
+      'messages',
+      updates,
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+
+    debugPrint('[ChatIsarService] ✅ Status upgraded: $messageId → $newStatus');
+    await _notifyMessagesChanged(entity.roomId);
+    return true;
+  }
+
+  Future<void> replaceLocalMessage({
+    required String localId,
+    required ChatMessageEntity serverEntity,
+  }) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+
+    await db.transaction((txn) async {
+      await txn.delete('messages',
+          where: 'local_id = ?', whereArgs: [localId]);
+      await txn.insert('messages', serverEntity.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+
+    debugPrint(
+        '[ChatIsarService] 🔁 Local replaced: $localId → ${serverEntity.messageId}');
+    await _notifyMessagesChanged(serverEntity.roomId);
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    if (!_isAvailable) return;
+    final entity = await getMessageById(messageId);
+    if (entity == null) return;
+    final db = await _db;
+    await db.delete('messages',
+        where: 'message_id = ?', whereArgs: [messageId]);
+    await _notifyMessagesChanged(entity.roomId);
+  }
+
+  Future<void> deleteMessagesByRoom(String roomId) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.delete('messages', where: 'room_id = ?', whereArgs: [roomId]);
+    debugPrint('[ChatIsarService] 🗑️ Messages deleted for room: $roomId');
+    await _notifyMessagesChanged(roomId);
+  }
+
+  // ─── Message Streams ──────────────────────────────────────────────────────
+
+  Stream<List<ChatMessageEntity>> watchMessages(String roomId) {
+    if (!_isAvailable) return const Stream.empty();
+    final ctrl = _msgCtrl(roomId);
+    // Fire immediately
+    Future.microtask(() async {
+      final msgs = await getMessagesByRoom(roomId);
+      if (!ctrl.isClosed) ctrl.add(msgs);
+    });
+    return ctrl.stream;
+  }
+
+  Stream<List<ChatMessageEntity>> watchPendingMessages(String senderId) {
+    if (!_isAvailable) return const Stream.empty();
+    // Buat controller khusus untuk pending messages
+    final key = '__pending__$senderId';
+    final ctrl = _messageControllers.putIfAbsent(
+      key,
+      () => StreamController<List<ChatMessageEntity>>.broadcast(),
+    );
+
+    Future.microtask(() async {
+      final db = await _db;
+      final maps = await db.query(
+        'messages',
+        where: "room_id = '' AND sender_id = ?",
+        whereArgs: [senderId],
+        orderBy: 'sent_at ASC',
+      );
+      final msgs = maps.map(ChatMessageEntity.fromMap).toList();
+      if (!ctrl.isClosed) ctrl.add(msgs);
+    });
+
+    return ctrl.stream;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BULK / UTILITY
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> clearAll() async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete('messages');
+      await txn.delete('rooms');
+    });
+    resetStreamCache();
+    debugPrint('[ChatIsarService] 🧹 All chat data cleared');
+    await _notifyRoomsChanged();
+  }
+
+  Future<void> clearRoom(String roomId) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete('messages',
+          where: 'room_id = ?', whereArgs: [roomId]);
+      await txn.delete('rooms',
+          where: 'room_id = ?', whereArgs: [roomId]);
+    });
+    debugPrint('[ChatIsarService] 🗑️ Room cleared: $roomId');
+    await _notifyRoomsChanged();
+    await _notifyMessagesChanged(roomId);
+  }
+
+  Future<Map<String, int>> getStats() async {
+    if (!_isAvailable) return {'messages': 0, 'rooms': 0};
+    final db = await _db;
+    final msgResult =
+        await db.rawQuery('SELECT COUNT(*) as cnt FROM messages');
+    final roomResult =
+        await db.rawQuery('SELECT COUNT(*) as cnt FROM rooms');
+    return {
+      'messages': (msgResult.first['cnt'] as int),
+      'rooms': (roomResult.first['cnt'] as int),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC QUERY HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<ChatMessageEntity?> getMessageByLocalId(String localId) async {
+    if (!_isAvailable) return null;
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return ChatMessageEntity.fromMap(maps.first);
+  }
+
+  Future<bool> localEchoExists(String localId) async {
+    if (!_isAvailable) return false;
+    final db = await _db;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM messages WHERE local_id = ?',
+      [localId],
+    );
+    return (result.first['cnt'] as int) > 0;
+  }
+
+  Future<ChatMessageEntity?> findLocalEchoByContent({
+    required String roomId,
+    required String message,
+    required DateTime sentAt,
+    String? senderIdHint,
+  }) async {
+    if (!_isAvailable) return null;
+    try {
+      final db = await _db;
+      final maps = await db.query(
+        'messages',
+        where:
+            "room_id = ? AND message = ? AND message_id LIKE 'local-%'",
+        whereArgs: [roomId, message],
+      );
+
+      if (maps.isEmpty) return null;
+
+      const threshold = Duration(minutes: 5);
+      final candidates = maps
+          .map(ChatMessageEntity.fromMap)
+          .where((e) => e.sentAt.difference(sentAt).abs() <= threshold)
+          .toList();
+
+      if (candidates.isEmpty) return null;
+
+      candidates.sort((a, b) => a.sentAt
+          .difference(sentAt)
+          .abs()
+          .compareTo(b.sentAt.difference(sentAt).abs()));
+
+      debugPrint('[ChatIsarService] 🔍 findLocalEchoByContent: '
+          'found ${candidates.first.messageId} '
+          'Δt=${candidates.first.sentAt.difference(sentAt).abs().inSeconds}s');
+      return candidates.first;
+    } catch (e) {
+      debugPrint('[ChatIsarService] ⚠️ findLocalEchoByContent: $e');
+      return null;
+    }
   }
 
   Future<ChatMessageEntity?> findLocalEchoByContentNoRoom({
@@ -130,28 +702,25 @@ class ChatIsarService {
     required DateTime sentAt,
     required String senderId,
   }) async {
+    if (!_isAvailable) return null;
     try {
-      // ✅ FIX: Perluas cutoff dari 10s ke 5 menit
-      // 10 detik terlalu ketat untuk kasus jaringan lambat atau FCM delay
-      final cutoffEarliest = sentAt.subtract(const Duration(minutes: 5));
-      final cutoffLatest = sentAt.add(const Duration(minutes: 5));
+      final cutoffEarliest =
+          sentAt.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch;
+      final cutoffLatest =
+          sentAt.add(const Duration(minutes: 5)).millisecondsSinceEpoch;
 
-      final candidates = await _db.chatMessageEntitys
-          .filter()
-          .messageIdStartsWith('local-')
-          .and()
-          .senderIdEqualTo(senderId)
-          .and()
-          .messageEqualTo(message)
-          .and()
-          .sentAtGreaterThan(cutoffEarliest)
-          .and()
-          .sentAtLessThan(cutoffLatest)
-          .findAll();
+      final db = await _db;
+      final maps = await db.query(
+        'messages',
+        where:
+            "message_id LIKE 'local-%' AND sender_id = ? AND message = ? "
+            "AND sent_at >= ? AND sent_at <= ?",
+        whereArgs: [senderId, message, cutoffEarliest, cutoffLatest],
+      );
 
-      if (candidates.isEmpty) return null;
+      if (maps.isEmpty) return null;
 
-      // Ambil yang paling dekat sentAt
+      final candidates = maps.map(ChatMessageEntity.fromMap).toList();
       candidates.sort((a, b) => a.sentAt
           .difference(sentAt)
           .abs()
@@ -168,425 +737,49 @@ class ChatIsarService {
     }
   }
 
-  Future<void> updateRoomLastMessage({
-    required String roomId,
-    required String lastMessage,
-    required DateTime lastMessageAt,
-  }) async {
-    final entity = await getRoomById(roomId);
-    if (entity == null) return;
-    await _db.writeTxn(() async {
-      entity.lastMessage = lastMessage;
-      entity.lastMessageAt = lastMessageAt;
-      await _db.roomChatEntitys.put(entity);
-    });
-  }
-
-  Future<void> updateRoomUnread({
-    required String roomId,
-    required int countStatusReceived,
-    required List<String> listIdMessageReceived,
-    required int countStatusSent,
-    required List<String> listIdMessageSent,
-  }) async {
-    final entity = await getRoomById(roomId);
-    if (entity == null) return;
-    await _db.writeTxn(() async {
-      entity.countStatusReceived = countStatusReceived;
-      entity.listIdMessageReceived = listIdMessageReceived;
-      entity.countStatusSent = countStatusSent;
-      entity.listIdMessageSent = listIdMessageSent;
-      await _db.roomChatEntitys.put(entity);
-    });
-  }
-
-  Future<void> clearRoomUnread(String roomId) async {
-    final entity = await getRoomById(roomId);
-    if (entity == null) return;
-    await _db.writeTxn(() async {
-      entity.unread = 0;
-      entity.countStatusReceived = 0;
-      entity.listIdMessageReceived = [];
-      await _db.roomChatEntitys.put(entity);
-    });
-    debugPrint('[ChatIsarService] 🧹 Unread cleared: $roomId');
-  }
-
-  Future<void> deleteRoom(String roomId) async {
-    final entity = await getRoomById(roomId);
-    if (entity == null) return;
-    await _db.writeTxn(() => _db.roomChatEntitys.delete(entity.id));
-  }
-
-  // ─── Stream ──────────────────────────────────────────────────────────────
-
-  Stream<List<RoomChatEntity>>? _allRoomsStream;
-  final Map<String, Stream<List<ChatMessageEntity>>> _messageStreams = {};
-  final Map<String, Stream<void>> _roomStreams = {};
-
-  Stream<List<RoomChatEntity>> watchAllRooms() {
-    _allRoomsStream ??= _db.roomChatEntitys
-        .where()
-        .sortByLastMessageAtDesc()
-        .watch(fireImmediately: true)
-        .asBroadcastStream();
-    return _allRoomsStream!;
-  }
-
-  Stream<void> watchRoom(String roomId) {
-    return _roomStreams.putIfAbsent(
-      roomId,
-      () => _db.roomChatEntitys
-          .filter()
-          .roomIdEqualTo(roomId)
-          .watchLazy(fireImmediately: true)
-          .asBroadcastStream(),
-    );
-  }
-
-  Stream<List<ChatMessageEntity>> watchPendingMessages(String senderId) {
-    return _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo('')
-        .and()
-        .senderIdEqualTo(senderId)
-        .sortBySentAt()
-        .watch(fireImmediately: true)
-        .asBroadcastStream();
-  }
-
-  void disposeRoomStream(String roomId) {
-    _messageStreams.remove(roomId);
-    _roomStreams.remove(roomId);
-  }
-
-  void resetStreamCache() {
-    _allRoomsStream = null;
-    _messageStreams.clear();
-    _roomStreams.clear();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MESSAGE OPERATIONS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<List<ChatMessageEntity>> getMessagesByRoom(String roomId) async {
-    return _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo(roomId)
-        .sortBySentAt()
-        .findAll();
-  }
-
-  Future<List<ChatMessageEntity>> getMessagesByRoomPaged({
-    required String roomId,
-    required int offset,
-    int limit = 30,
-  }) async {
-    return _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo(roomId)
-        .sortBySentAtDesc()
-        .offset(offset)
-        .limit(limit)
-        .findAll();
-  }
-
-  Future<ChatMessageEntity?> getMessageById(String messageId) async {
-    return _db.chatMessageEntitys
-        .filter()
-        .messageIdEqualTo(messageId)
-        .findFirst();
-  }
-
-  Future<bool> messageExists(String messageId) async {
-    final count = await _db.chatMessageEntitys
-        .filter()
-        .messageIdEqualTo(messageId)
-        .count();
-    return count > 0;
-  }
-
-  Future<List<ChatMessageEntity>> getPendingMessages(String roomId) async {
-    return _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo(roomId)
-        .sendStatusEqualTo('pending')
-        .sortBySentAt()
-        .findAll();
-  }
-
-  Future<List<ChatMessageEntity>> getUnreadMessages(
-    String roomId, {
-    String? currentUserId,
-  }) async {
-    final query = _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo(roomId)
-        .not()
-        .sendStatusEqualTo('read')
-        .not()
-        .sendStatusEqualTo('failed');
-
-    final all = await query.findAll();
-
-    return all.where((e) {
-      if (e.messageId.startsWith('local-')) return false;
-      if (currentUserId != null && e.senderId == currentUserId) return false;
-      return true;
-    }).toList();
-  }
-
-  Future<void> saveMessage(ChatMessageEntity entity) async {
-    await _db.writeTxn(() => _db.chatMessageEntitys.put(entity));
-  }
-
-  Future<void> saveAllMessages(List<ChatMessageEntity> entities) async {
-    if (entities.isEmpty) return;
-    await _db.writeTxn(() => _db.chatMessageEntitys.putAll(entities));
-    debugPrint('[ChatIsarService] 💾 ${entities.length} messages saved');
-  }
-
-  /// ✅ REPLACE — hapus semua pesan di room lalu simpan data baru.
-  /// Dipakai saat pull-to-refresh RoomChatPage.
-  /// local-xxx yang sudah dikonfirmasi server ikut terhapus.
-  Future<void> replaceRoomMessages({
-    required String roomId,
-    required List<ChatMessageEntity> newEntities,
-  }) async {
-    await _db.writeTxn(() async {
-      // 1️⃣ Hapus semua pesan lama (termasuk local-xxx obsolete)
-      await _db.chatMessageEntitys.filter().roomIdEqualTo(roomId).deleteAll();
-
-      // 2️⃣ Simpan data baru dari API
-      if (newEntities.isNotEmpty) {
-        await _db.chatMessageEntitys.putAll(newEntities);
-      }
-    });
-
-    debugPrint('[ChatIsarService] 🔄 Room messages replaced: $roomId '
-        '(${newEntities.length} messages)');
-  }
-
-  Future<bool> updateMessageStatus(String messageId, String newStatus) async {
-    final entity = await getMessageById(messageId);
-    if (entity == null) {
-      debugPrint(
-          '[ChatIsarService] ⚠️ updateMessageStatus: not found ($messageId)');
-      return false;
-    }
-
-    await _db.writeTxn(() async {
-      entity.sendStatus = newStatus;
-      if (newStatus == 'received' && entity.receivedAt == null) {
-        entity.receivedAt = DateTime.now();
-      } else if (newStatus == 'read' && entity.readAt == null) {
-        entity.readAt = DateTime.now();
-      }
-      await _db.chatMessageEntitys.put(entity);
-    });
-
-    debugPrint('[ChatIsarService] 🔄 Status updated: $messageId → $newStatus');
-    return true;
-  }
-
-  /// Update status hanya jika status baru lebih tinggi (cegah downgrade).
-  /// Flow: sent(1) < received(2) < read(3)
-  Future<bool> updateMessageStatusIfHigher(
-    String messageId,
-    String newStatus,
-    Map<String, int> priority,
-  ) async {
-    final entity = await getMessageById(messageId);
-    if (entity == null) return false;
-
-    final currentPriority = priority[entity.sendStatus] ?? 0;
-    final newPriority = priority[newStatus] ?? 0;
-
-    if (newPriority <= currentPriority) {
-      debugPrint('[ChatIsarService] ⏭️ Status not upgraded: '
-          '${entity.sendStatus}($currentPriority) → $newStatus($newPriority) skipped');
-      return false;
-    }
-
-    await _db.writeTxn(() async {
-      entity.sendStatus = newStatus;
-      if (newStatus == 'received' && entity.receivedAt == null) {
-        entity.receivedAt = DateTime.now();
-      } else if (newStatus == 'read' && entity.readAt == null) {
-        entity.readAt = DateTime.now();
-        entity.receivedAt ??= DateTime.now();
-      }
-      await _db.chatMessageEntitys.put(entity);
-    });
-
-    debugPrint('[ChatIsarService] ✅ Status upgraded: $messageId → $newStatus');
-    return true;
-  }
-
-  Future<void> replaceLocalMessage({
-    required String localId,
-    required ChatMessageEntity serverEntity,
-  }) async {
-    await _db.writeTxn(() async {
-      final local = await _db.chatMessageEntitys
-          .filter()
-          .localIdEqualTo(localId)
-          .findFirst();
-      if (local != null) {
-        await _db.chatMessageEntitys.delete(local.id);
-      }
-      await _db.chatMessageEntitys.put(serverEntity);
-    });
-    debugPrint(
-        '[ChatIsarService] 🔁 Local replaced: $localId → ${serverEntity.messageId}');
-  }
-
-  Future<void> deleteMessage(String messageId) async {
-    final entity = await getMessageById(messageId);
-    if (entity == null) return;
-    await _db.writeTxn(() => _db.chatMessageEntitys.delete(entity.id));
-  }
-
-  Future<void> deleteMessagesByRoom(String roomId) async {
-    await _db.writeTxn(() async {
-      await _db.chatMessageEntitys.filter().roomIdEqualTo(roomId).deleteAll();
-    });
-    debugPrint('[ChatIsarService] 🗑️ Messages deleted for room: $roomId');
-  }
-
-  // ─── Stream ──────────────────────────────────────────────────────────────
-
-  Stream<List<ChatMessageEntity>> watchMessages(String roomId) {
-    return _messageStreams.putIfAbsent(
-      roomId,
-      () => _db.chatMessageEntitys
-          .filter()
-          .roomIdEqualTo(roomId)
-          .sortBySentAt()
-          .watch(fireImmediately: true)
-          .asBroadcastStream(),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // BULK / UTILITY
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<void> clearAll() async {
-    await _db.writeTxn(() async {
-      await _db.chatMessageEntitys.clear();
-      await _db.roomChatEntitys.clear();
-    });
-    resetStreamCache();
-    debugPrint('[ChatIsarService] 🧹 All chat data cleared');
-  }
-
-  Future<void> clearRoom(String roomId) async {
-    await _db.writeTxn(() async {
-      await _db.chatMessageEntitys.filter().roomIdEqualTo(roomId).deleteAll();
-      final room =
-          await _db.roomChatEntitys.filter().roomIdEqualTo(roomId).findFirst();
-      if (room != null) await _db.roomChatEntitys.delete(room.id);
-    });
-    debugPrint('[ChatIsarService] 🗑️ Room cleared: $roomId');
-  }
-
-  Future<Map<String, int>> getStats() async {
-    final messageCount = await _db.chatMessageEntitys.count();
-    final roomCount = await _db.roomChatEntitys.count();
-    return {'messages': messageCount, 'rooms': roomCount};
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PUBLIC QUERY HELPERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<ChatMessageEntity?> getMessageByLocalId(String localId) async {
-    return _db.chatMessageEntitys.filter().localIdEqualTo(localId).findFirst();
-  }
-
-  Future<bool> localEchoExists(String localId) async {
-    final count =
-        await _db.chatMessageEntitys.filter().localIdEqualTo(localId).count();
-    return count > 0;
-  }
-
-  Future<ChatMessageEntity?> findLocalEchoByContent({
-    required String roomId,
-    required String message,
-    required DateTime sentAt,
-    String? senderIdHint,
-  }) async {
-    try {
-      // ✅ FIX: Hapus filter sendStatusEqualTo('sent')
-      // Local echo bisa saja sudah berubah status sebelum FCM own-echo datang
-      // Cukup filter by roomId + message + startsWith('local-')
-      final candidates = await _db.chatMessageEntitys
-          .filter()
-          .roomIdEqualTo(roomId)
-          .and()
-          .messageEqualTo(message)
-          .and()
-          .messageIdStartsWith('local-')
-          .findAll();
-
-      if (candidates.isEmpty) return null;
-
-      // ✅ FIX: Perluas threshold dari 60s ke 5 menit
-      // Jaringan lambat atau antrian FCM bisa menyebabkan delay panjang
-      const threshold = Duration(minutes: 5);
-
-      // Urutkan by kedekatan sentAt — ambil yang paling dekat
-      final matched = candidates.where((entity) {
-        final diff = entity.sentAt.difference(sentAt).abs();
-        return diff <= threshold;
-      }).toList();
-
-      if (matched.isEmpty) return null;
-
-      matched.sort((a, b) => a.sentAt
-          .difference(sentAt)
-          .abs()
-          .compareTo(b.sentAt.difference(sentAt).abs()));
-
-      debugPrint('[ChatIsarService] 🔍 findLocalEchoByContent: '
-          'found ${matched.first.messageId} '
-          'Δt=${matched.first.sentAt.difference(sentAt).abs().inSeconds}s');
-      return matched.first;
-    } catch (e) {
-      debugPrint('[ChatIsarService] ⚠️ findLocalEchoByContent: $e');
-      return null;
-    }
-  }
-
   Future<List<ChatMessageEntity>> getFailedMessages(String roomId) async {
-    return _db.chatMessageEntitys
-        .filter()
-        .roomIdEqualTo(roomId)
-        .sendStatusEqualTo('failed')
-        .sortBySentAt()
-        .findAll();
+    if (!_isAvailable) return [];
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: "room_id = ? AND send_status = 'failed'",
+      whereArgs: [roomId],
+      orderBy: 'sent_at ASC',
+    );
+    return maps.map(ChatMessageEntity.fromMap).toList();
   }
 
   Future<void> markAllMessagesAsRead(
     String roomId, {
     String? currentUserId,
   }) async {
+    if (!_isAvailable) return;
     final unread =
         await getUnreadMessages(roomId, currentUserId: currentUserId);
     if (unread.isEmpty) return;
 
-    final now = DateTime.now();
-    await _db.writeTxn(() async {
-      for (final msg in unread) {
-        msg.sendStatus = 'read';
-        msg.readAt ??= now;
-      }
-      await _db.chatMessageEntitys.putAll(unread);
-    });
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final db = await _db;
+    final batch = db.batch();
+    for (final msg in unread) {
+      batch.update(
+        'messages',
+        {
+          'send_status': 'read',
+          'read_at': now,
+        },
+        where: 'message_id = ?',
+        whereArgs: [msg.messageId],
+      );
+    }
+    await batch.commit(noResult: true);
 
     debugPrint(
         '[ChatIsarService] 👁️ ${unread.length} msgs marked read: $roomId');
+    await _notifyMessagesChanged(roomId);
   }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  String _encodeList(List<String> list) => jsonEncode(list);
 }

@@ -7,9 +7,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart
 import 'package:mpjnew/src/features/customer/widget/kategori_section.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_section.dart';
-import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
-import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 class CustomerHomePage extends StatefulWidget {
   CustomerHomePage({super.key});
@@ -20,24 +18,32 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage>
     with WidgetsBindingObserver {
-  final RefreshController _refreshController =
-      RefreshController(initialRefresh: false);
-
+  // ✅ Satu ScrollController — tidak ada pihak ketiga yang ikut campur
+  final ScrollController _scrollController = ScrollController();
   int _lastPreloadIndex = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_onScroll);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Silent login restore — no-op untuk guest, tidak memblokir load data.
       await _loadCustomerId();
       if (!mounted) return;
-      final userId = context.read<UserProvider>().userId;
-      if (userId == null || userId.isEmpty) {
-        debugPrint("⚠️ Belum login, skip loadData()");
+
+      // Portofolio bersifat publik — guest pun boleh melihat feed.
+      // Cukup skip fetch jika data sudah di-pre-fetch saat splash.
+      // Pull-to-refresh (_onRefresh) tetap memanggil loadData() penuh.
+      final kategori = context.read<KategoriProvider>();
+      final porto = context.read<PortofolioProvider>();
+      if (kategori.kategoriList.isNotEmpty && porto.portofolioList.isNotEmpty) {
+        debugPrint(
+            "[HomePage] ✅ Data pre-loaded from splash, skip initial fetch");
         return;
       }
+
       await loadData();
     });
   }
@@ -45,6 +51,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _cancelPreloads();
     super.dispose();
   }
@@ -64,17 +72,21 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     }
   }
 
-  Future<void> _onRefresh() async {
-    if (!mounted) {
-      _refreshController.refreshCompleted();
-      return;
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 200) {
+      _preloadNextBatch();
     }
+  }
+
+  // ✅ RefreshIndicator native — return Future, tidak perlu controller
+  Future<void> _onRefresh() async {
+    if (!mounted) return;
     try {
       await loadData();
-      if (mounted) _refreshController.refreshCompleted();
     } catch (e) {
       debugPrint('[HomePage] ❌ Refresh error: $e');
-      if (mounted) _refreshController.refreshFailed();
     }
   }
 
@@ -158,120 +170,105 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollUpdateNotification) {
-              final metrics = notification.metrics;
-              if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-                _preloadNextBatch();
-              }
-            }
-            return false;
-          },
-          child: Column(
-            children: [
-              // ── Search bar sticky (di luar SmartRefresher) ────────────
-              _ModernSearchBar(
-                onTap: () {
-                  context.read<NavigationProvider>().navigateToPage(
-                        context,
-                        SearchPage(
-                          id_category: "",
-                          nama_category: '',
-                          search: "",
-                          autoOpenFilter: true,
-                        ),
-                        targetTabIndex: 0,
-                        targetPage: 'SearchPage',
-                      );
-                },
-              ),
+        child: Column(
+          children: [
+            // ── Search bar sticky ─────────────────────────────────────
+            _ModernSearchBar(
+              onTap: () {
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      SearchPage(
+                        id_category: "",
+                        nama_category: '',
+                        search: "",
+                        autoOpenFilter: true,
+                      ),
+                      targetTabIndex: 0,
+                      targetPage: 'SearchPage',
+                    );
+              },
+            ),
 
-              // ── SmartRefresher hanya kelola area di bawah search ─────
-              Expanded(
-                child: SmartRefresher(
-                  controller: _refreshController,
-                  onRefresh: _onRefresh,
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _onRefresh,
+                // ✅ Warna sesuai primary app
+                color: Constants.primaryColor,
+                backgroundColor: Colors.white,
+                // ✅ displacement kecil agar indikator tidak terlalu jauh
+                displacement: 20,
+                child: ListView(
+                  controller: _scrollController,
+                  // ✅ Hanya satu physics di sini, tidak dobel
                   physics: const AlwaysScrollableScrollPhysics(),
-                  header: buildRefreshHeader(),
-                  child: CustomScrollView(
-                    slivers: [
-                      // ── Kategori ─────────────────────────────────────
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 10),
-                          child: KategoriSection(),
-                        ),
-                      ),
+                  children: [
+                    // ── Kategori ──────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: KategoriSection(),
+                    ),
+                    
+                    SizedBox(
+                      height: 5,
+                    ),
 
-                      // ── Portofolio ───────────────────────────────────
-                      PortofolioSection(),
+                    // ── Portofolio ────────────────────────────────────
+                    const PortofolioSection(),
 
-                      // ── Preload indicator ─────────────────────────────
-                      SliverToBoxAdapter(
-                        child: Consumer<PortofolioProvider>(
-                          builder: (context, provider, child) {
-                            final stats = provider.getPreloadStats();
-                            final isPreloading =
-                                stats['isPreloading'] as bool;
-                            final queueLength = stats['queueLength'] as int;
+                    // ── Preload indicator ─────────────────────────────
+                    Consumer<PortofolioProvider>(
+                      builder: (context, provider, child) {
+                        final stats = provider.getPreloadStats();
+                        final isPreloading = stats['isPreloading'] as bool;
+                        final queueLength = stats['queueLength'] as int;
 
-                            if (!isPreloading || queueLength == 0) {
-                              return const SizedBox.shrink();
-                            }
+                        if (!isPreloading || queueLength == 0) {
+                          return const SizedBox.shrink();
+                        }
 
-                            return Container(
-                              padding: const EdgeInsets.all(10),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation(
-                                        Constants.primaryColor,
-                                      ),
-                                    ),
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    Constants.primaryColor,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Memuat gambar... ($queueLength)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Memuat gambar... ($queueLength)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
 
-                      const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                    ],
-                  ),
+                    const SizedBox(height: 80),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onRefresh,
-        tooltip: 'Refresh',
-        backgroundColor: Constants.primaryColor,
-        child: const Icon(Icons.refresh, color: Colors.white),
       ),
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// _ModernSearchBar — tidak ada perubahan dari versi asli
+// _ModernSearchBar — tidak ada perubahan
 // ═══════════════════════════════════════════════════════════════════════
 
 class _ModernSearchBar extends StatefulWidget {
@@ -393,32 +390,5 @@ class _ModernSearchBarState extends State<_ModernSearchBar>
         ),
       ),
     );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// SliverHeaderDelegate — dipertahankan untuk kompatibilitas
-// ═══════════════════════════════════════════════════════════════════════
-
-class SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-
-  SliverHeaderDelegate({required this.child});
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return child;
-  }
-
-  @override
-  double get maxExtent => 72.0;
-
-  @override
-  double get minExtent => 72.0;
-
-  @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
-    return false;
   }
 }

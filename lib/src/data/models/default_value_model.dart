@@ -231,20 +231,32 @@ class EstimasiBiaya {
 /// Data versi aplikasi, database, dan API
 class VersionModel {
   final String versionApp;
+  final String versionAppCustomer;
+  final String versionAppVendor;
   final String versionDatabase;
   final String versionApi;
+  final String linkPlaystoreCustomer;
+  final String linkPlaystoreVendor;
 
   const VersionModel({
     required this.versionApp,
+    required this.versionAppCustomer,
+    required this.versionAppVendor,
     required this.versionDatabase,
     required this.versionApi,
+    required this.linkPlaystoreCustomer,
+    required this.linkPlaystoreVendor,
   });
 
   factory VersionModel.fromJson(Map<String, dynamic> json) {
     return VersionModel(
       versionApp: json['Version_App'] as String? ?? '',
+      versionAppCustomer: json['Version_App_Customer'] as String? ?? '',
+      versionAppVendor: json['Version_App_Vendor'] as String? ?? '',
       versionDatabase: json['Version_Database'] as String? ?? '',
       versionApi: json['Version_Api'] as String? ?? '',
+      linkPlaystoreCustomer: json['Link_Playstore_Customer'] as String? ?? '',
+      linkPlaystoreVendor: json['Link_Playstore_Vendor'] as String? ?? '',
     );
   }
 }

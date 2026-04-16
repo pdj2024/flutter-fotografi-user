@@ -15,6 +15,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.d
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/help_fab.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -60,6 +61,22 @@ class _MainMenuState extends State<MainMenu> {
                 _buildOffstageNavigator(1, (_) => const ChatListPage()),
                 _buildOffstageNavigator(2, (_) => const MainOrderPage()),
                 _buildOffstageNavigator(3, (_) => const CustomerAccountPage()),
+                Consumer<NavigationProvider>(
+                  builder: (context, nav, _) {
+                    final isHiddenTab = nav.selectedIndex == 1;
+                    final isNestedPage = !nav.isBottomNavVisible;
+
+                    if (isHiddenTab || isNestedPage) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return const Positioned(
+                      bottom: 20,
+                      right: 16,
+                      child: HelpFab(),
+                    );
+                  },
+                ),
               ],
             );
           },

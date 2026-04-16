@@ -1,17 +1,16 @@
-import 'package:isar/isar.dart';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
-
-part 'chat_message_entity.g.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EMBEDDED: PAKET
 // Mirror dari PaketModel — semua field sama, tidak ada yang dihilangkan
 // ═══════════════════════════════════════════════════════════════════════════
 
-@embedded
 class EmbeddedPaket {
   String noId = '';
   String namaPaket = '';
@@ -30,6 +29,23 @@ class EmbeddedPaket {
     ..rincian = m.rincian
     ..status = m.status;
 
+  factory EmbeddedPaket.fromJson(Map<String, dynamic> json) => EmbeddedPaket()
+    ..noId = (json['noId'] as String?) ?? ''
+    ..namaPaket = (json['namaPaket'] as String?) ?? ''
+    ..idVendor = (json['idVendor'] as String?) ?? ''
+    ..harga = (json['harga'] as int?) ?? 0
+    ..rincian = (json['rincian'] as String?) ?? ''
+    ..status = (json['status'] as String?) ?? '';
+
+  Map<String, dynamic> toJson() => {
+        'noId': noId,
+        'namaPaket': namaPaket,
+        'idVendor': idVendor,
+        'harga': harga,
+        'rincian': rincian,
+        'status': status,
+      };
+
   PaketModel toModel() => PaketModel(
         no_id: noId,
         nama_paket: namaPaket,
@@ -39,7 +55,6 @@ class EmbeddedPaket {
         status: status,
       );
 
-  @ignore
   bool get isNotEmpty => noId.isNotEmpty;
 }
 
@@ -48,7 +63,6 @@ class EmbeddedPaket {
 // Mirror dari PenawaranModel — semua field sama
 // ═══════════════════════════════════════════════════════════════════════════
 
-@embedded
 class EmbeddedPenawaran {
   String noId = '';
   String noTrackingPenawaran = '';
@@ -91,6 +105,54 @@ class EmbeddedPenawaran {
     ..createdAt = m.createdAt
     ..updatedAt = m.updatedAt;
 
+  factory EmbeddedPenawaran.fromJson(Map<String, dynamic> json) =>
+      EmbeddedPenawaran()
+        ..noId = (json['noId'] as String?) ?? ''
+        ..noTrackingPenawaran = (json['noTrackingPenawaran'] as String?) ?? ''
+        ..noPesanan = (json['noPesanan'] as String?) ?? ''
+        ..idVendor = (json['idVendor'] as String?) ?? ''
+        ..namaVendor = (json['namaVendor'] as String?) ?? ''
+        ..idCustomer = (json['idCustomer'] as String?) ?? ''
+        ..namaCustomer = (json['namaCustomer'] as String?) ?? ''
+        ..idPaket = (json['idPaket'] as String?) ?? ''
+        ..namaPaket = (json['namaPaket'] as String?) ?? ''
+        ..harga = (json['harga'] as int?) ?? 0
+        ..status = (json['status'] as String?) ?? ''
+        ..lokasi = (json['lokasi'] as String?) ?? ''
+        ..kota = (json['kota'] as String?) ?? ''
+        ..namaKota = (json['namaKota'] as String?) ?? ''
+        ..deskripsi = (json['deskripsi'] as String?) ?? ''
+        ..tglRealisasi = json['tglRealisasi'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['tglRealisasi'] as int)
+            : DateTime.now()
+        ..createdAt = json['createdAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
+            : DateTime.now()
+        ..updatedAt = json['updatedAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
+            : null;
+
+  Map<String, dynamic> toJson() => {
+        'noId': noId,
+        'noTrackingPenawaran': noTrackingPenawaran,
+        'noPesanan': noPesanan,
+        'idVendor': idVendor,
+        'namaVendor': namaVendor,
+        'idCustomer': idCustomer,
+        'namaCustomer': namaCustomer,
+        'idPaket': idPaket,
+        'namaPaket': namaPaket,
+        'harga': harga,
+        'status': status,
+        'lokasi': lokasi,
+        'kota': kota,
+        'namaKota': namaKota,
+        'deskripsi': deskripsi,
+        'tglRealisasi': tglRealisasi.millisecondsSinceEpoch,
+        'createdAt': createdAt.millisecondsSinceEpoch,
+        'updatedAt': updatedAt?.millisecondsSinceEpoch,
+      };
+
   PenawaranModel toModel() => PenawaranModel(
         noId: noId,
         noTrackingPenawaran: noTrackingPenawaran,
@@ -112,11 +174,9 @@ class EmbeddedPenawaran {
         updatedAt: updatedAt,
       );
 
-  @ignore
   bool get isNotEmpty => noId.isNotEmpty;
 
   /// ✅ Penawaran sudah jadi pesanan jika noPesanan tidak kosong
-  @ignore
   bool get sudahJadiPesanan => noPesanan.isNotEmpty;
 }
 
@@ -125,7 +185,6 @@ class EmbeddedPenawaran {
 // Mirror dari PesananModel — semua field sama
 // ═══════════════════════════════════════════════════════════════════════════
 
-@embedded
 class EmbeddedPesanan {
   String noBukti = '';
   String? noTrackingPesanan;
@@ -202,6 +261,90 @@ class EmbeddedPesanan {
     ..createdAt = m.createdAt
     ..updatedAt = m.updatedAt;
 
+  factory EmbeddedPesanan.fromJson(Map<String, dynamic> json) =>
+      EmbeddedPesanan()
+        ..noBukti = (json['noBukti'] as String?) ?? ''
+        ..noTrackingPesanan = json['noTrackingPesanan'] as String?
+        ..status = json['status'] as String?
+        ..statusProgresPesanan = json['statusProgresPesanan'] as String?
+        ..deskripsiProgresPesanan = json['deskripsiProgresPesanan'] as String?
+        ..noPenawaran = json['noPenawaran'] as String?
+        ..idVendor = (json['idVendor'] as String?) ?? ''
+        ..namaVendor = json['namaVendor'] as String?
+        ..idMediaVendor = json['idMediaVendor'] as String?
+        ..idCustomer = (json['idCustomer'] as String?) ?? ''
+        ..namaCustomer = json['namaCustomer'] as String?
+        ..idPaket = (json['idPaket'] as String?) ?? ''
+        ..namaPaket = (json['namaPaket'] as String?) ?? ''
+        ..harga = (json['harga'] as int?) ?? 0
+        ..lokasi = (json['lokasi'] as String?) ?? ''
+        ..kota = (json['kota'] as String?) ?? ''
+        ..namaKota = json['namaKota'] as String?
+        ..tglRealisasi = json['tglRealisasi'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['tglRealisasi'] as int)
+            : DateTime.now()
+        ..metodeBayar = json['metodeBayar'] as String?
+        ..statusBayar = json['statusBayar'] as String?
+        ..idPaymentGateway = json['idPaymentGateway'] as String?
+        ..orderIdMidtrans = json['orderIdMidtrans'] as String?
+        ..expiryTime = json['expiryTime'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['expiryTime'] as int)
+            : null
+        ..paymentNumber1 = json['paymentNumber1'] as String?
+        ..paymentNumber2 = json['paymentNumber2'] as String?
+        ..linkSnap = json['linkSnap'] as String?
+        ..linkUrl = json['linkUrl'] as String?
+        ..subtotal = (json['subtotal'] as int?) ?? 0
+        ..totDpp = (json['totDpp'] as num?)?.toDouble()
+        ..ppn = json['ppn'] as int?
+        ..inclPpn = json['inclPpn'] as bool?
+        ..totPpn = json['totPpn'] as int?
+        ..grandTotal = (json['grandTotal'] as int?) ?? 0
+        ..createdAt = json['createdAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
+            : null
+        ..updatedAt = json['updatedAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
+            : null;
+
+  Map<String, dynamic> toJson() => {
+        'noBukti': noBukti,
+        'noTrackingPesanan': noTrackingPesanan,
+        'status': status,
+        'statusProgresPesanan': statusProgresPesanan,
+        'deskripsiProgresPesanan': deskripsiProgresPesanan,
+        'noPenawaran': noPenawaran,
+        'idVendor': idVendor,
+        'namaVendor': namaVendor,
+        'idMediaVendor': idMediaVendor,
+        'idCustomer': idCustomer,
+        'namaCustomer': namaCustomer,
+        'idPaket': idPaket,
+        'namaPaket': namaPaket,
+        'harga': harga,
+        'lokasi': lokasi,
+        'kota': kota,
+        'namaKota': namaKota,
+        'tglRealisasi': tglRealisasi.millisecondsSinceEpoch,
+        'metodeBayar': metodeBayar,
+        'statusBayar': statusBayar,
+        'idPaymentGateway': idPaymentGateway,
+        'orderIdMidtrans': orderIdMidtrans,
+        'expiryTime': expiryTime?.millisecondsSinceEpoch,
+        'paymentNumber1': paymentNumber1,
+        'paymentNumber2': paymentNumber2,
+        'linkSnap': linkSnap,
+        'linkUrl': linkUrl,
+        'subtotal': subtotal,
+        'totDpp': totDpp,
+        'ppn': ppn,
+        'inclPpn': inclPpn,
+        'totPpn': totPpn,
+        'grandTotal': grandTotal,
+        'createdAt': createdAt?.millisecondsSinceEpoch,
+        'updatedAt': updatedAt?.millisecondsSinceEpoch,
+      };
+
   PesananModel toModel() => PesananModel(
         noBukti: noBukti,
         noTrackingPesanan: noTrackingPesanan,
@@ -240,7 +383,6 @@ class EmbeddedPesanan {
         updatedAt: updatedAt,
       );
 
-  @ignore
   bool get isNotEmpty => noBukti.isNotEmpty;
 }
 
@@ -248,35 +390,25 @@ class EmbeddedPesanan {
 // CHAT MESSAGE ENTITY
 // ═══════════════════════════════════════════════════════════════════════════
 
-@collection
 class ChatMessageEntity {
-  Id id = Isar.autoIncrement;
+  int id = 0;
 
-  @Index(unique: true, replace: true)
   late String messageId;
-
-  @Index()
   late String roomId;
-
   late String senderId;
   late String message;
-
-  @Index()
   late String sendStatus;
-
   late DateTime sentAt;
 
   String? localId;
   String? jenisPesan;
 
   // ── Reference IDs — disimpan agar enrich bisa berjalan ──────────────────
-  // Penting: embedded data bisa null (belum di-enrich),
-  // tapi ID selalu ada jika pesan memang punya paket/penawaran/pesanan
   String? idPaket;
   String? noPenawaran;
   String? noInvoice; // = noBukti pesanan
 
-  // ── Embedded objects — full model tersimpan di Isar ───────────────────
+  // ── Embedded objects — full model tersimpan sebagai JSON ─────────────────
   EmbeddedPaket? paket;
   EmbeddedPenawaran? penawaran;
   EmbeddedPesanan? pesanan;
@@ -289,30 +421,21 @@ class ChatMessageEntity {
   // HELPER GETTERS
   // =========================================
 
-  @ignore
-  bool get isLocalEcho =>
-      localId != null && messageId.startsWith('local-');
+  bool get isLocalEcho => localId != null && messageId.startsWith('local-');
 
-  @ignore
   bool get hasPaket => paket != null && paket!.isNotEmpty;
 
-  @ignore
   bool get hasPenawaran => penawaran != null && penawaran!.isNotEmpty;
 
-  @ignore
   bool get hasPesanan => pesanan != null && pesanan!.isNotEmpty;
 
-  @ignore
   bool get isPending => sendStatus == 'pending';
 
-  @ignore
   bool get isFailed => sendStatus == 'failed';
 
-  @ignore
   bool get isRead => sendStatus == 'read';
 
   /// Jenis pesan resolved — prioritas: pesanan > penawaran > paket > text
-  @ignore
   String get resolvedJenisPesan {
     if (hasPesanan) return 'pesanan';
     if (hasPenawaran) return 'penawaran';
@@ -325,20 +448,16 @@ class ChatMessageEntity {
   }
 
   /// ✅ Cek apakah penawaran sudah berubah jadi pesanan
-  @ignore
   bool get penawaranSudahJadiPesanan =>
       hasPenawaran && penawaran!.sudahJadiPesanan;
 
   // ── Reconstruct model ────────────────────────────────────────────────────
 
-  @ignore
   PaketModel? get paketModel => hasPaket ? paket!.toModel() : null;
 
-  @ignore
   PenawaranModel? get penawaranModel =>
       hasPenawaran ? penawaran!.toModel() : null;
 
-  @ignore
   PesananModel? get pesananModel => hasPesanan ? pesanan!.toModel() : null;
 
   // =========================================
@@ -393,6 +512,76 @@ class ChatMessageEntity {
       ..penawaran =
           penawaran != null ? EmbeddedPenawaran.fromModel(penawaran) : null
       ..pesanan = pesanan != null ? EmbeddedPesanan.fromModel(pesanan) : null;
+  }
+
+  // =========================================
+  // SQFLITE SERIALIZATION
+  // =========================================
+
+  Map<String, dynamic> toMap() => {
+        'message_id': messageId,
+        'room_id': roomId,
+        'sender_id': senderId,
+        'message': message,
+        'send_status': sendStatus,
+        'sent_at': sentAt.millisecondsSinceEpoch,
+        'local_id': localId,
+        'jenis_pesan': jenisPesan,
+        'id_paket': idPaket,
+        'no_penawaran': noPenawaran,
+        'no_invoice': noInvoice,
+        'paket': paket != null ? jsonEncode(paket!.toJson()) : null,
+        'penawaran':
+            penawaran != null ? jsonEncode(penawaran!.toJson()) : null,
+        'pesanan': pesanan != null ? jsonEncode(pesanan!.toJson()) : null,
+        'read_at': readAt?.millisecondsSinceEpoch,
+        'received_at': receivedAt?.millisecondsSinceEpoch,
+        'receiver_ids': jsonEncode(receiverIds),
+      };
+
+  factory ChatMessageEntity.fromMap(Map<String, dynamic> map) {
+    final entity = ChatMessageEntity()
+      ..id = (map['id'] as int?) ?? 0
+      ..messageId = map['message_id'] as String
+      ..roomId = map['room_id'] as String
+      ..senderId = map['sender_id'] as String
+      ..message = map['message'] as String
+      ..sendStatus = map['send_status'] as String
+      ..sentAt =
+          DateTime.fromMillisecondsSinceEpoch(map['sent_at'] as int)
+      ..localId = map['local_id'] as String?
+      ..jenisPesan = map['jenis_pesan'] as String?
+      ..idPaket = map['id_paket'] as String?
+      ..noPenawaran = map['no_penawaran'] as String?
+      ..noInvoice = map['no_invoice'] as String?
+      ..readAt = map['read_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['read_at'] as int)
+          : null
+      ..receivedAt = map['received_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['received_at'] as int)
+          : null
+      ..receiverIds = map['receiver_ids'] != null
+          ? List<String>.from(jsonDecode(map['receiver_ids'] as String))
+          : [];
+
+    try {
+      if (map['paket'] != null) {
+        entity.paket =
+            EmbeddedPaket.fromJson(jsonDecode(map['paket'] as String));
+      }
+      if (map['penawaran'] != null) {
+        entity.penawaran = EmbeddedPenawaran.fromJson(
+            jsonDecode(map['penawaran'] as String));
+      }
+      if (map['pesanan'] != null) {
+        entity.pesanan =
+            EmbeddedPesanan.fromJson(jsonDecode(map['pesanan'] as String));
+      }
+    } catch (e) {
+      debugPrint('[ChatMessageEntity] ⚠️ fromMap embedded parse error: $e');
+    }
+
+    return entity;
   }
 
   // =========================================

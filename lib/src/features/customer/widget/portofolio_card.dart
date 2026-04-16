@@ -42,27 +42,35 @@ class PortofolioCard extends StatefulWidget {
 }
 
 class _PortofolioCardState extends State<PortofolioCard> {
-  // ── Carousel ─────────────────────────────────────────────
   late final PageController _pageController;
   int _currentIndex = 0;
-
-  // ── Dynamic image height ──────────────────────────────────
-  double? _imageHeight;
-  bool _isImageLoaded = false;
-
-  // ── Caption ──────────────────────────────────────────────
   bool _isCaptionExpanded = false;
-  bool _captionHasOverflow = true;
-  static const int _captionMaxLines = 2;
+
+  // ── Aspect ratio cache ──────────────────────────────────────────────────
+  // Cache GLOBAL per URL — sekali resolve, tidak pernah resolve lagi.
+  static final Map<String, double> _ratioCache = {};
+
+  // null = belum diketahui → tampilkan _AdaptiveImage (shimmer → gambar)
+  // >0   = sudah diketahui → langsung render AspectRatio + PageView
+  double? _resolvedRatio;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _measureCaption();
-    });
+
+    final media = _validMedia;
+    if (media.isEmpty) {
+      _resolvedRatio = 4 / 3;
+      return;
+    }
+
+    final url = media[0].idMedia!;
+    // Cache HIT: assign sinkron sebelum build pertama — tidak ada shimmer
+    if (_ratioCache.containsKey(url)) {
+      _resolvedRatio = _ratioCache[url];
+    }
+    // Cache MISS: biarkan null → _AdaptiveImage yang akan callback
   }
 
   @override
@@ -71,25 +79,14 @@ class _PortofolioCardState extends State<PortofolioCard> {
     super.dispose();
   }
 
-  // ── Caption helpers ───────────────────────────────────────
-
-  void _measureCaption() {
-    final caption = _plainCaption;
-    if (caption == null || caption.isEmpty) return;
-
-    final maxWidth = MediaQuery.of(context).size.width - 40;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: caption,
-        style:
-            const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
-      ),
-      maxLines: _captionMaxLines,
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: maxWidth);
-
-    if (tp.didExceedMaxLines != _captionHasOverflow) {
-      if (mounted) setState(() => _captionHasOverflow = tp.didExceedMaxLines);
+  /// Dipanggil oleh _AdaptiveImage tepat saat pixel gambar pertama selesai
+  /// di-decode. Karena sumber datanya adalah ImageInfo dari gambar yang sudah
+  /// ada di Flutter image cache, tidak ada jeda antara gambar muncul dan
+  /// ukuran card berubah.
+  void _onRatioResolved(String url, double ratio) {
+    _ratioCache[url] = ratio;
+    if (mounted && _resolvedRatio != ratio) {
+      setState(() => _resolvedRatio = ratio);
     }
   }
 
@@ -99,61 +96,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
     return c.replaceAll(RegExp(r'<[^>]*>'), '').trim();
   }
 
-  // ── Image dimension detection ─────────────────────────────
-
-  Future<void> _loadImageDimensions(ImageProvider imageProvider) async {
-    if (!mounted || _isImageLoaded) return;
-
-    final stream = imageProvider.resolve(const ImageConfiguration());
-    final completer = Completer<void>();
-    late ImageStreamListener listener;
-
-    listener = ImageStreamListener(
-      (ImageInfo info, bool _) {
-        if (!mounted) return;
-        final screenWidth = MediaQuery.of(context).size.width;
-        final ar = info.image.width / info.image.height;
-        setState(() {
-          _imageHeight = screenWidth / ar;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        if (!completer.isCompleted) completer.complete();
-      },
-      onError: (_, __) {
-        if (!mounted) return;
-        setState(() {
-          _imageHeight = 300;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        if (!completer.isCompleted) completer.complete();
-      },
-    );
-
-    stream.addListener(listener);
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!completer.isCompleted && mounted) {
-        setState(() {
-          _imageHeight = 300;
-          _isImageLoaded = true;
-        });
-        stream.removeListener(listener);
-        completer.complete();
-      }
-    });
-  }
-
-  // ── Media helpers ─────────────────────────────────────────
-
   List<MediaUrlModel> get _validMedia => widget.portofolio.mediaUrls
       .where((m) => m.idMedia != null && m.idMedia!.isNotEmpty)
       .toList();
-
-  // ═══════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +107,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
     final media = _validMedia;
     final bool isAvatarValid = widget.photographerIcon.trim().isNotEmpty;
     final String? caption = _plainCaption;
+    final String? firstUrl = media.isNotEmpty ? media[0].idMedia : null;
 
     return GestureDetector(
       onTap: () {
@@ -191,44 +137,61 @@ class _PortofolioCardState extends State<PortofolioCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Gambar carousel ──────────────────────────────
+            // ── Gambar carousel ─────────────────────────────────────────
+            //
+            // FLOW:
+            // 1. Cache MISS → _resolvedRatio null
+            //    → tampilkan _AdaptiveImage (shimmer → gambar natural size)
+            //    → saat gambar decode, callback _onRatioResolved dipanggil
+            //    → setState → _resolvedRatio terisi → rebuild ke mode 2
+            //
+            // 2. Cache HIT atau setelah callback
+            //    → langsung render AspectRatio dengan ratio yang benar
+            //    → PageView aktif untuk multi-gambar
+            //
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: SizedBox(
-                width: double.infinity,
-                height: _imageHeight ?? 300,
-                child: Stack(
-                  children: [
-                    PageView.builder(
-                      controller: _pageController,
-                      itemCount: media.isEmpty ? 1 : media.length,
-                      physics: const ClampingScrollPhysics(),
-                      onPageChanged: (index) =>
-                          setState(() => _currentIndex = index),
-                      itemBuilder: (context, index) {
-                        if (media.isEmpty) return _buildNoImagePlaceholder();
-                        return _buildImageItem(media[index]);
-                      },
-                    ),
-                    if (media.length > 1)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: _buildCounterBadge(media.length),
+              child: _resolvedRatio == null
+                  ? (firstUrl != null
+                      ? _AdaptiveImage(
+                          url: firstUrl,
+                          onRatioResolved: (r) => _onRatioResolved(firstUrl, r),
+                        )
+                      : _NoImageBox(height: 220))
+                  : AspectRatio(
+                      aspectRatio: _resolvedRatio!,
+                      child: Stack(
+                        children: [
+                          PageView.builder(
+                            controller: _pageController,
+                            itemCount: media.isEmpty ? 1 : media.length,
+                            physics: const PageScrollPhysics(),
+                            onPageChanged: (i) =>
+                                setState(() => _currentIndex = i),
+                            itemBuilder: (context, index) {
+                              if (media.isEmpty) return const _NoImageBox();
+                              return _buildImageItem(media[index]);
+                            },
+                          ),
+                          if (media.length > 1)
+                            Positioned(
+                              top: 10,
+                              right: 10,
+                              child: _buildCounterBadge(media.length),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
+                    ),
             ),
 
-            // ── Dot indicator ────────────────────────────────
-            if (media.length > 1) ...[
+            // ── Dot indicator ───────────────────────────────────────────
+            if (_resolvedRatio != null && media.length > 1) ...[
               const SizedBox(height: 8),
               Center(child: _buildDotIndicator(media.length)),
             ],
 
-            // ── Like / Save row ───────────────────────────────
+            // ── Like / Save row ─────────────────────────────────────────
             Selector<PortofolioProvider, _LikeSaveState>(
               selector: (_, provider) => _LikeSaveState(
                 isLiked: provider.isLiked(porto.noId),
@@ -244,14 +207,12 @@ class _PortofolioCardState extends State<PortofolioCard> {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () {
-                            nav.navigateToPage(
-                              context,
-                              VendorBioPage(idVendor: widget.idVendor),
-                              targetTabIndex: 0,
-                              targetPage: 'VendorBioPage',
-                            );
-                          },
+                          onTap: () => nav.navigateToPage(
+                            context,
+                            VendorBioPage(idVendor: widget.idVendor),
+                            targetTabIndex: 0,
+                            targetPage: 'VendorBioPage',
+                          ),
                           child: Row(
                             children: [
                               ClipOval(
@@ -266,9 +227,9 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                               const ShimmerPlaceholder(
                                                   radius: 15),
                                           errorWidget: (_, __, ___) =>
-                                              _defaultAvatar(),
+                                              _DefaultAvatar(),
                                         )
-                                      : _defaultAvatar(),
+                                      : _DefaultAvatar(),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -278,13 +239,15 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
-                                          widget.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
+                                        Flexible(
+                                          child: Text(
+                                            widget.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 16,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         if (widget.rating != null &&
                                             widget.rating! > 0) ...[
@@ -303,18 +266,18 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                       ],
                                     ),
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
                                       children: [
-                                        Text(
-                                          Helper.formatTanggal(
-                                              widget.portofolio.lastUpdated ??
-                                                  widget.portofolio.tglCreated),
-                                          style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 12,
+                                        Flexible(
+                                          child: Text(
+                                            Helper.formatTanggal(widget
+                                                    .portofolio.lastUpdated ??
+                                                widget.portofolio.tglCreated),
+                                            style: const TextStyle(
+                                              color: Colors.black54,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         Container(
                                           margin: const EdgeInsets.symmetric(
@@ -326,13 +289,16 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                             shape: BoxShape.circle,
                                           ),
                                         ),
-                                        Text(
-                                          widget.portofolio.namaKategori!,
-                                          style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 12,
+                                        Flexible(
+                                          child: Text(
+                                            widget.portofolio.namaKategori ??
+                                                '',
+                                            style: const TextStyle(
+                                              color: Colors.black54,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ],
                                     ),
@@ -354,12 +320,10 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isLikeInProgress,
                             onTap: state.isLikeInProgress
                                 ? null
-                                : () async {
-                                    await provider.toggleLike(
+                                : () async => provider.toggleLike(
                                       context: context,
                                       porto: porto,
-                                    );
-                                  },
+                                    ),
                           ),
                           const SizedBox(width: 4),
                           _ActionButton(
@@ -371,12 +335,10 @@ class _PortofolioCardState extends State<PortofolioCard> {
                             isInProgress: state.isSaveInProgress,
                             onTap: state.isSaveInProgress
                                 ? null
-                                : () async {
-                                    await provider.toggleSave(
+                                : () async => provider.toggleSave(
                                       context: context,
                                       porto: porto,
-                                    );
-                                  },
+                                    ),
                           ),
                         ],
                       ),
@@ -386,7 +348,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
               },
             ),
 
-            // ── Caption ────────────────────────────────────────
+            // ── Caption ─────────────────────────────────────────────────
             if (caption != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -429,38 +391,36 @@ class _PortofolioCardState extends State<PortofolioCard> {
                         },
                       ),
                     ),
-                    if (_captionHasOverflow) ...[
-                      const SizedBox(height: 2),
-                      GestureDetector(
-                        onTap: () => setState(
-                            () => _isCaptionExpanded = !_isCaptionExpanded),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _isCaptionExpanded
-                                  ? 'Lebih sedikit'
-                                  : 'Selengkapnya',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade500,
-                              ),
+                    const SizedBox(height: 2),
+                    GestureDetector(
+                      onTap: () => setState(
+                          () => _isCaptionExpanded = !_isCaptionExpanded),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _isCaptionExpanded
+                                ? 'Lebih sedikit'
+                                : 'Selengkapnya',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade500,
                             ),
-                            const SizedBox(width: 2),
-                            AnimatedRotation(
-                              turns: _isCaptionExpanded ? 0.5 : 0,
-                              duration: const Duration(milliseconds: 220),
-                              child: Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 15,
-                                color: Colors.grey.shade500,
-                              ),
+                          ),
+                          const SizedBox(width: 2),
+                          AnimatedRotation(
+                            turns: _isCaptionExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 220),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 15,
+                              color: Colors.grey.shade500,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -473,38 +433,17 @@ class _PortofolioCardState extends State<PortofolioCard> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // IMAGE ITEM
-  // ═══════════════════════════════════════════════════════════
-
   Widget _buildImageItem(MediaUrlModel media) {
     return CachedNetworkImage(
       imageUrl: media.idMedia!,
       fit: BoxFit.cover,
       width: double.infinity,
-      placeholder: (_, __) => _buildShimmerPlaceholder(),
-      errorWidget: (_, __, ___) => _buildErrorPlaceholder(),
       memCacheWidth: 1080,
       maxWidthDiskCache: 1080,
-      imageBuilder: (context, imageProvider) {
-        if (!_isImageLoaded) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _loadImageDimensions(imageProvider);
-          });
-        }
-        return Image(
-          image: imageProvider,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: _imageHeight,
-        );
-      },
+      placeholder: (_, __) => const _ImageShimmer(),
+      errorWidget: (_, __, ___) => _ErrorBox(),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // INDICATOR & BADGE
-  // ═══════════════════════════════════════════════════════════
 
   Widget _buildDotIndicator(int count) {
     return Row(
@@ -552,46 +491,142 @@ class _PortofolioCardState extends State<PortofolioCard> {
       ),
     );
   }
+}
 
-  // ═══════════════════════════════════════════════════════════
-  // PLACEHOLDER WIDGETS
-  // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// _AdaptiveImage
+//
+// Menampilkan gambar DAN mendeteksi ratio pada saat gambar selesai di-decode.
+// Teknik: CachedNetworkImage.imageBuilder dipanggil tepat saat ImageInfo
+// tersedia di memori → resolve ratio dari sana → tidak ada race condition.
+// ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildShimmerPlaceholder() => ShimmerPlaceholder(
+class _AdaptiveImage extends StatefulWidget {
+  final String url;
+  final void Function(double ratio) onRatioResolved;
+
+  const _AdaptiveImage({
+    required this.url,
+    required this.onRatioResolved,
+  });
+
+  @override
+  State<_AdaptiveImage> createState() => _AdaptiveImageState();
+}
+
+class _AdaptiveImageState extends State<_AdaptiveImage> {
+  bool _reported = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      imageUrl: widget.url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      memCacheWidth: 1080,
+      maxWidthDiskCache: 1080,
+      // imageBuilder dipanggil HANYA saat gambar sudah di-decode sempurna.
+      // Di sini kita baca dimensi asli → callback ke parent → parent setState.
+      imageBuilder: (context, imageProvider) {
+        if (!_reported) {
+          _reported = true;
+          _readRatio(imageProvider);
+        }
+        return Image(
+          image: imageProvider,
+          fit: BoxFit.cover,
+          width: double.infinity,
+        );
+      },
+      placeholder: (_, __) => const SizedBox(
+        height: 220,
         width: double.infinity,
-        height: _imageHeight ?? 300,
+        child: ShimmerPlaceholder(width: double.infinity, height: 220),
+      ),
+      errorWidget: (_, __, ___) => _ErrorBox(height: 220),
+    );
+  }
+
+  /// Baca width/height dari ImageProvider yang sudah ada di Flutter image cache.
+  /// Karena imageBuilder sudah dipanggil, gambar PASTI ada di cache → listener
+  /// akan fire hampir seketika (synchronous-like).
+  void _readRatio(ImageProvider provider) {
+    final stream = provider.resolve(const ImageConfiguration());
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        final w = info.image.width.toDouble();
+        final h = info.image.height.toDouble();
+        if (h > 0) widget.onRatioResolved(w / h);
+        stream.removeListener(listener);
+      },
+      onError: (_, __) {
+        widget.onRatioResolved(4 / 3);
+        stream.removeListener(listener);
+      },
+    );
+    stream.addListener(listener);
+  }
+}
+
+// ── Reusable small widgets ─────────────────────────────────────────────────
+
+class _ImageShimmer extends StatelessWidget {
+  const _ImageShimmer();
+
+  @override
+  Widget build(BuildContext context) => const ShimmerPlaceholder(
+        width: double.infinity,
+        height: double.infinity,
       );
+}
 
-  Widget _buildErrorPlaceholder() => Container(
-        width: double.infinity,
-        height: _imageHeight ?? 300,
-        color: Colors.grey.shade100,
-        child: Center(
-          child: Icon(Icons.broken_image_outlined,
-              size: 40, color: Colors.grey.shade400),
+class _NoImageBox extends StatelessWidget {
+  final double? height;
+  const _NoImageBox({this.height});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: height,
+        child: Container(
+          color: Colors.grey.shade200,
+          child: Center(
+            child: Icon(Icons.image_not_supported_outlined,
+                size: 40, color: Colors.grey.shade400),
+          ),
         ),
       );
+}
 
-  Widget _buildNoImagePlaceholder() => Container(
-        width: double.infinity,
-        height: 300,
-        color: Colors.grey.shade200,
-        child: Center(
-          child: Icon(Icons.image_not_supported_outlined,
-              size: 40, color: Colors.grey.shade400),
+class _ErrorBox extends StatelessWidget {
+  final double? height;
+  const _ErrorBox({this.height});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: height,
+        child: Container(
+          color: Colors.grey.shade100,
+          child: Center(
+            child: Icon(Icons.broken_image_outlined,
+                size: 40, color: Colors.grey.shade400),
+          ),
         ),
       );
+}
 
-  Widget _defaultAvatar() => Container(
+class _DefaultAvatar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
         color: Colors.grey.shade200,
         alignment: Alignment.center,
         child: Icon(Icons.person, size: 16, color: Colors.grey.shade400),
       );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // STATE MODEL untuk Selector
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _LikeSaveState {
   final bool isLiked;
@@ -619,9 +654,9 @@ class _LikeSaveState {
       Object.hash(isLiked, isSaved, isLikeInProgress, isSaveInProgress);
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ACTION BUTTON
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _ActionButton extends StatelessWidget {
   final IconData icon;

@@ -36,6 +36,9 @@ class AuthService {
   /// Clear setelah dipakai
   void clearLastLoginData() => _lastLoginData = null;
 
+  // Session state
+  bool _hasValidTokenSession = false;
+
   // Refresh lock
   bool _isRefreshing = false;
   final List<Completer<String?>> _refreshQueue = [];
@@ -80,11 +83,68 @@ class AuthService {
 
       _currentUser = await _googleSignIn.signInSilently();
 
+      if (_currentUser == null) {
+        debugPrint("⚠️  Silent sign-in failed, validating refresh token...");
+        final tokenValid = await _validateAndRefreshToken();
+        if (!tokenValid) {
+          debugPrint("❌ Refresh token invalid, clearing session");
+          await _clearLoginState();
+          await tokenStorage.clearAll();
+          return false;
+        }
+        debugPrint("✅ Refresh token valid, session restorable from token");
+        _hasValidTokenSession = true;
+      }
+
       debugPrint("✅ Session restored");
       return true;
     } catch (e) {
       debugPrint("❌ Restore session error: $e");
       await _clearLoginState();
+      return false;
+    }
+  }
+
+  /// Validasi refresh token dengan hit endpoint /auth/refresh.
+  /// Dipakai saat signInSilently() gagal — tidak memanggil onSessionExpired.
+  Future<bool> _validateAndRefreshToken() async {
+    try {
+      final refreshToken = await tokenStorage.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        debugPrint("❌ [AuthService] No refresh token in storage");
+        return false;
+      }
+
+      final uri = Uri.parse('$_baseUrl/auth/refresh');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jenis-User': Constants.customer,
+        },
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      debugPrint("📊 [ValidateRefresh] Status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final newAccessToken = data['token'] as String?;
+        final newRefreshToken = data['refreshToken'] as String?;
+
+        if (newAccessToken == null) return false;
+
+        await tokenStorage.saveAccessToken(newAccessToken);
+        if (newRefreshToken != null) {
+          await tokenStorage.saveRefreshToken(newRefreshToken);
+        }
+        debugPrint("✅ [AuthService] Token refreshed during restore");
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint("❌ [AuthService] _validateAndRefreshToken error: $e");
       return false;
     }
   }
@@ -251,10 +311,12 @@ class AuthService {
       await _googleSignIn.disconnect();
       await _clearLoginState();
       _currentUser = null;
+      _hasValidTokenSession = false;
       debugPrint("✅ [AuthService] Force logout complete");
       onSessionExpired?.call();
     } catch (e) {
       debugPrint("❌ [AuthService] Force logout error: $e");
+      _hasValidTokenSession = false;
       onSessionExpired?.call();
     }
   }
@@ -379,6 +441,7 @@ class AuthService {
       await _googleSignIn.signOut();
       await _clearLoginState();
       _currentUser = null;
+      _hasValidTokenSession = false;
 
       debugPrint("✅ Sign-out complete");
     } catch (e) {
@@ -386,6 +449,7 @@ class AuthService {
       await tokenStorage.clearAll();
       await _clearLoginState();
       _currentUser = null;
+      _hasValidTokenSession = false;
     }
   }
 
@@ -396,6 +460,7 @@ class AuthService {
       await _googleSignIn.disconnect();
       await _clearLoginState();
       _currentUser = null;
+      _hasValidTokenSession = false;
     } catch (e) {
       await signOut();
     }
@@ -408,9 +473,10 @@ class AuthService {
   // 📊 STATE
   // ═══════════════════════════════════════════════════════
 
-  bool get isLoggedIn => _currentUser != null;
+  bool get isLoggedIn => _currentUser != null || _hasValidTokenSession;
   GoogleSignInAccount? get currentUser => _currentUser;
   String? get email => _currentUser?.email;
+  String? get storedEmail => _authBox?.get(_keyUserEmail) as String?;
   String? get displayName => _currentUser?.displayName;
   String? get photoUrl => _currentUser?.photoUrl;
   String? get userId => _currentUser?.id;

@@ -133,6 +133,21 @@ class _UserLoginState extends State<UserLogin>
           _loadLikedAndSaved(context, provider),
         ]);
 
+        // Gelombang 3: refresh portofolio dengan userId agar status like/save
+        // tampil benar. Harus SETELAH gelombang 2 karena _syncLikedAndSavedFromLocal
+        // membaca dari list yang baru diisi oleh _loadLikedAndSaved.
+        if (mounted) {
+          try {
+            await context.read<PortofolioProvider>().loadPortofolio(
+                  context,
+                  preloadImages: false, // gambar sudah di-cache saat guest
+                );
+            debugPrint("[UserLogin] ✅ Portofolio refreshed with like/save status");
+          } catch (e) {
+            debugPrint("[UserLogin] ⚠️ Portofolio refresh error (non-fatal): $e");
+          }
+        }
+
         debugPrint("✅ [UserLogin] All services initialized");
         debugPrint("═══════════════════════════════════════");
 

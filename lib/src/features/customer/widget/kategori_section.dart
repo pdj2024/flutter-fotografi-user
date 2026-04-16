@@ -15,12 +15,6 @@ class KategoriSection extends StatefulWidget {
 
 class _KategoriSectionState extends State<KategoriSection> {
   @override
-  void initState() {
-    super.initState();
-    Future.microtask(() => context.read<KategoriProvider>().loadKategori());
-  }
-
-  @override
   Widget build(BuildContext context) {
     final kategoriProvider = context.watch<KategoriProvider>();
     final kategoriList = kategoriProvider.kategoriList;
