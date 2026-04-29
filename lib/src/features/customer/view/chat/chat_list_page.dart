@@ -202,8 +202,7 @@ class _ChatListPageState extends State<ChatListPage>
         decoration: InputDecoration(
           hintText: 'Cari percakapan...',
           hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-          prefixIcon:
-              Icon(Icons.search, size: 20, color: Colors.grey.shade600),
+          prefixIcon: Icon(Icons.search, size: 20, color: Colors.grey.shade600),
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           filled: true,
           fillColor: Colors.grey.shade100,
@@ -264,8 +263,7 @@ class _ChatListPageState extends State<ChatListPage>
   }
 
   Widget _buildAvatar(RoomChatEntity room) {
-    final hasMedia =
-        room.idMediaLawan != null && room.idMediaLawan!.isNotEmpty;
+    final hasMedia = room.idMediaLawan != null && room.idMediaLawan!.isNotEmpty;
 
     return CircleAvatar(
       radius: 28,
@@ -278,8 +276,8 @@ class _ChatListPageState extends State<ChatListPage>
               placeholder: (_, __) => CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.grey.shade300,
-                child: Icon(Icons.person,
-                    color: Colors.grey.shade500, size: 28),
+                child:
+                    Icon(Icons.person, color: Colors.grey.shade500, size: 28),
               ),
               errorWidget: (_, __, ___) => _buildInitialAvatar(room),
             )
@@ -288,9 +286,8 @@ class _ChatListPageState extends State<ChatListPage>
   }
 
   Widget _buildInitialAvatar(RoomChatEntity room) {
-    final initial = room.displayName.isNotEmpty
-        ? room.displayName[0].toUpperCase()
-        : '?';
+    final initial =
+        room.displayName.isNotEmpty ? room.displayName[0].toUpperCase() : '?';
     return CircleAvatar(
       radius: 28,
       backgroundColor: Constants.primaryColorVendor.withOpacity(0.2),
@@ -361,8 +358,7 @@ class _ChatListPageState extends State<ChatListPage>
             if (room.hasUnread)
               Container(
                 constraints: const BoxConstraints(minWidth: 20),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Constants.primaryColorVendor,
                   borderRadius: BorderRadius.circular(10),
@@ -475,9 +471,7 @@ class _ChatListPageState extends State<ChatListPage>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isSearchResult
-                      ? Icons.search_off
-                      : Icons.chat_bubble_outline,
+                  isSearchResult ? Icons.search_off : Icons.chat_bubble_outline,
                   size: 56,
                   color: Constants.primaryColorVendor,
                 ),
@@ -512,8 +506,7 @@ class _ChatListPageState extends State<ChatListPage>
             const SizedBox(height: 32),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 48),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),

@@ -271,6 +271,7 @@ class PaymentNotificationHandler {
 
   _NotifContent _resolveContent(String statusBayar, String orderRef) {
     switch (statusBayar) {
+      case 'capture':
       case 'settlement':
       case 'berhasil':
       case 'success':
@@ -306,6 +307,7 @@ class PaymentNotificationHandler {
 
   List<AndroidNotificationAction> _getActions(String statusBayar) {
     switch (statusBayar) {
+      case 'capture':
       case 'settlement':
       case 'berhasil':
       case 'success':

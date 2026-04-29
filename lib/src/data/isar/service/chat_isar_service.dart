@@ -263,12 +263,76 @@ class ChatIsarService {
 
   Stream<List<RoomChatEntity>> watchAllRooms() {
     if (!_isAvailable) return const Stream.empty();
-    // Fire immediately dengan data saat ini
+    // Fire immediately dengan data saat ini, lalu repair lastMessage kosong
     Future.microtask(() async {
       final rooms = await getAllRooms();
       if (!_roomsController.isClosed) _roomsController.add(rooms);
+      // Repair rooms dengan lastMessage kosong dari pesan tersimpan
+      await _repairEmptyLastMessages(rooms);
     });
     return _roomsController.stream;
+  }
+
+  /// Repair rooms yang lastMessage-nya kosong atau 'Pesan baru' (placeholder generik).
+  /// Mengambil pesan terakhir dari tabel messages dan mengisi ulang lastMessage.
+  Future<void> _repairEmptyLastMessages(List<RoomChatEntity> rooms) async {
+    if (!_isAvailable) return;
+    final db = await _db;
+    bool anyUpdated = false;
+    for (final room in rooms) {
+      if (room.lastMessage.isNotEmpty && room.lastMessage != 'Pesan baru') {
+        continue;
+      }
+      try {
+        final maps = await db.query(
+          'messages',
+          where: 'room_id = ?',
+          whereArgs: [room.roomId],
+          orderBy: 'sent_at DESC',
+          limit: 1,
+        );
+        if (maps.isEmpty) continue;
+        final last = ChatMessageEntity.fromMap(maps.first);
+
+        String preview;
+        if (last.message.isNotEmpty) {
+          preview = last.message;
+        } else {
+          final jenis = last.resolvedJenisPesan;
+          switch (jenis) {
+            case 'pesanan':
+              preview = '🧾 Detail pesanan';
+              break;
+            case 'penawaran':
+              preview = '💼 Penawaran baru';
+              break;
+            case 'paket':
+              preview = '📦 Paket ditawarkan';
+              break;
+            case 'image':
+              preview = '🖼️ Gambar';
+              break;
+            default:
+              continue; // tetap kosong, jangan overwrite dengan generic
+          }
+        }
+
+        await db.update(
+          'rooms',
+          {
+            'last_message': preview,
+            'last_message_at': last.sentAt.millisecondsSinceEpoch,
+          },
+          where: 'room_id = ?',
+          whereArgs: [room.roomId],
+        );
+        anyUpdated = true;
+        debugPrint('[ChatIsarService] 🔧 Repaired lastMessage: ${room.roomId} → "$preview"');
+      } catch (e) {
+        debugPrint('[ChatIsarService] ⚠️ _repairEmptyLastMessages $e');
+      }
+    }
+    if (anyUpdated) await _notifyRoomsChanged();
   }
 
   Stream<void> watchRoom(String roomId) {

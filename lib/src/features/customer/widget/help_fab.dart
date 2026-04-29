@@ -84,9 +84,9 @@ class _HelpFabState extends State<HelpFab> with SingleTickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     _MenuItem(
-                      icon: Icons.wechat_sharp,
-                      iconColor: const Color(0xFF0F6E56),
-                      iconBg: const Color(0xFFE1F5EE),
+                      icon: FontAwesomeIcons.whatsapp,
+                      iconColor: const Color(0xFF25D366),
+                      iconBg: const Color(0xFFDCF8C6),
                       label: 'Butuh bantuan?',
                       onTap: () => _openWhatsApp(),
                     ),
@@ -274,7 +274,7 @@ class _AnimatedFabState extends State<_AnimatedFab>
 // ── Menu item chip ─────────────────────────────────────────────────────────
 
 class _MenuItem extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final Color iconBg;
   final String label;
@@ -311,11 +311,12 @@ class _MenuItem extends StatelessWidget {
             Container(
               width: 26,
               height: 26,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: iconBg,
                 borderRadius: BorderRadius.circular(7),
               ),
-              child: Icon(icon, color: iconColor, size: 14),
+              child: FaIcon(icon, color: iconColor, size: 14),
             ),
             const SizedBox(width: 8),
             Text(

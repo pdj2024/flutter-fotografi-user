@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class Constants {
 
-  static const String versionApp = '1.0.5';
+  static const String versionApp = '1.0.6';
 
   static const String versionApi = '1.0.0';
 

@@ -154,20 +154,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // KALKULASI HARGA
-  // ══════════════════════════════════════════════════════════════
-
-  /// Hitung ulang estimasi biaya menggunakan PpnModel.hitungEstimasi().
-  ///
-  /// Dipanggil setiap kali:
-  ///  - Data pertama kali di-load
-  ///  - User memilih / mengganti metode pembayaran
-  ///
-  /// PpnModel.hitungEstimasi() otomatis menangani 3 skenario:
-  ///  - Incl. PPN  → DPP diekstrak dari dalam harga
-  ///  - Excl. PPN  → PPN ditambahkan di atas harga (ditanggung customer)
-  ///  - Tanpa PPN  → tidak ada tambahan
   void _hitungHarga() {
     if (penawaran == null || ppnModel == null) return;
 
@@ -841,35 +827,6 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       ),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════
-  // EXPANDABLE BOTTOM BAR
-  //
-  // Label dan baris PPN ditampilkan secara dinamis:
-  //
-  //  ┌─ Incl. PPN ───────────────────────────────────────────────┐
-  //  │  Harga Paket (sudah termasuk PPN)      Rp X.XXX.XXX       │
-  //  │  PPN (11%) sudah termasuk             -Rp XXX.XXX         │
-  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
-  //  │  ─────────────────────────────────────────────────────    │
-  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
-  //  └───────────────────────────────────────────────────────────┘
-  //
-  //  ┌─ Excl. PPN ───────────────────────────────────────────────┐
-  //  │  Harga Paket (belum termasuk PPN)      Rp X.XXX.XXX       │
-  //  │  PPN (11%)                             Rp XXX.XXX         │
-  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
-  //  │  ─────────────────────────────────────────────────────    │
-  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
-  //  └───────────────────────────────────────────────────────────┘
-  //
-  //  ┌─ Tanpa PPN ───────────────────────────────────────────────┐
-  //  │  Harga Paket                           Rp X.XXX.XXX       │
-  //  │  Biaya Pembayaran (jika dipilih)       Rp XXX.XXX         │
-  //  │  ─────────────────────────────────────────────────────    │
-  //  │  Total Pembayaran                      Rp X.XXX.XXX       │
-  //  └───────────────────────────────────────────────────────────┘
-  // ══════════════════════════════════════════════════════════════
 
   Widget _buildExpandableBottomBar() {
     // Untuk label, gunakan admin fee yang belum kena PPN (DPP admin)
