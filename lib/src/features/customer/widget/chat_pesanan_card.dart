@@ -4,6 +4,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 
 class ChatPesananCard extends StatelessWidget {
   final PesananModel pesanan;
@@ -89,7 +90,7 @@ class ChatPesananCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     // Status Progress Badge
-                    if (pesanan.statusBayar == "settlement")
+                    if (PesananProvider.isPaymentSettled(pesanan.statusBayar))
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -194,7 +195,7 @@ class ChatPesananCard extends StatelessWidget {
                 // Payment Method
                 if (pesanan.metodeBayar != null &&
                     pesanan.metodeBayar!.isNotEmpty &&
-                    pesanan.statusBayar != "settlement") ...[
+                    !PesananProvider.isPaymentSettled(pesanan.statusBayar)) ...[
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     Icons.payment_outlined,
@@ -212,7 +213,7 @@ class ChatPesananCard extends StatelessWidget {
                 // Progress Description (jika ada)
                 if (pesanan.deskripsiProgresPesanan != null &&
                     pesanan.deskripsiProgresPesanan!.isNotEmpty &&
-                    pesanan.statusBayar == "settlement") ...[
+                    PesananProvider.isPaymentSettled(pesanan.statusBayar)) ...[
                   const SizedBox(height: 12),
                   _buildProgressDescription(),
                 ],
@@ -457,6 +458,7 @@ class ChatPesananCard extends StatelessWidget {
     switch (status) {
       case 'belum bayar':
         return Colors.orange.shade700;
+      case 'capture':
       case 'settlement':
         return Colors.green.shade700;
       default:
@@ -470,6 +472,7 @@ class ChatPesananCard extends StatelessWidget {
     switch (status) {
       case 'belum bayar':
         return 'Belum Bayar';
+      case 'capture':
       case 'settlement':
         return 'Lunas';
       default:
@@ -483,6 +486,7 @@ class ChatPesananCard extends StatelessWidget {
     switch (status) {
       case 'belum bayar':
         return Icons.pending_outlined;
+      case 'capture':
       case 'settlement':
         return Icons.check_circle_outline;
       default:
@@ -500,7 +504,7 @@ class ChatPesananCard extends StatelessWidget {
     // Prioritas berdasarkan status pembayaran dan progress
     if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
       return 'Bayar Sekarang';
-    } else if (paymentStatus == 'settlement') {
+    } else if (PesananProvider.isPaymentSettled(pesanan.statusBayar)) {
       if (progressStatus == 'selesai') {
         return 'Lihat Detail';
       } else if (progressStatus == 'review' || progressStatus == 'revisi') {

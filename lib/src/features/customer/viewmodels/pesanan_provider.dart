@@ -190,12 +190,35 @@ class PesananProvider with ChangeNotifier {
         idCustomer: userId,
       );
 
-      if (allOrders.isNotEmpty) {
-        await localService.saveOrders(allOrders);
-      }
-
       _allPesanan = allOrders;
       _filterPesanan();
+
+      // Fetch dan simpan histories untuk unpaid + progress (sama seperti loadOrderWithCache)
+      final toFetchHistories = [..._pesananUnpaid, ..._pesananProgress];
+      final allHistories = <String, List<HistoryOrderModel>>{};
+      for (final order in toFetchHistories) {
+        try {
+          final h = await historyService.getAll(
+            noOrder: order.noBukti,
+            status: 'aktif',
+            orderBy: 'Tgl_Progress',
+            orderDir: 'DESC',
+          );
+          if (h.isNotEmpty) allHistories[order.noBukti] = h;
+        } catch (e) {
+          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
+        }
+      }
+
+      if (allOrders.isNotEmpty) {
+        await localService.saveOrders(allOrders, historiesMap: allHistories);
+      }
+
+      if (allHistories.isNotEmpty) {
+        _orderHistories
+          ..clear()
+          ..addAll(allHistories);
+      }
 
       debugPrint('[PesananProvider] ✅ loadOrderOnly done: '
           '${_allPesanan.length} total | '
@@ -530,19 +553,19 @@ class PesananProvider with ChangeNotifier {
   //    di MainOrderPage.
   void _filterPesanan() {
     _pesananUnpaid = _allPesanan.where((p) {
-      final isUnpaidStatus = p.statusProgresPesanan == "menunggu bayar";
-      final isAlreadySettled = isPaymentSettled(p.statusBayar);
-      // Tampilkan di unpaid HANYA jika belum settled
-      // Jika sudah settled tapi progres belum berubah → biarkan
-      // _handleSettledPayments yang handle (dia akan buat history persiapan)
-      // dan tetap tampilkan di unpaid sementara agar user tahu ada pesanan
-      return isUnpaidStatus;
+      return p.statusProgresPesanan == "menunggu bayar" &&
+          !isPaymentSettled(p.statusBayar);
     }).toList();
 
-    _pesananProgress = _allPesanan
-        .where((p) => ["persiapan", "proses", "review", "revisi"]
-            .contains(p.statusProgresPesanan))
-        .toList();
+    _pesananProgress = _allPesanan.where((p) {
+      if (["persiapan", "proses", "review", "revisi"]
+          .contains(p.statusProgresPesanan)) return true;
+      // Pesanan statusBayar sudah settled tapi server belum geser statusProgres →
+      // tampilkan di progress (bukan unpaid) agar summary count akurat
+      if (p.statusProgresPesanan == "menunggu bayar" &&
+          isPaymentSettled(p.statusBayar)) return true;
+      return false;
+    }).toList();
 
     _pesananSelesai =
         _allPesanan.where((p) => p.statusProgresPesanan == "selesai").toList();

@@ -960,10 +960,19 @@ class ChatStorageService {
           final existing = await _isar.getRoomById(room.roomId);
 
           if (existing != null) {
+            // Pilih lastMessage terbaik: API → existing Isar → rebuild dari pesan tersimpan
+            String mergedLastMessage = room.lastMessage.isNotEmpty
+                ? room.lastMessage
+                : existing.lastMessage;
+            // Rebuild jika kosong ATAU hanya berisi placeholder generik 'Pesan baru'
+            // (bisa terjadi jika sesi sebelumnya menyimpan nilai salah untuk pesan pesanan/penawaran)
+            if (mergedLastMessage.isEmpty || mergedLastMessage == 'Pesan baru') {
+              final rebuilt = await _rebuildPreviewFromLastMessage(room.roomId);
+              if (rebuilt.isNotEmpty) mergedLastMessage = rebuilt;
+            }
+
             final updated = existing.copyWith(
-              lastMessage: room.lastMessage.isNotEmpty
-                  ? room.lastMessage
-                  : existing.lastMessage,
+              lastMessage: mergedLastMessage,
               lastMessageAt: room.lastMessageAt.isAfter(existing.lastMessageAt)
                   ? room.lastMessageAt
                   : existing.lastMessageAt,
@@ -985,7 +994,14 @@ class ChatStorageService {
             );
             await _isar.saveRoom(updated);
           } else {
+            // Room baru dari API — jika lastMessage kosong, rebuild dari pesan tersimpan
+            String lastMsg = room.lastMessage;
+            if (lastMsg.isEmpty || lastMsg == 'Pesan baru') {
+              final rebuilt = await _rebuildPreviewFromLastMessage(room.roomId);
+              if (rebuilt.isNotEmpty) lastMsg = rebuilt;
+            }
             final entity = RoomChatEntity.fromRoomChatModel(room)
+              ..lastMessage = lastMsg
               ..countStatusReceived = 0
               ..listIdMessageReceived = [];
             await _isar.saveRoom(entity);
@@ -1119,6 +1135,25 @@ class ChatStorageService {
   // ═══════════════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Rebuild preview text dari pesan terakhir yang tersimpan di database.
+  /// Dipanggil saat lastMessage room kosong — biasanya karena API tidak
+  /// mengembalikan Last_Message untuk pesan tipe pesanan/penawaran/paket.
+  Future<String> _rebuildPreviewFromLastMessage(String roomId) async {
+    try {
+      final messages = await _isar.getMessagesByRoomPaged(
+        roomId: roomId,
+        offset: 0,
+        limit: 1,
+      );
+      if (messages.isEmpty) return '';
+      final last = messages.first;
+      if (last.message.isNotEmpty) return last.message;
+      return _formatPreview(last.resolvedJenisPesan);
+    } catch (_) {
+      return '';
+    }
+  }
 
   Future<void> _updateRoomLastMessage(ChatModel message) async {
     try {

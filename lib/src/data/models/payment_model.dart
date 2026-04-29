@@ -59,7 +59,8 @@ class MidtransPayment {
 
   /// 🔥 Helper status
   bool get isPending => transactionStatus == 'pending';
-  bool get isSuccess => transactionStatus == 'settlement';
+  bool get isSuccess =>
+      transactionStatus == 'settlement' || transactionStatus == 'capture';
   bool get isExpired => DateTime.now().isAfter(expiryTime);
 
   /// 🔥 Helper URL

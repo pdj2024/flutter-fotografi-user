@@ -320,10 +320,18 @@ class MyApp extends StatelessWidget {
         debugPrint('[Main] 📊 FCM progress: ${progress.noOrder}');
         try {
           historyOrderProvider.handleProgressFromFCM(progress);
-          pesananProvider.updateOrderStatus(
-            progress.noOrder,
-            progress.statusProgressPesanan,
-          );
+
+          // Untuk status 'review' dan 'revisi', vendor juga mengisi linkUrl
+          // di order. refreshOrder() fetch full PesananModel dari API sehingga
+          // linkUrl langsung tersedia tanpa user refresh manual.
+          // Untuk status lain, cukup update lokal agar lebih cepat.
+          final newStatus = progress.statusProgressPesanan;
+          if (newStatus == 'review' || newStatus == 'revisi') {
+            pesananProvider.refreshOrder(progress.noOrder);
+          } else {
+            pesananProvider.updateOrderStatus(progress.noOrder, newStatus);
+          }
+
           Future.delayed(const Duration(milliseconds: 300), () {
             if (historyOrderProvider.isOrderTracked(progress.noOrder)) {
               historyOrderProvider.fetchHistoryForOrder(

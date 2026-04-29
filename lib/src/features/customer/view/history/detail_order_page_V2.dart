@@ -1456,7 +1456,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   }
 
   Widget _buildPaymentContent(PesananModel pesanan) {
-    final isPaid = pesanan.statusBayar == 'settlement';
+    final isPaid = PesananProvider.isPaymentSettled(pesanan.statusBayar);
     final payColor =
         isPaid ? _cfg('selesai').color : _cfg('menunggu bayar').color;
 

@@ -10,6 +10,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/card_button.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PaymentTimerStatus {
@@ -49,7 +50,13 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   String get _statusStr =>
       widget.order.statusProgresPesanan ?? 'menunggu bayar';
-  bool get _isUnpaid => _statusStr == 'menunggu bayar';
+
+  /// Pembayaran sudah dikonfirmasi (capture/settlement) tapi server belum geser status
+  bool get _isSettledPending =>
+      _statusStr == 'menunggu bayar' &&
+      PesananProvider.isPaymentSettled(widget.order.statusBayar);
+
+  bool get _isUnpaid => _statusStr == 'menunggu bayar' && !_isSettledPending;
   bool get _isReview => _statusStr == 'review';
 
   @override
@@ -58,6 +65,8 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     if (_isUnpaid) {
       _loadTimerStatus();
       _startPeriodicUpdate();
+    } else if (_isSettledPending) {
+      // Tidak perlu timer — pembayaran sudah dikonfirmasi
     }
   }
 
@@ -188,8 +197,14 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                   text: widget.order.lokasi,
                 ),
 
+                // Settled-pending banner — pembayaran terkonfirmasi, server belum update
+                if (_isSettledPending) ...[
+                  const SizedBox(height: 12),
+                  _buildSettledPendingBanner(),
+                ],
+
                 // Progress status banner — tampil untuk semua status KECUALI menunggu bayar
-                if (!_isUnpaid) ...[
+                if (!_isUnpaid && !_isSettledPending) ...[
                   const SizedBox(height: 12),
                   _buildProgressBanner(),
                 ],
@@ -350,6 +365,20 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     );
   }
 
+  // ─── Settled-Pending Banner ────────────────────────────────────
+  Widget _buildSettledPendingBanner() {
+    return _PaymentBannerContainer(
+      color: Colors.green.shade700,
+      bgColor: Colors.green.shade50,
+      borderColor: Colors.green.shade200,
+      icon: Icons.check_circle_outline_rounded,
+      iconBgColor: Colors.green.shade100,
+      title: 'Pembayaran Terkonfirmasi',
+      subtitle: 'Menunggu proses dari vendor',
+      trailing: null,
+    );
+  }
+
   // ─── Payment Timer Banner ──────────────────────────────────────
   Widget _buildPaymentBanner() {
     final status = _timerStatus!;
@@ -454,7 +483,14 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     // Tentukan tombol primary berdasarkan status + timer
     Widget primaryButton;
 
-    if (_isUnpaid) {
+    if (_isSettledPending) {
+      primaryButton = PrimaryButton(
+        icon: Icons.arrow_forward_rounded,
+        label: 'Detail',
+        onTap: widget.onTap,
+        color: Colors.green.shade700,
+      );
+    } else if (_isUnpaid) {
       final status = _timerStatus;
 
       if (status == null) {
