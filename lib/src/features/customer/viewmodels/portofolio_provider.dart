@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/media_preload_service.dart';
@@ -199,8 +200,18 @@ class PortofolioProvider with ChangeNotifier {
       if (result.length >= 10) {
         _saveToCacheInBackground(result.take(10).toList());
       }
+
       if (preloadImages && result.isNotEmpty) {
-        _preloadService.preloadPortfolios(result, priorityCount: 10);
+        // Jangan preload item yang sedang visible di layar — biarkan
+        // CachedNetworkImage mendownloadnya dengan bandwidth penuh tanpa saingan.
+        // Hanya preload item di bawah viewport agar siap sebelum user scroll.
+        const viewportEstimate = 5;
+        if (result.length > viewportEstimate) {
+          unawaited(_preloadService.preloadPortfolios(
+            result.skip(viewportEstimate).toList(),
+            priorityCount: 10,
+          ));
+        }
       }
     } catch (e) {
       debugPrint('[PortofolioProvider] ❌ loadPortofolio: $e');
@@ -558,4 +569,40 @@ class PortofolioProvider with ChangeNotifier {
   void resumePreloads() => _preloadService.resume();
   Future<Map<String, dynamic>> getCacheStats() => localService.getStats();
   Future<void> printCacheStats() => localService.printStats();
+
+  /// Preload gambar dari N portofolio pertama ke disk + memory cache.
+  ///
+  /// Dipanggil dari splash screen SETELAH [loadPortofolio] selesai.
+  /// Dengan cara ini, saat user masuk home page gambar sudah ada di cache
+  /// dan langsung tampil tanpa shimmer.
+  ///
+  /// [timeout] memastikan splash tidak terlalu lama di koneksi lambat —
+  /// jika habis, home page tetap tampil dengan shimmer seperti biasa.
+  Future<void> preloadFirstImages(
+    BuildContext context, {
+    int portfolioCount = 5,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (_portofolioList.isEmpty || !context.mounted) return;
+
+    final urls = _portofolioList
+        .take(portfolioCount)
+        .expand((p) => p.mediaUrls)
+        .map((m) => m.idMedia ?? m.url ?? '')
+        .where((u) => u.isNotEmpty && u.startsWith('http'))
+        .take(portfolioCount * 2)
+        .toList();
+
+    if (urls.isEmpty) return;
+
+    debugPrint('[PortofolioProvider] 🖼️ Preloading ${urls.length} images before home...');
+    try {
+      await _preloadService
+          .warmMemoryCache(urls, context, maxCount: urls.length)
+          .timeout(timeout);
+      debugPrint('[PortofolioProvider] ✅ Image preload complete');
+    } catch (_) {
+      debugPrint('[PortofolioProvider] ⏱️ Image preload timed out — home will show shimmer');
+    }
+  }
 }

@@ -546,6 +546,15 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> markAllSentAsReceived() async {
+    if (_currentUserId == null) return;
+    try {
+      await _storage.markAllSentAsReceived();
+    } catch (e) {
+      debugPrint('[ChatProvider] ❌ markAllSentAsReceived: $e');
+    }
+  }
+
   Future<bool> updatePenawaranToPesanan({
     required ChatModel message,
     required String pesananId,

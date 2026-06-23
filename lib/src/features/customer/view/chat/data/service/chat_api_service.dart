@@ -191,7 +191,8 @@ class ChatApiService {
                 'messageId=$fallbackId roomId=$fallbackRoomId');
             return SendMessageResult(
               messageId: fallbackId,
-              roomId: fallbackRoomId.isNotEmpty ? fallbackRoomId : message.roomId,
+              roomId:
+                  fallbackRoomId.isNotEmpty ? fallbackRoomId : message.roomId,
             );
           }
         }
@@ -200,12 +201,13 @@ class ChatApiService {
       }
 
       // ── Gunakan roomId dari response, fallback ke roomId yang dikirim ──
-      final finalRoomId =
-          roomId.isNotEmpty ? roomId : message.roomId;
+      final finalRoomId = roomId.isNotEmpty ? roomId : message.roomId;
 
       debugPrint('[ChatApi] ✅ sendMessageWithResult: '
           'messageId=$messageId roomId=$finalRoomId '
           '(${message.roomId.isEmpty ? "new room" : "existing room"})');
+
+      debugPrint("Send Status: ${message.sendStatus}");
 
       return SendMessageResult(
         messageId: messageId,
@@ -245,8 +247,7 @@ class ChatApiService {
     required String status,
   }) async {
     try {
-      debugPrint(
-          '[ChatApi] 📤 updateMessage: ${model.messageId} → $status');
+      debugPrint('[ChatApi] 📤 updateMessage: ${model.messageId} → $status');
       final response = await _client.put(
         '/$_controller/update?message_id=${model.messageId}',
         headers: {'Content-Type': 'application/json'},
@@ -281,8 +282,7 @@ class ChatApiService {
           return {'success': true, 'message': 'Update berhasil'};
         }
       } else {
-        debugPrint(
-            '[ChatApi] ❌ update failed: ${response.statusCode}');
+        debugPrint('[ChatApi] ❌ update failed: ${response.statusCode}');
         return jsonDecode(response.body);
       }
     } catch (e) {

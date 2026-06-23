@@ -464,10 +464,33 @@ class ChatIsarService {
   Future<void> saveAllMessages(List<ChatMessageEntity> entities) async {
     if (!_isAvailable || entities.isEmpty) return;
     final db = await _db;
+
+    // Fetch existing statuses in one query to avoid downgrading higher status
+    // (e.g. 'read' must not be overwritten by API's 'received'/'sent')
+    final ids = entities.map((e) => e.messageId).toList();
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final existingRows = await db.query(
+      'messages',
+      columns: ['message_id', 'send_status'],
+      where: 'message_id IN ($placeholders)',
+      whereArgs: ids,
+    );
+    final existingStatus = {
+      for (final row in existingRows)
+        row['message_id'] as String: row['send_status'] as String
+    };
+
+    const statusPriority = {'read': 3, 'received': 2, 'sent': 1};
+
     final batch = db.batch();
     for (final e in entities) {
-      batch.insert('messages', e.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      final current = existingStatus[e.messageId];
+      final map = e.toMap();
+      if (current != null &&
+          (statusPriority[current] ?? 0) > (statusPriority[e.sendStatus] ?? 0)) {
+        map['send_status'] = current;
+      }
+      batch.insert('messages', map, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
     debugPrint('[ChatIsarService] 💾 ${entities.length} messages saved');
@@ -841,6 +864,41 @@ class ChatIsarService {
     debugPrint(
         '[ChatIsarService] 👁️ ${unread.length} msgs marked read: $roomId');
     await _notifyMessagesChanged(roomId);
+  }
+
+  Future<List<String>> markSentMessagesAsReceived(String currentUserId) async {
+    if (!_isAvailable) return [];
+    final db = await _db;
+
+    final maps = await db.query(
+      'messages',
+      columns: ['message_id', 'room_id'],
+      where:
+          "send_status = 'sent' AND sender_id != ? AND message_id NOT LIKE 'local-%'",
+      whereArgs: [currentUserId],
+    );
+    if (maps.isEmpty) return [];
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = db.batch();
+    for (final m in maps) {
+      batch.update(
+        'messages',
+        {'send_status': 'received', 'received_at': now},
+        where: 'message_id = ?',
+        whereArgs: [m['message_id']],
+      );
+    }
+    await batch.commit(noResult: true);
+
+    final messageIds = maps.map((m) => m['message_id'] as String).toList();
+    final roomIds = maps.map((m) => m['room_id'] as String).toSet();
+    debugPrint(
+        '[ChatIsarService] 📬 ${messageIds.length} msgs sent→received');
+    for (final roomId in roomIds) {
+      await _notifyMessagesChanged(roomId);
+    }
+    return messageIds;
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────

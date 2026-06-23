@@ -4,6 +4,7 @@ import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/kategori_section.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/portofolio_section.dart';
@@ -27,6 +28,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
+
+    // Drain pesan yang masuk saat app mati/force close (Case 4)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<RoomChatProvider>().onAppResumed();
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Silent login restore — no-op untuk guest, tidak memblokir load data.
@@ -66,6 +73,8 @@ class _CustomerHomePageState extends State<CustomerHomePage>
         break;
       case AppLifecycleState.resumed:
         portofolioProvider.resumePreloads();
+        // Drain pesan yang masuk saat app di background (Case 3)
+        if (mounted) context.read<RoomChatProvider>().onAppResumed();
         break;
       default:
         break;
@@ -192,70 +201,69 @@ class _CustomerHomePageState extends State<CustomerHomePage>
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _onRefresh,
-                // ✅ Warna sesuai primary app
                 color: Constants.primaryColor,
                 backgroundColor: Colors.white,
-                // ✅ displacement kecil agar indikator tidak terlalu jauh
                 displacement: 20,
-                child: ListView(
+                child: CustomScrollView(
                   controller: _scrollController,
-                  // ✅ Hanya satu physics di sini, tidak dobel
                   physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
+                  slivers: [
                     // ── Kategori ──────────────────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: KategoriSection(),
-                    ),
-                    
-                    SizedBox(
-                      height: 5,
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: KategoriSection(),
+                      ),
                     ),
 
-                    // ── Portofolio ────────────────────────────────────
+                    const SliverToBoxAdapter(child: SizedBox(height: 5)),
+
+                    // ── Portofolio — lazy build, hanya yang visible ───
                     const PortofolioSection(),
 
                     // ── Preload indicator ─────────────────────────────
-                    Consumer<PortofolioProvider>(
-                      builder: (context, provider, child) {
-                        final stats = provider.getPreloadStats();
-                        final isPreloading = stats['isPreloading'] as bool;
-                        final queueLength = stats['queueLength'] as int;
+                    SliverToBoxAdapter(
+                      child: Consumer<PortofolioProvider>(
+                        builder: (context, provider, child) {
+                          final stats = provider.getPreloadStats();
+                          final isPreloading = stats['isPreloading'] as bool;
+                          final queueLength = stats['queueLength'] as int;
 
-                        if (!isPreloading || queueLength == 0) {
-                          return const SizedBox.shrink();
-                        }
+                          if (!isPreloading || queueLength == 0) {
+                            return const SizedBox.shrink();
+                          }
 
-                        return Container(
-                          padding: const EdgeInsets.all(10),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    Constants.primaryColor,
+                          return Container(
+                            padding: const EdgeInsets.all(10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      Constants.primaryColor,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Memuat gambar... ($queueLength)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Memuat gambar... ($queueLength)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
 
-                    const SizedBox(height: 80),
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
                   ],
                 ),
               ),

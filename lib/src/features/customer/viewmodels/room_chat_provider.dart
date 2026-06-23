@@ -145,9 +145,17 @@ class RoomChatProvider extends ChangeNotifier {
     _mergedStream = null;
 
     await ChatStorageService.setActiveRoomPref(roomId);
+    ChatStorageService.instance.setActiveRoom(roomId);
     await chatProv.trackRoom(roomId);
     chatProv.setActiveRoom(roomId);
     FCMService.instance.setActiveRoom(roomId);
+
+    // Drain background queue dulu agar pesan yang antri di SharedPrefs
+    // masuk ke Isar sebelum markRoomAsRead berjalan.
+    // Ini mencegah race condition saat user membuka room chat setelah
+    // app resume dari minimize (lifecycle event sudah terjadi sebelum
+    // RoomChatPage dibuat, sehingga onAppResumed tidak otomatis terpanggil).
+    await ChatStorageService.instance.drainBackgroundQueue(activeRoomId: roomId);
 
     unawaited(ChatStorageService.instance.markRoomAsRead(roomId));
     chatProv.loadMessages(roomId, silent: true, forceRefresh: false);
@@ -474,6 +482,7 @@ class RoomChatProvider extends ChangeNotifier {
     if (_activeRoomId != null) {
       chatProv.setActiveRoom(null);
       FCMService.instance.setActiveRoom(null);
+      ChatStorageService.instance.setActiveRoom(null);
     }
 
     await ChatStorageService.setActiveRoomPref(null);

@@ -215,7 +215,41 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
+  bool _isPaymentExpired(PesananModel o) {
+    // Snap
+    if (o.linkSnap != null && o.linkSnap!.isNotEmpty) {
+      if (o.expiryTime != null) return o.expiryTime!.isBefore(DateTime.now());
+      final ref = o.createdAt ?? o.updatedAt;
+      if (ref != null) return DateTime.now().difference(ref).inDays >= 30;
+      return false;
+    }
+    // Core: metodeBayar ada tapi paymentNumber1&2 + expiryTime semuanya null
+    final hasMethods = o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
+    if (hasMethods) {
+      final noNum =
+          (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
+          (o.paymentNumber2 == null || o.paymentNumber2!.isEmpty);
+      if (noNum && o.expiryTime == null) {
+        final ref = o.createdAt ?? o.updatedAt;
+        if (ref == null) return true;
+        return DateTime.now().difference(ref).inDays >= 1;
+      }
+    }
+    return false;
+  }
+
   void _openPayment(PesananModel o) {
+    if (_isPaymentExpired(o)) {
+      context.read<NavigationProvider>().navigateToPage(
+            context,
+            DetailOrderPageV2(pesananModel: o),
+            targetTabIndex: 2,
+            targetPage: 'DetailOrderPage',
+            hrsLogin: true,
+          );
+      return;
+    }
+
     if (o.linkSnap != null) {
       context.read<NavigationProvider>().navigateToPage(
             context,

@@ -320,8 +320,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     const SizedBox(height: 12),
                     _buildProfileCard(pesanan),
                     const SizedBox(height: 12),
-                    if ((status == 'review' || status == 'revisi') &&
-                        pesanan.linkUrl != null &&
+                    if (pesanan.linkUrl != null &&
                         pesanan.linkUrl!.isNotEmpty) ...[
                       _buildLinkResultCard(pesanan),
                       const SizedBox(height: 12),
@@ -396,8 +395,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         icon = Icons.schedule_rounded;
         fullText =
             'Pemotretan dijadwalkan pada ${Helper.formatTanggal(tglRealisasi!)}. '
-            'Tombol konfirmasi akan aktif pada hari pemotretan atau setelahnya. '
-            'Pastikan Anda hadir sesuai jadwal dan siap mengonfirmasi setelah sesi selesai.';
+            'Tombol konfirmasi sudah tersedia — tekan kapan saja setelah sesi pemotretan selesai dilaksanakan.';
       } else if (today.isAtSameMomentAs(tglShoot)) {
         icon = Icons.camera_alt_outlined;
         fullText = 'Pemotretan dijadwalkan hari ini. Setelah sesi selesai, '
@@ -409,9 +407,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         icon = Icons.warning_amber_rounded;
         fullText = 'Pemotretan sudah melewati tanggal yang dijadwalkan '
             '(${Helper.formatTanggal(tglRealisasi!)}). '
-            'Segera konfirmasi jika sesi telah selesai dilaksanakan. '
-            'Jika tidak dikonfirmasi dalam 3×24 jam dari tanggal realisasi, '
-            'pesanan akan otomatis lanjut ke tahap pengerjaan oleh vendor.';
+            'Segera konfirmasi jika sesi telah selesai dilaksanakan.';
       }
     }
 
@@ -674,7 +670,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     final bool isBeforeShoot = tglShoot != null && today.isBefore(tglShoot);
     final bool isOnShootDay =
         tglShoot != null && today.isAtSameMomentAs(tglShoot);
-    final bool isAfterShoot = tglShoot != null && today.isAfter(tglShoot);
 
     // ✅ Warna dot dari _cfg — tidak ada magic color manual
     final dotColor = isBeforeShoot
@@ -683,11 +678,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
             ? _cfg('persiapan').color
             : _cfg('proses').color;
 
-    // ✅ Label dari OrderStatusFlow.displayLabel
     final shootLabel = isBeforeShoot
-        ? 'Sesi pemotretan belum dimulai'
+        ? 'Dijadwalkan ${Helper.formatTanggal(tglRealisasi)}'
         : isOnShootDay
-            ? 'Sesi pemotretan sedang berlangsung hari ini'
+            ? 'Sesi pemotretan hari ini'
             : 'Sesi pemotretan sudah berlangsung';
 
     // ✅ Label tombol dari OrderStatusFlow.transitions
@@ -737,8 +731,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed:
-                  (isOnShootDay || isAfterShoot) ? _konfirmasiPemotretan : null,
+              onPressed: _konfirmasiPemotretan,
               icon: const Icon(Icons.camera_alt_rounded, size: 20),
               label: Text(
                 btnLabel, // ✅ dari OrderStatusFlow.transitions
@@ -1466,9 +1459,67 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     final int ppnPercent = pesanan.ppn ?? 0;
     final int adminFee = metodePembayaran?.fee ?? 0;
 
+    // Snap expired
+    bool isPaymentExpired = false;
+    if (!isPaid) {
+      if (pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty) {
+        if (pesanan.expiryTime != null) {
+          isPaymentExpired = pesanan.expiryTime!.isBefore(DateTime.now());
+        } else {
+          final ref = pesanan.createdAt ?? pesanan.updatedAt;
+          if (ref != null) {
+            isPaymentExpired = DateTime.now().difference(ref).inDays >= 30;
+          }
+        }
+      } else {
+        // Core expired
+        final hasMethods =
+            pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty;
+        if (hasMethods) {
+          final noNum =
+              (pesanan.paymentNumber1 == null ||
+                  pesanan.paymentNumber1!.isEmpty) &&
+              (pesanan.paymentNumber2 == null ||
+                  pesanan.paymentNumber2!.isEmpty);
+          if (noNum && pesanan.expiryTime == null) {
+            final ref = pesanan.createdAt ?? pesanan.updatedAt;
+            isPaymentExpired =
+                ref == null || DateTime.now().difference(ref).inDays >= 1;
+          }
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (isPaymentExpired) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.link_off_rounded,
+                    size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Pembayaran sudah expired. Hubungi vendor atau buat pesanan baru jika diperlukan.',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _buildInfoRow(
           label: 'Nomor Bukti',
           value: pesanan.noTrackingPesanan ?? '-',

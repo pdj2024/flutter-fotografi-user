@@ -624,8 +624,8 @@ class ChatSyncService {
           return;
         }
         final entities = await _buildEntitiesWithEmbedded(messages);
-        await _isar.replaceRoomMessages(roomId: roomId, newEntities: entities);
-        debugPrint('[ChatSync] ✅ BG replace: ${entities.length} for $roomId');
+        await _isar.saveAllMessages(entities);
+        debugPrint('[ChatSync] ✅ BG sync (saveAllMessages): ${entities.length} for $roomId');
       } catch (e) {
         debugPrint('[ChatSync] ⚠️ BG sync error: $e');
       } finally {

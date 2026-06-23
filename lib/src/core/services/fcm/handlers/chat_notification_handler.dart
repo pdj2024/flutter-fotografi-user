@@ -56,15 +56,9 @@ class ChatNotificationHandler {
   // =========================================
 
   Future<void> handleForegroundMessage(RemoteMessage message) async {
-    debugPrint(
-        '[ChatHandler] 📨 handleForegroundMessage: ${message.messageId}');
-
     try {
       final detail = NotificationHelper.parseDetail(message.data['detail']);
-      if (detail.isEmpty) {
-        debugPrint('[ChatHandler] ⚠️ detail kosong, skip');
-        return;
-      }
+      if (detail.isEmpty) return;
 
       final messageId = detail['message_id']?.toString() ?? '';
       final roomId = detail['room_id']?.toString() ?? '';
@@ -72,74 +66,63 @@ class ChatNotificationHandler {
       final messageText = detail['message']?.toString() ?? '';
       final jenisPesan = detail['jenis_pesan']?.toString() ?? 'text';
       final sendStatus = detail['send_status']?.toString() ?? 'sent';
-      final localId = detail['local_id']?.toString();
 
-      if (messageId.isEmpty) {
-        debugPrint('[ChatHandler] ⚠️ messageId kosong, skip');
-        return;
-      }
+      if (messageId.isEmpty) return;
 
       final currentUserId = getCurrentUserId();
+      debugPrint(
+          '[ChatHandler] ⏭️ User ID Saat ini ${currentUserId ?? 'null'}');
       final activeRoomId = getActiveRoomId();
-
-      // ── 1. Filter echo sendiri ──────────────────────────────────────────
-      // Own echo: sender = diri sendiri DAN sendStatus bukan 'sent'
-      // (sendStatus 'sent' dari server = konfirmasi bahwa pesan terkirim,
-      //  masih perlu diproses untuk replace local echo)
+      debugPrint('[ChatHandler] ⏭️ active Room Id ${activeRoomId ?? 'null'}');
       final isOwnMessage = senderId == currentUserId;
 
-      // ✅ Own echo dengan sendStatus apapun — jangan update status ke API
-      // Yang boleh update status adalah PENERIMA, bukan pengirim
-      if (isOwnMessage) {
-        // if (sendStatus != 'sent') {
-        //   debugPrint('[ChatHandler] ⏭️ Own echo (status: $sendStatus), skip');
-        //   return;
-        // }
+      // ── 1. Own echo — sendStatus: 'sent' (konfirmasi dari BE) ──────────────
+      if (isOwnMessage && sendStatus == 'sent') {
         final chatModel = _parseChatModel(detail, message);
         if (chatModel == null) return;
-        onMessageReceived(chatModel, 'sent'); // hanya persist ke Isar
-        // ✅ Tidak ada onUpdateMessageStatus di sini
+        onMessageReceived(chatModel, 'sent');
         return;
       }
 
-      // ── 2. Parse ChatModel ──────────────────────────────────────────────
+      // ── 2. Status echo MILIK SENDIRI (received/read dari partner) ─────────
+      // BE broadcast FCM ini ke semua peserta termasuk pengirim asli.
+      // Update status lokal pesan kita dari 'sent' → 'received'/'read'.
+      // Tidak perlu hit API — backend sudah tahu statusnya.
+      if (isOwnMessage && sendStatus != 'sent') {
+        final chatModel = _parseChatModel(detail, message);
+        if (chatModel == null) return;
+        onMessageReceived(chatModel, sendStatus);
+        debugPrint(
+            '[ChatHandler] ✅ Own message echo ($sendStatus), update local status');
+        return;
+      }
+
+      // ── 3. Parse ChatModel ──────────────────────────────────────────────────
       final chatModel = _parseChatModel(detail, message);
-      if (chatModel == null) {
-        debugPrint('[ChatHandler] ⚠️ gagal parse ChatModel, skip');
+      if (chatModel == null) return;
+
+      // ── 4. Status echo dari orang LAIN (received/read update untuk kita) ───
+      // Ini adalah konfirmasi bahwa penerima sudah menerima/membaca pesan kita.
+      // Persist dengan status asli dari FCM, tidak perlu panggil API.
+      if (sendStatus != 'sent') {
+        onMessageReceived(chatModel, sendStatus);
+        debugPrint(
+            '[ChatHandler] 🔕 Status echo ($sendStatus) dari penerima, persist only');
         return;
       }
 
-      // ── 3. ✅ Tentukan targetStatus berdasarkan posisi user ───────────────
-      //
-      // Logika:
-      //   - User SEDANG di room yang SAMA → "read" (sudah lihat pesannya)
-      //   - User di room LAIN atau tidak di room manapun → "received"
-      //
-      // activeRoomId:
-      //   - Diset oleh FCMService.setActiveRoom() saat user buka RoomChatPage
-      //   - Di-clear (null) saat user keluar dari RoomChatPage
+      // ── 5. Pesan BARU dari orang lain (sendStatus: 'sent') ─────────────────
       final bool isUserInSameRoom = activeRoomId != null &&
           activeRoomId.isNotEmpty &&
           activeRoomId == roomId;
 
       final String targetStatus = isUserInSameRoom ? 'read' : 'received';
 
-      debugPrint('[ChatHandler] 🏠 activeRoom=$activeRoomId | msgRoom=$roomId '
-          '| inSameRoom=$isUserInSameRoom → targetStatus=$targetStatus');
-
-      // ── 4. Inject targetStatus ke ChatModel ────────────────────────────
-      // ChatProvider.handleMessageFromFCM akan menyimpan dengan status ini
       final chatModelWithStatus = chatModel.copyWith(sendStatus: targetStatus);
-
-      // ── 5. Kirim ke ChatProvider (simpan ke Isar + update stream) ────────
       onMessageReceived(chatModelWithStatus, targetStatus);
-
-      // ── 6. Update status ke API ────────────────────────────────────────
-      // Fire-and-forget: tidak await agar UI tidak terblokir
       onUpdateMessageStatus(messageId, roomId, targetStatus);
 
-      // ── 7. Tampilkan notifikasi lokal HANYA jika bukan room aktif ────────
-      if (!isUserInSameRoom && !isOwnMessage) {
+      if (!isUserInSameRoom) {
         await _showLocalNotification(
           messageId: messageId,
           roomId: roomId,

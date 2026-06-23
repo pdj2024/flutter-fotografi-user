@@ -56,9 +56,11 @@ var companyNameGlobal = 'PT. ABC';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
   debugPrint('[BGHandler] 📨 Message: ${message.messageId}');
+  debugPrint('[BGHandler] 📨 Message: ${message.data}');
   debugPrint('[BGHandler] Type: ${message.data['type']}');
 
   try {

@@ -59,15 +59,49 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
   bool get _isUnpaid => _statusStr == 'menunggu bayar' && !_isSettledPending;
   bool get _isReview => _statusStr == 'review';
 
+  /// Pembayaran sudah expired — deteksi Snap dan Core.
+  /// Snap  : cek linkSnap + expiryTime / umur > 30 hari.
+  /// Core  : cek metodeBayar ada tapi paymentNumber1&2 + expiryTime semuanya null
+  ///         (Midtrans menghapus data ketika expired) + umur > 1 hari.
+  bool get _isPaymentExpired {
+    if (!_isUnpaid) return false;
+    final o = widget.order;
+
+    // ── Snap ──────────────────────────────────────────────────────
+    if (o.linkSnap != null && o.linkSnap!.isNotEmpty) {
+      if (o.expiryTime != null) return o.expiryTime!.isBefore(DateTime.now());
+      final ref = o.createdAt ?? o.updatedAt;
+      if (ref != null) return DateTime.now().difference(ref).inDays >= 30;
+      return false;
+    }
+
+    // ── Core ──────────────────────────────────────────────────────
+    final hasMethods =
+        o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
+    if (hasMethods) {
+      final noNum =
+          (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
+          (o.paymentNumber2 == null || o.paymentNumber2!.isEmpty);
+      if (noNum && o.expiryTime == null) {
+        final ref = o.createdAt ?? o.updatedAt;
+        // Beri jeda 1 hari agar fresh order yang belum dapat payment number
+        // tidak dianggap expired.
+        if (ref == null) return true;
+        return DateTime.now().difference(ref).inDays >= 1;
+      }
+    }
+
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
-    if (_isUnpaid) {
+    if (_isUnpaid && !_isPaymentExpired) {
       _loadTimerStatus();
       _startPeriodicUpdate();
-    } else if (_isSettledPending) {
-      // Tidak perlu timer — pembayaran sudah dikonfirmasi
     }
+    // Expired & settled-pending: tidak perlu countdown timer
   }
 
   @override
@@ -209,8 +243,8 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                   _buildProgressBanner(),
                 ],
 
-                // Payment Timer Banner — hanya tampil jika menunggu bayar
-                if (_isUnpaid && _timerStatus != null) ...[
+                // Payment Timer/Expired Banner — tampil untuk menunggu bayar
+                if (_isUnpaid && (_isPaymentExpired || _timerStatus != null)) ...[
                   const SizedBox(height: 12),
                   _buildPaymentBanner(),
                 ],
@@ -381,6 +415,19 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   // ─── Payment Timer Banner ──────────────────────────────────────
   Widget _buildPaymentBanner() {
+    // 0. Pembayaran sudah expired (Snap atau Core)
+    if (_isPaymentExpired) {
+      return _PaymentBannerContainer(
+        color: Colors.grey.shade600,
+        bgColor: Colors.grey.shade100,
+        borderColor: Colors.grey.shade300,
+        icon: Icons.link_off_rounded,
+        iconBgColor: Colors.grey.shade200,
+        title: 'Pembayaran Expired',
+        subtitle: 'Buka detail pesanan untuk informasi selanjutnya',
+      );
+    }
+
     final status = _timerStatus!;
 
     // 1. Belum mulai timer (remainingTime == null)
@@ -491,6 +538,15 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
         color: Colors.green.shade700,
       );
     } else if (_isUnpaid) {
+      // Pembayaran expired → langsung ke detail, jangan buka WebView
+      if (_isPaymentExpired) {
+        primaryButton = PrimaryButton(
+          icon: Icons.arrow_forward_rounded,
+          label: 'Lihat Detail',
+          onTap: widget.onTap,
+          color: Colors.grey.shade600,
+        );
+      } else {
       final status = _timerStatus;
 
       if (status == null) {
@@ -526,6 +582,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
           color: const Color(0xFF1565C0),
         );
       }
+      } // end else (!_isSnapLinkExpired)
     } else if (_isReview) {
       primaryButton = PrimaryButton(
         icon: Icons.arrow_forward_rounded,
