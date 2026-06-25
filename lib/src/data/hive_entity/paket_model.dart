@@ -22,6 +22,9 @@ class PaketModel {
   @HiveField(5)
   final String status;
 
+  @HiveField(6)
+  final int revisi;
+
   PaketModel({
     required this.no_id,
     required this.nama_paket,
@@ -29,6 +32,7 @@ class PaketModel {
     required this.harga,
     required this.rincian,
     required this.status,
+    this.revisi = 0,
   });
 
   factory PaketModel.fromJson(Map<String, dynamic> json) {
@@ -39,6 +43,7 @@ class PaketModel {
       harga: json['Harga'] ?? 0,
       rincian: json['Rincian'] ?? '',
       status: json['Status'] ?? "",
+      revisi: json['Revisi'] ?? 0,
     );
   }
 
@@ -50,6 +55,7 @@ class PaketModel {
       'harga': harga,
       'rincian': rincian,
       'status': status,
+      'Revisi': revisi,
     };
   }
 
@@ -60,6 +66,7 @@ class PaketModel {
     int? harga,
     String? rincian,
     String? status,
+    int? revisi,
   }) {
     return PaketModel(
       no_id: no_id ?? this.no_id,
@@ -68,6 +75,7 @@ class PaketModel {
       harga: harga ?? this.harga,
       rincian: rincian ?? this.rincian,
       status: status ?? this.status,
+      revisi: revisi ?? this.revisi,
     );
   }
 

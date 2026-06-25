@@ -372,6 +372,10 @@ class PesananProvider with ChangeNotifier {
       }
 
       notifyListeners();
+
+      // Refresh full order data in background so the detail page shows
+      // the latest linkUrl, revisi, and other fields from the server.
+      refreshOrder(noBukti);
     } catch (e, st) {
       debugPrint("[PesananProvider] ❌ FCM progress error: $e\n$st");
     }

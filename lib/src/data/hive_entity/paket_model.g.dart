@@ -23,13 +23,14 @@ class PaketModelAdapter extends TypeAdapter<PaketModel> {
       harga: fields[3] as int,
       rincian: fields[4] as String,
       status: fields[5] as String,
+      revisi: (fields[6] as int?) ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, PaketModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.no_id)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class PaketModelAdapter extends TypeAdapter<PaketModel> {
       ..writeByte(4)
       ..write(obj.rincian)
       ..writeByte(5)
-      ..write(obj.status);
+      ..write(obj.status)
+      ..writeByte(6)
+      ..write(obj.revisi);
   }
 
   @override

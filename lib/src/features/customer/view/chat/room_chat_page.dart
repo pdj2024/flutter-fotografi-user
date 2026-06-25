@@ -72,6 +72,10 @@ class _RoomChatPageState extends State<RoomChatPage>
   // Isar broadcast stream sudah stabil — tidak perlu dibuat ulang
   Stream<List<ChatMessageEntity>>? _messagesStream;
 
+  // Keys untuk scroll ke bubble per item aktif (penawaran/pesanan)
+  // Key: 'pen_<noPenawaran>' atau 'psn_<noBukti>'
+  final Map<String, GlobalKey> _itemBubbleKeys = {};
+
   bool _isInitializing = false;
   bool _hasInitialized = false;
 
@@ -379,6 +383,21 @@ class _RoomChatPageState extends State<RoomChatPage>
                 ),
               ),
 
+            // Banner penawaran/pesanan aktif
+            if (_hasInitialized && _messagesStream != null)
+              StreamBuilder<List<ChatMessageEntity>>(
+                stream: _messagesStream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  final pens = _findActivePenawarans(snapshot.data!);
+                  final psns = _findActivePesanans(snapshot.data!);
+                  if (pens.isEmpty && psns.isEmpty) return const SizedBox.shrink();
+                  return _buildActiveItemsBanner(pens, psns);
+                },
+              ),
+
             // ✅ StreamBuilder dengan _messagesStream yang di-cache
             Expanded(
               child: StreamBuilder<List<ChatMessageEntity>>(
@@ -496,6 +515,15 @@ class _RoomChatPageState extends State<RoomChatPage>
     final sorted = [...messages]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
     final grouped = Helper.groupMessagesByDate(sorted);
 
+    // Hitung active message IDs untuk assign GlobalKey (banner scroll-to)
+    final activeMessageIds = {
+      for (final e in [
+        ..._findActivePenawarans(entities),
+        ..._findActivePesanans(entities),
+      ])
+        e.messageId,
+    };
+
     return SmartRefresher(
       enablePullUp: true,
       controller: _refreshController,
@@ -534,12 +562,18 @@ class _RoomChatPageState extends State<RoomChatPage>
               //   2. entity.hasPenawaran && penawaran.noPesanan tidak kosong
               //      → penawaran sudah konversi ke pesanan, fetch pesanan dari entity
               if (entity?.hasPesanan == true && pesanan != null) {
-                return ChatPesananCard(
+                final card = ChatPesananCard(
                   pesanan: pesanan,
                   roomId: widget.roomId ?? '',
                   customerId: userProv.customer?.noId ?? '',
                   onTap: () => _handlePesananTap(context, pesanan),
                 );
+                if (activeMessageIds.contains(entity!.messageId)) {
+                  final key = _itemBubbleKeys.putIfAbsent(
+                      'psn_${entity.pesanan!.noBukti}', () => GlobalKey());
+                  return KeyedSubtree(key: key, child: card);
+                }
+                return card;
               }
 
               // ── PENAWARAN → PESANAN (konversi) ───────────────────────
@@ -570,12 +604,18 @@ class _RoomChatPageState extends State<RoomChatPage>
               // ── PENAWARAN CARD ───────────────────────────────────────
               // ✅ FIX: Cek entity.hasPenawaran, bukan message.noPenawaran
               if (entity?.hasPenawaran == true && penawaran != null) {
-                return ChatPenawaranCard(
+                final card = ChatPenawaranCard(
                   penawaran: penawaran,
                   roomId: widget.roomId ?? '',
                   customerId: userProv.customer?.noId ?? '',
                   onTap: () => _handleOfferTap(context, penawaran, message),
                 );
+                if (activeMessageIds.contains(entity!.messageId)) {
+                  final key = _itemBubbleKeys.putIfAbsent(
+                      'pen_${entity.penawaran!.noId}', () => GlobalKey());
+                  return KeyedSubtree(key: key, child: card);
+                }
+                return card;
               }
 
               // ── PENAWARAN / PESANAN BELUM TER-ENRICH ────────────────
@@ -853,6 +893,333 @@ class _RoomChatPageState extends State<RoomChatPage>
             ),
           );
     }
+  }
+
+  // =========================================
+  // ACTIVE ITEMS BANNER (penawaran + pesanan)
+  // =========================================
+
+  List<ChatMessageEntity> _findActivePenawarans(
+      List<ChatMessageEntity> entities) {
+    final sorted = [...entities]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    final result = <ChatMessageEntity>[];
+    final seen = <String>{};
+    for (final e in sorted) {
+      if (result.length >= 3) break;
+      if (e.hasPenawaran &&
+          !e.penawaran!.sudahJadiPesanan &&
+          e.penawaran!.status != 'nonaktif') {
+        final id = e.penawaran!.noId;
+        if (id.isNotEmpty && seen.add(id)) result.add(e);
+      }
+    }
+    return result;
+  }
+
+  List<ChatMessageEntity> _findActivePesanans(
+      List<ChatMessageEntity> entities) {
+    final sorted = [...entities]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    final result = <ChatMessageEntity>[];
+    final seen = <String>{};
+    for (final e in sorted) {
+      if (e.hasPesanan) {
+        final status = e.pesanan!.status?.toLowerCase() ?? '';
+        final progress = e.pesanan!.statusProgresPesanan?.toLowerCase() ?? '';
+        if (status != 'selesai' && progress != 'selesai') {
+          final id = e.pesanan!.noBukti;
+          if (id.isNotEmpty && seen.add(id)) result.add(e);
+        }
+      }
+    }
+    return result;
+  }
+
+  void _scrollToItem(String keyId) {
+    final ctx = _itemBubbleKeys[keyId]?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Widget _buildActiveItemsBanner(
+    List<ChatMessageEntity> penawarans,
+    List<ChatMessageEntity> pesanans,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Row(
+        children: [
+          if (penawarans.isNotEmpty) ...[
+            _buildBannerChip(
+              icon: Icons.description_outlined,
+              label: 'Penawaran',
+              count: penawarans.length,
+              color: Constants.primaryColor,
+              onTap: () => _showActiveItemsSheet('penawaran', penawarans),
+            ),
+          ],
+          if (penawarans.isNotEmpty && pesanans.isNotEmpty)
+            const SizedBox(width: 8),
+          if (pesanans.isNotEmpty) ...[
+            _buildBannerChip(
+              icon: Icons.receipt_long_outlined,
+              label: 'Pesanan',
+              count: pesanans.length,
+              color: const Color(0xFF2563EB),
+              onTap: () => _showActiveItemsSheet('pesanan', pesanans),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerChip({
+    required IconData icon,
+    required String label,
+    required int count,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: color),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 14, color: color.withOpacity(0.6)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showActiveItemsSheet(String type, List<ChatMessageEntity> items) {
+    final isPenawaran = type == 'penawaran';
+    final title = isPenawaran ? 'Penawaran Aktif' : 'Pesanan Aktif';
+    final color =
+        isPenawaran ? Constants.primaryColor : const Color(0xFF2563EB);
+    final sheetIcon = isPenawaran
+        ? Icons.description_outlined
+        : Icons.receipt_long_outlined;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(
+                children: [
+                  Icon(sheetIcon, size: 16, color: color),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$title (${items.length})',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: color),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, thickness: 1),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: items.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, thickness: 1),
+                itemBuilder: (ctx, i) {
+                  final e = items[i];
+                  final keyId = e.hasPesanan
+                      ? 'psn_${e.pesanan!.noBukti}'
+                      : 'pen_${e.penawaran!.noId}';
+                  return InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _scrollToItem(keyId);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      child: e.hasPesanan
+                          ? _buildPesananSheetRow(e, color)
+                          : _buildPenawaranSheetRow(e, color),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPenawaranSheetRow(ChatMessageEntity e, Color color) {
+    final p = e.penawaran!;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.description_outlined, size: 18, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '#${p.noTrackingPenawaran}',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${p.namaPaket} • ${p.lokasi}',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              Helper.formatCurrency(p.harga),
+              style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.bold, color: color),
+            ),
+            const SizedBox(height: 2),
+            Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPesananSheetRow(ChatMessageEntity e, Color color) {
+    final p = e.pesanan!;
+    final statusLabel = p.statusProgresPesanan?.isNotEmpty == true
+        ? p.statusProgresPesanan!
+        : (p.status ?? 'Proses');
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.receipt_long_outlined, size: 18, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '#${p.noTrackingPesanan ?? p.noBukti}',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                statusLabel,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              Helper.formatCurrency(p.grandTotal),
+              style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.bold, color: color),
+            ),
+            const SizedBox(height: 2),
+            Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
+          ],
+        ),
+      ],
+    );
   }
 
   // =========================================

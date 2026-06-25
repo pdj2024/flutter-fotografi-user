@@ -74,6 +74,8 @@ class HistoryOrderProvider extends ChangeNotifier {
         ' — order: ${progress.noOrder}'
         ' — status: ${progress.statusProgressPesanan}');
     _handleNewProgress(progress);
+    // Re-fetch full history list in background to ensure all items are in sync.
+    fetchHistoryForOrder(progress.noOrder, silent: true);
   }
 
   void _handleNewProgress(HistoryOrderModel progress) {

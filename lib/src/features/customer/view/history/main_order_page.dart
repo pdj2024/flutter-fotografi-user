@@ -182,13 +182,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
       ...provider.pesananUnpaid,
       ...provider.pesananProgress,
     ];
-    final now = DateTime.now();
     active.sort((a, b) {
-      final aFuture = !a.tglRealisasi.isBefore(now);
-      final bFuture = !b.tglRealisasi.isBefore(now);
-      if (aFuture && bFuture) return a.tglRealisasi.compareTo(b.tglRealisasi);
-      if (!aFuture && !bFuture) return b.tglRealisasi.compareTo(a.tglRealisasi);
-      return aFuture ? -1 : 1;
+      final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
+      final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
+      return bTime.compareTo(aTime);
     });
 
     if (_selectedFilter == null) return active;

@@ -58,6 +58,9 @@ class PenawaranModel {
   @HiveField(17)
   final DateTime? updatedAt;
 
+  @HiveField(18)
+  final int revisi;
+
   PenawaranModel({
     required this.noId,
     required this.noTrackingPenawaran,
@@ -77,6 +80,7 @@ class PenawaranModel {
     required this.tglRealisasi,
     required this.createdAt,
     this.updatedAt,
+    this.revisi = 0,
   });
 
   // FROM JSON
@@ -102,6 +106,7 @@ class PenawaranModel {
       updatedAt: json["Updated_At"] != null
           ? DateTime.parse(json["Updated_At"])
           : null,
+      revisi: json["Revisi"] ?? 0,
     );
   }
 
@@ -126,6 +131,7 @@ class PenawaranModel {
       "Tgl_Realisasi": tglRealisasi.toIso8601String(),
       "Created_At": createdAt.toIso8601String(),
       "Updated_At": updatedAt?.toIso8601String(),
+      "Revisi": revisi,
     };
   }
 
@@ -164,6 +170,7 @@ class PenawaranModel {
     DateTime? tglRealisasi,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? revisi,
   }) {
     return PenawaranModel(
       noId: noId ?? this.noId,
@@ -184,6 +191,7 @@ class PenawaranModel {
       tglRealisasi: tglRealisasi ?? this.tglRealisasi,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      revisi: revisi ?? this.revisi,
     );
   }
 }

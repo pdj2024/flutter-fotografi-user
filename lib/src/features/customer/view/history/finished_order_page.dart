@@ -24,7 +24,12 @@ class FinishedOrderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final orders = context.watch<PesananProvider>().pesananSelesai;
+    final rawOrders = context.watch<PesananProvider>().pesananSelesai;
+    final orders = [...rawOrders]..sort((a, b) {
+        final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
+        final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
+        return bTime.compareTo(aTime);
+      });
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F2),

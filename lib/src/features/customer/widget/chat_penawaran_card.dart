@@ -26,16 +26,17 @@ class ChatPenawaranCard extends StatelessWidget {
     final tanggal =
         DateFormat("dd MMM yyyy", "id_ID").format(penawaran.tglRealisasi);
     final waktu = Helper.toLocalTime(penawaran.tglRealisasi);
+    final isCancelled = penawaran.status == 'nonaktif';
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCancelled ? Colors.grey.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withOpacity(isCancelled ? 0.06 : 0.2),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -48,7 +49,9 @@ class ChatPenawaranCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Constants.primaryColor.withOpacity(0.1),
+              color: isCancelled
+                  ? Colors.grey.shade200
+                  : Constants.primaryColor.withOpacity(0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -61,13 +64,51 @@ class ChatPenawaranCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "Penawaran #${penawaran.noTrackingPenawaran}",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black54,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              "Penawaran #${penawaran.noTrackingPenawaran}",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: isCancelled
+                                    ? Colors.grey.shade500
+                                    : Colors.black54,
+                              ),
+                            ),
+                          ),
+                          if (isCancelled) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: Colors.red.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.cancel_outlined,
+                                      size: 11,
+                                      color: Colors.red.shade600),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Dibatalkan',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.red.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -75,7 +116,13 @@ class ChatPenawaranCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Constants.primaryColor,
+                          color: isCancelled
+                              ? Colors.grey.shade400
+                              : Constants.primaryColor,
+                          decoration: isCancelled
+                              ? TextDecoration.lineThrough
+                              : null,
+                          decorationColor: Colors.grey.shade400,
                         ),
                       ),
                     ],
@@ -96,6 +143,7 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.inventory_2_outlined,
                   "Paket",
                   penawaran.namaPaket,
+                  isCancelled: isCancelled,
                 ),
                 const SizedBox(height: 12),
 
@@ -104,6 +152,7 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.calendar_today_outlined,
                   "Tanggal Realisasi",
                   "$waktu, $tanggal",
+                  isCancelled: isCancelled,
                 ),
                 const SizedBox(height: 12),
 
@@ -112,6 +161,7 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.location_on_outlined,
                   "Lokasi",
                   penawaran.lokasi,
+                  isCancelled: isCancelled,
                 ),
 
                 // Kota (jika berbeda dengan lokasi)
@@ -124,58 +174,65 @@ class ChatPenawaranCard extends StatelessWidget {
                     Icons.location_city_outlined,
                     "Kota",
                     penawaran.namaKota,
+                    isCancelled: isCancelled,
                   ),
                 ],
               ],
             ),
           ),
 
-          // Tombol Action
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Constants.primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: onTap,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      "Lihat Detail & Pembayaran",
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+          // Tombol Action — hanya tampil jika bukan dibatalkan
+          if (!isCancelled)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Constants.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward, size: 18),
-                  ],
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: onTap,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Lihat Detail & Pembayaran",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward, size: 18),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String label,
+    String value, {
+    bool isCancelled = false,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
           size: 18,
-          color: Colors.grey.shade600,
+          color: isCancelled ? Colors.grey.shade400 : Colors.grey.shade600,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -186,16 +243,18 @@ class ChatPenawaranCard extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 11,
-                  color: Colors.grey.shade600,
+                  color: isCancelled
+                      ? Colors.grey.shade400
+                      : Colors.grey.shade600,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: Colors.black87,
+                  color: isCancelled ? Colors.grey.shade500 : Colors.black87,
                   fontWeight: FontWeight.w500,
                 ),
               ),

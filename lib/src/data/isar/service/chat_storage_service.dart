@@ -952,18 +952,29 @@ class ChatStorageService {
   }) async {
     if (rooms.isEmpty) return;
 
+    final aktifRooms = rooms.where((r) => r.status == 'aktif').toList();
+    final nonaktifIds = rooms
+        .where((r) => r.status != 'aktif')
+        .map((r) => r.roomId)
+        .toSet();
+
+    if (nonaktifIds.isNotEmpty) {
+      debugPrint('[ChatStorage] 🗑 Nonaktif dari API: ${nonaktifIds.length} room(s)');
+    }
+
     try {
       if (replace) {
-        final entities = rooms.map((room) {
+        final entities = aktifRooms.map((room) {
           return RoomChatEntity.fromRoomChatModel(room)
             ..countStatusReceived = 0
             ..listIdMessageReceived = [];
         }).toList();
 
         await _isar.replaceAllRooms(entities);
-        debugPrint('[ChatStorage] 🔄 Rooms replaced: ${rooms.length}');
+        debugPrint('[ChatStorage] 🔄 Rooms replaced: ${aktifRooms.length}'
+            '${nonaktifIds.isNotEmpty ? " (${nonaktifIds.length} nonaktif dibuang)" : ""}');
       } else {
-        for (final room in rooms) {
+        for (final room in aktifRooms) {
           final existing = await _isar.getRoomById(room.roomId);
 
           if (existing != null) {
@@ -1014,7 +1025,17 @@ class ChatStorageService {
             await _isar.saveRoom(entity);
           }
         }
-        debugPrint('[ChatStorage] 💾 Rooms upserted: ${rooms.length}');
+
+        for (final roomId in nonaktifIds) {
+          final existing = await _isar.getRoomById(roomId);
+          if (existing != null) {
+            await _isar.deleteRoom(roomId);
+            debugPrint('[ChatStorage] 🗑 Room nonaktif dihapus: $roomId');
+          }
+        }
+
+        debugPrint('[ChatStorage] 💾 Rooms upserted: ${aktifRooms.length}'
+            '${nonaktifIds.isNotEmpty ? " (+${nonaktifIds.length} nonaktif dihapus)" : ""}');
       }
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ persistRoomsFromApi: $e\n$st');

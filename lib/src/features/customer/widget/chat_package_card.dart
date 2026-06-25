@@ -151,6 +151,26 @@ class ChatPackageCard extends StatelessWidget {
                       ),
                     ),
 
+                    const SizedBox(height: 8),
+
+                    // Revisi
+                    Row(
+                      children: [
+                        Icon(Icons.loop_rounded,
+                            size: 13, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          paket.revisi == 0
+                              ? 'Tanpa revisi'
+                              : '${paket.revisi}× revisi',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+
                     // ✅ Description (LIMITED TO 3 LINES)
                     if (paket.rincian.isNotEmpty) ...[
                       const SizedBox(height: 12),

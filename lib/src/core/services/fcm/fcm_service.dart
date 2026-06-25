@@ -172,6 +172,7 @@ class FCMService {
       onProgressReceived: (progressData) {
         debugPrint('[FCM] 📊 Progress: ${progressData.noOrder}');
         _historyOrderProvider?.handleProgressFromFCM(progressData);
+        _pesananProvider?.handleProgressFromFCM(progressData);
         onProgressReceived?.call(progressData);
       },
     );
