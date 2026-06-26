@@ -125,4 +125,15 @@ class PesananService {
       throw Exception('Gagal menghapus $entity');
     }
   }
+
+  /// BATAL — POST /order/batal/:no_bukti
+  Future<void> batal(String noBukti) async {
+    final response = await _client.post(
+      '/$controller/batal/$noBukti',
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Gagal membatalkan pesanan (${response.statusCode})');
+    }
+  }
 }

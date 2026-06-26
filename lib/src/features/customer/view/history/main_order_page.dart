@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
@@ -262,6 +265,31 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
+  Future<void> _batalkanPesanan(PesananModel o) async {
+    try {
+      await PesananService().batal(o.noBukti);
+      final history = HistoryOrderService.createDibatalkan(
+        noOrder: o.noBukti,
+        senderId: o.idCustomer ?? '',
+        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
+      );
+      await HistoryOrderService().create(history);
+      if (!mounted) return;
+      await context.read<PesananProvider>().loadOrder(context);
+      CustomSnackbar.showSuccessSnackbar(context, 'Pesanan berhasil dibatalkan.');
+    } catch (e) {
+      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
+    }
+  }
+
+  void _gantiMetodePembayaran(PesananModel o) {
+    context.read<NavigationProvider>().navigateToPage(
+      context,
+      WaitingPaymentPage(paymentData: o),
+      targetTabIndex: 2,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<PesananProvider>();
@@ -509,6 +537,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetPage: 'RoomChatPage',
                             ),
                     onPay: () => _openPayment(o),
+                    onBatal: () => _batalkanPesanan(o),
+                    onGantiMetode: () => _gantiMetodePembayaran(o),
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(

@@ -10,6 +10,7 @@ import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 
 import 'utils/notification_channel_manager.dart';
@@ -37,6 +38,7 @@ class FCMService {
   ChatProvider? _chatProvider;
   HistoryOrderProvider? _historyOrderProvider;
   PesananProvider? _pesananProvider;
+  PenawaranProvider? _penawaranProvider;
 
   Function(ChatModel)? onChatMessageReceived;
   Function(HistoryOrderModel)? onProgressReceived;
@@ -67,10 +69,16 @@ class FCMService {
     debugPrint('[FCM] ✅ PesananProvider injected');
   }
 
+  void setPenawaranProvider(PenawaranProvider provider) {
+    _penawaranProvider = provider;
+    debugPrint('[FCM] ✅ PenawaranProvider injected');
+  }
+
   void clearProviders() {
     _chatProvider = null;
     _historyOrderProvider = null;
     _pesananProvider = null;
+    _penawaranProvider = null;
     debugPrint('[FCM] 🗑️ Providers cleared');
   }
 
@@ -210,6 +218,19 @@ class FCMService {
         } else {
           debugPrint('[FCM] ⚠️ ChatProvider null, pakai callback fallback');
           onChatMessageReceived?.call(message);
+        }
+
+        if (message.hasPenawaran) {
+          _penawaranProvider?.refreshSinglePenawaran(message.noPenawaran!);
+          _chatProvider?.refreshEmbeddedPenawaranInRoom(
+              message.roomId, message.noPenawaran!);
+          debugPrint('[FCM] 🔄 Refresh penawaran: ${message.noPenawaran}');
+        }
+        if (message.hasPesanan) {
+          _pesananProvider?.refreshOrder(message.noInvoice!);
+          _chatProvider?.refreshEmbeddedPesananInRoom(
+              message.roomId, message.noInvoice!);
+          debugPrint('[FCM] 🔄 Refresh pesanan: ${message.noInvoice}');
         }
       },
 

@@ -9,12 +9,15 @@ import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/data/models/history_order_model.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
@@ -79,6 +82,8 @@ class _RoomChatPageState extends State<RoomChatPage>
   bool _isInitializing = false;
   bool _hasInitialized = false;
 
+  Function(HistoryOrderModel)? _prevProgressCallback;
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +94,7 @@ class _RoomChatPageState extends State<RoomChatPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _initializeChat();
+      _registerProgressListener();
     });
   }
 
@@ -146,8 +152,29 @@ class _RoomChatPageState extends State<RoomChatPage>
       });
     }
 
+    // Restore progress callback ke sebelum masuk room
+    FCMService.instance.onProgressReceived = _prevProgressCallback;
+
     _messagesStream = null;
     super.dispose();
+  }
+
+  // ── Progress FCM listener ────────────────────────────────────────────────
+
+  void _registerProgressListener() {
+    _prevProgressCallback = FCMService.instance.onProgressReceived;
+    FCMService.instance.onProgressReceived = (progress) {
+      _prevProgressCallback?.call(progress);
+      _onProgressFCM(progress);
+    };
+  }
+
+  void _onProgressFCM(HistoryOrderModel progress) {
+    if (!mounted) return;
+    final roomId = _roomChatProvider.activeRoomId;
+    if (roomId == null) return;
+    // Refresh pesan agar embedded pesanan di Isar terupdate → card rebuild
+    _chatProvider.loadMessages(roomId, forceRefresh: true);
   }
 
   // =========================================
@@ -567,6 +594,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                   roomId: widget.roomId ?? '',
                   customerId: userProv.customer?.noId ?? '',
                   onTap: () => _handlePesananTap(context, pesanan),
+                  onBatal: () => _batalkanPesanan(pesanan),
+                  onGantiMetode: () => _gantiMetodePembayaran(pesanan),
                 );
                 if (activeMessageIds.contains(entity!.messageId)) {
                   final key = _itemBubbleKeys.putIfAbsent(
@@ -591,6 +620,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                     roomId: widget.roomId ?? '',
                     customerId: userProv.customer?.noId ?? '',
                     onTap: () => _handlePesananTap(context, pesanan),
+                    onBatal: () => _batalkanPesanan(pesanan),
+                    onGantiMetode: () => _gantiMetodePembayaran(pesanan),
                   );
                 }
                 // Pesanan embedded belum ada (masih sync) → shimmer
@@ -716,6 +747,38 @@ class _RoomChatPageState extends State<RoomChatPage>
             DetailOrderPageV2(pesananModel: pesanan),
           );
     }
+  }
+
+  Future<void> _batalkanPesanan(dynamic pesanan) async {
+    try {
+      await PesananService().batal(pesanan.noBukti);
+      final history = HistoryOrderService.createDibatalkan(
+        noOrder: pesanan.noBukti,
+        senderId: pesanan.idCustomer ?? '',
+        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
+      );
+      await HistoryOrderService().create(history);
+      if (!mounted) return;
+      context.read<PesananProvider>().refreshOrder(pesanan.noBukti);
+      // Re-fetch pesan agar embedded pesanan di Isar terupdate → card rebuild
+      final roomId = _roomChatProvider.activeRoomId;
+      if (roomId != null) {
+        await _chatProvider.loadMessages(roomId, forceRefresh: true);
+      }
+      if (!mounted) return;
+      CustomSnackbar.showSuccessSnackbar(context, 'Pesanan berhasil dibatalkan.');
+    } catch (e) {
+      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
+    }
+  }
+
+  void _gantiMetodePembayaran(dynamic pesanan) {
+    if (!mounted) return;
+    context.read<NavigationProvider>().navigateToPage(
+      context,
+      targetTabIndex: 2,
+      WaitingPaymentPage(paymentData: pesanan),
+    );
   }
 
   // =========================================
@@ -925,7 +988,9 @@ class _RoomChatPageState extends State<RoomChatPage>
       if (e.hasPesanan) {
         final status = e.pesanan!.status?.toLowerCase() ?? '';
         final progress = e.pesanan!.statusProgresPesanan?.toLowerCase() ?? '';
-        if (status != 'selesai' && progress != 'selesai') {
+        if (status != 'selesai' &&
+            progress != 'selesai' &&
+            progress != 'dibatalkan') {
           final id = e.pesanan!.noBukti;
           if (id.isNotEmpty && seen.add(id)) result.add(e);
         }

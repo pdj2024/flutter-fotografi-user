@@ -695,6 +695,22 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshEmbeddedPenawaranInRoom(
+      String roomId, String noPenawaran) async {
+    if (roomId.isEmpty || noPenawaran.isEmpty) return;
+    final fresh = await _loadPenawaranModel(noPenawaran);
+    if (fresh == null) return;
+    _refreshRelatedPenawaranMessages(roomId, fresh.noId, fresh);
+  }
+
+  Future<void> refreshEmbeddedPesananInRoom(
+      String roomId, String noInvoice) async {
+    if (roomId.isEmpty || noInvoice.isEmpty) return;
+    final fresh = await _loadPesananModel(noInvoice);
+    if (fresh == null) return;
+    _refreshRelatedPesananMessages(roomId, fresh.noBukti, fresh);
+  }
+
   Future<PenawaranModel?> _loadPenawaranModel(String id) async {
     try {
       final list = await PenawaranService().getAll(noId: id);

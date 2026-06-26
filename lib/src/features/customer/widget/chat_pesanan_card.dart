@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
 
 class ChatPesananCard extends StatelessWidget {
   final PesananModel pesanan;
@@ -13,6 +14,8 @@ class ChatPesananCard extends StatelessWidget {
   final String roomId;
   final String customerId;
   final VoidCallback? onTap;
+  final VoidCallback? onBatal;
+  final VoidCallback? onGantiMetode;
 
   const ChatPesananCard({
     super.key,
@@ -22,6 +25,8 @@ class ChatPesananCard extends StatelessWidget {
     required this.onTap,
     this.paket,
     this.isPesanan = false,
+    this.onBatal,
+    this.onGantiMetode,
   });
 
   @override
@@ -86,60 +91,82 @@ class ChatPesananCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Status Progress Badge
-                    if (PesananProvider.isPaymentSettled(pesanan.statusBayar))
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getProgressStatusColor(),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _getProgressStatusText(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    // Payment Status Badge
-                    if (pesanan.statusBayar != null &&
-                        pesanan.statusBayar!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getPaymentStatusColor(),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _getPaymentStatusIcon(),
-                              size: 10,
-                              color: Colors.white,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Status Progress Badge
+                        if (PesananProvider.isPaymentSettled(
+                            pesanan.statusBayar))
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _getPaymentStatusText(),
+                            decoration: BoxDecoration(
+                              color: _getProgressStatusColor(),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              _getProgressStatusText(),
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ],
+                          ),
+                        // Payment Status Badge
+                        if (pesanan.statusBayar != null &&
+                            pesanan.statusBayar!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getPaymentStatusColor(),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _getPaymentStatusIcon(),
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _getPaymentStatusText(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    // Menu ⋮ untuk batalkan / ganti metode
+                    if (_canShowMenu()) ...[
+                      SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _showActionSheet(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.more_vert,
+                              size: 16, color: Colors.black54),
                         ),
                       ),
                     ],
@@ -543,6 +570,138 @@ class ChatPesananCard extends StatelessWidget {
     } else {
       return Icons.arrow_forward;
     }
+  }
+
+  // ========================================
+  // BATALKAN ACTIONS
+  // ========================================
+
+  bool _canShowMenu() {
+    final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
+    final bayar = pesanan.statusBayar?.toLowerCase() ?? '';
+    return bayar != 'settlement' &&
+        status != 'selesai' &&
+        status != 'dibatalkan';
+  }
+
+  void _showActionSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded,
+                          color: Colors.black54, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Opsi Pesanan',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 2),
+                          Text('Pilih tindakan untuk pesanan ini',
+                              style:
+                                  TextStyle(fontSize: 13, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: Colors.grey.shade200),
+              if (onGantiMetode != null)
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.payment_outlined,
+                        color: Colors.blue.shade600, size: 22),
+                  ),
+                  title: const Text('Ganti Metode Pembayaran',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+                  trailing:
+                      Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onGantiMetode!();
+                  },
+                ),
+              ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.cancel_outlined,
+                      color: Color(0xFFDC2626), size: 22),
+                ),
+                title: const Text('Batalkan Pesanan',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Color(0xFFDC2626))),
+                trailing:
+                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showConfirmBatal(context);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showConfirmBatal(BuildContext context) {
+    ConfirmDialog.showBatalkanPesananDialog(
+      context: context,
+      onConfirm: () => onBatal?.call(),
+    );
   }
 
   // ========================================

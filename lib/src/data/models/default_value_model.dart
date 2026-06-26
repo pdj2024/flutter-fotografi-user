@@ -225,6 +225,36 @@ class EstimasiBiaya {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// APP CONFIG MODEL
+// ═══════════════════════════════════════════════════════════════
+
+/// Konfigurasi umum aplikasi: Chat_Help & Batas_Revisi
+class AppConfigModel {
+  /// Teks pesan default untuk WA customer service
+  final String chatHelp;
+
+  /// Batas revisi default saat vendor membuat paket baru
+  final int batasRevisi;
+
+  const AppConfigModel({
+    required this.chatHelp,
+    required this.batasRevisi,
+  });
+
+  factory AppConfigModel.fromJson(Map<String, dynamic> json) {
+    return AppConfigModel(
+      chatHelp: json['Chat_Help'] as String? ?? 'Hai',
+      batasRevisi: (json['Batas_Revisi'] as num?)?.toInt() ?? 3,
+    );
+  }
+
+  static const AppConfigModel fallback = AppConfigModel(
+    chatHelp: 'Hai',
+    batasRevisi: 3,
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // VERSION MODEL
 // ═══════════════════════════════════════════════════════════════
 

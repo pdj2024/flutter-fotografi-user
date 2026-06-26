@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:mpjnew/src/core/services/default_value_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HelpFab extends StatefulWidget {
@@ -16,6 +17,7 @@ class _HelpFabState extends State<HelpFab> with SingleTickerProviderStateMixin {
   late final Animation<double> _scaleAnim;
 
   static const _waNumber = '62895353837000';
+  String _chatHelp = 'Hai';
 
   @override
   void initState() {
@@ -32,6 +34,16 @@ class _HelpFabState extends State<HelpFab> with SingleTickerProviderStateMixin {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _showTooltip = false);
     });
+    _loadChatHelp();
+  }
+
+  Future<void> _loadChatHelp() async {
+    try {
+      final config = await DefaultValueService().getAppConfig();
+      if (mounted) setState(() => _chatHelp = config.chatHelp);
+    } catch (_) {
+      // Gunakan fallback 'Hai' jika gagal
+    }
   }
 
   @override
@@ -53,9 +65,7 @@ class _HelpFabState extends State<HelpFab> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _openWhatsApp({String? message}) async {
-    final encoded = Uri.encodeComponent(
-      message ?? 'Halo, saya butuh bantuan mengenai aplikasi MPJ Vendor.',
-    );
+    final encoded = Uri.encodeComponent(message ?? _chatHelp);
     final uri = Uri.parse('https://wa.me/$_waNumber?text=$encoded');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);

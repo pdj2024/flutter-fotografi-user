@@ -303,6 +303,7 @@ class PesananModel {
       'status_bayar': statusBayar,
       'payment_type': metodeBayar,
       'id_payment_gateway': idPaymentGateway,
+      'revisi': revisi,
     };
   }
 

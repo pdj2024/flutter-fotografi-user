@@ -219,6 +219,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
         idPaymentGateway: null,
         subtotal: 0,
         grandTotal: 0,
+        revisi: penawaran!.revisi,
       );
 
       debugPrint(
@@ -566,10 +567,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 12),
+                            _buildRevisiChip(penawaran!.revisi),
                             if (paket!.rincian.isNotEmpty) ...[
-                              const SizedBox(height: 16),
                               const Divider(),
-                              const SizedBox(height: 12),
                               const Text(
                                 "Rincian Paket:",
                                 style: TextStyle(
@@ -825,6 +826,42 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRevisiChip(int revisi) {
+    final isUnlimited = revisi == 0;
+    final label = isUnlimited ? 'Tidak terbatas' : '$revisi kali';
+    final color = isUnlimited ? Colors.green.shade700 : Constants.primaryColor;
+    final bgColor = isUnlimited
+        ? Colors.green.shade50
+        : Constants.primaryColor.withOpacity(0.08);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(Icons.replay_rounded, size: 16, color: Colors.black45),
+        const SizedBox(width: 8),
+        const Text(
+          'Maks. Revisi',
+          style: TextStyle(fontSize: 13, color: Colors.black54),
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

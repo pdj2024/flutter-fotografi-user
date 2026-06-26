@@ -11,6 +11,7 @@ import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/card_button.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PaymentTimerStatus {
@@ -29,6 +30,8 @@ class OrderHistoryCard extends StatefulWidget {
   final VoidCallback onChat;
   final VoidCallback onPay;
   final VoidCallback onReview;
+  final VoidCallback? onBatal;
+  final VoidCallback? onGantiMetode;
 
   const OrderHistoryCard({
     required this.order,
@@ -36,6 +39,8 @@ class OrderHistoryCard extends StatefulWidget {
     required this.onChat,
     required this.onPay,
     required this.onReview,
+    this.onBatal,
+    this.onGantiMetode,
   });
 
   @override
@@ -76,11 +81,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     }
 
     // ── Core ──────────────────────────────────────────────────────
-    final hasMethods =
-        o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
+    final hasMethods = o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
     if (hasMethods) {
-      final noNum =
-          (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
+      final noNum = (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
           (o.paymentNumber2 == null || o.paymentNumber2!.isEmpty);
       if (noNum && o.expiryTime == null) {
         final ref = o.createdAt ?? o.updatedAt;
@@ -244,7 +247,8 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                 ],
 
                 // Payment Timer/Expired Banner — tampil untuk menunggu bayar
-                if (_isUnpaid && (_isPaymentExpired || _timerStatus != null)) ...[
+                if (_isUnpaid &&
+                    (_isPaymentExpired || _timerStatus != null)) ...[
                   const SizedBox(height: 12),
                   _buildPaymentBanner(),
                 ],
@@ -295,8 +299,129 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     );
   }
 
+  void _showActionSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded,
+                          color: Colors.black54, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Opsi Pesanan',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 2),
+                          Text('Pilih tindakan untuk pesanan ini',
+                              style:
+                                  TextStyle(fontSize: 13, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: Colors.grey.shade200),
+              if (widget.onGantiMetode != null)
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.payment_outlined,
+                        color: Colors.blue.shade600, size: 22),
+                  ),
+                  title: const Text('Ganti Metode Pembayaran',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+                  trailing:
+                      Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    widget.onGantiMetode!();
+                  },
+                ),
+              ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.cancel_outlined,
+                      color: Color(0xFFDC2626), size: 22),
+                ),
+                title: const Text('Batalkan Pesanan',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Color(0xFFDC2626))),
+                trailing:
+                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showConfirmBatal(context);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showConfirmBatal(BuildContext context) {
+    ConfirmDialog.showBatalkanPesananDialog(
+      context: context,
+      onConfirm: () => widget.onBatal?.call(),
+    );
+  }
+
   // ─── Vendor row ────────────────────────────────────────────────
   Widget _buildVendorRow() {
+    final canShowMenu = _isUnpaid && widget.onBatal != null;
     return Row(
       children: [
         _VendorAvatar(url: widget.order.idMediaVendor ?? ''),
@@ -337,6 +462,16 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
             ],
           ),
         ),
+        if (canShowMenu) ...[
+          GestureDetector(
+            onTap: () => _showActionSheet(context),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              child: Icon(Icons.more_vert, size: 16),
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
       ],
     );
   }
@@ -547,41 +682,41 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
           color: Colors.grey.shade600,
         );
       } else {
-      final status = _timerStatus;
+        final status = _timerStatus;
 
-      if (status == null) {
-        // Loading timer, disable sementara
-        primaryButton = PrimaryButton(
-          icon: Icons.payment_rounded,
-          label: 'Bayar Sekarang',
-          onTap: widget.onPay,
-          color: const Color(0xFF1565C0),
-        );
-      } else if (status.isExpired) {
-        // Expired → Coba Lagi (orange)
-        primaryButton = PrimaryButton(
-          icon: Icons.refresh_rounded,
-          label: 'Coba Lagi',
-          onTap: _retryPayment,
-          color: Colors.orange.shade700,
-        );
-      } else if (status.remainingTime != null) {
-        // Timer aktif → Lanjut Bayar (orange)
-        primaryButton = PrimaryButton(
-          icon: Icons.payment_rounded,
-          label: 'Lanjut Bayar',
-          onTap: widget.onPay,
-          color: Colors.orange.shade700,
-        );
-      } else {
-        // Belum mulai → Bayar Sekarang (biru)
-        primaryButton = PrimaryButton(
-          icon: Icons.payment_rounded,
-          label: 'Bayar Sekarang',
-          onTap: _startPaymentTimer,
-          color: const Color(0xFF1565C0),
-        );
-      }
+        if (status == null) {
+          // Loading timer, disable sementara
+          primaryButton = PrimaryButton(
+            icon: Icons.payment_rounded,
+            label: 'Bayar Sekarang',
+            onTap: widget.onPay,
+            color: const Color(0xFF1565C0),
+          );
+        } else if (status.isExpired) {
+          // Expired → Coba Lagi (orange)
+          primaryButton = PrimaryButton(
+            icon: Icons.refresh_rounded,
+            label: 'Coba Lagi',
+            onTap: _retryPayment,
+            color: Colors.orange.shade700,
+          );
+        } else if (status.remainingTime != null) {
+          // Timer aktif → Lanjut Bayar (orange)
+          primaryButton = PrimaryButton(
+            icon: Icons.payment_rounded,
+            label: 'Lanjut Bayar',
+            onTap: widget.onPay,
+            color: Colors.orange.shade700,
+          );
+        } else {
+          // Belum mulai → Bayar Sekarang (biru)
+          primaryButton = PrimaryButton(
+            icon: Icons.payment_rounded,
+            label: 'Bayar Sekarang',
+            onTap: _startPaymentTimer,
+            color: const Color(0xFF1565C0),
+          );
+        }
       } // end else (!_isSnapLinkExpired)
     } else if (_isReview) {
       primaryButton = PrimaryButton(
