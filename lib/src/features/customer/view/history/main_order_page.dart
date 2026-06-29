@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
@@ -14,6 +17,7 @@ import 'package:mpjnew/src/features/customer/view/history/widget/status_config.d
 import 'package:mpjnew/src/features/customer/view/history/widget/summary_card.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
@@ -69,7 +73,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
     if (_lastUserId != null && _lastUserId != userId) {
       _paymentCheckDone = false;
     }
-    
+
     if (_isInitialized && _lastUserId == userId) return;
 
     await context.read<PesananProvider>().loadOrder(context);
@@ -182,13 +186,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
       ...provider.pesananUnpaid,
       ...provider.pesananProgress,
     ];
-    final now = DateTime.now();
     active.sort((a, b) {
-      final aFuture = !a.tglRealisasi.isBefore(now);
-      final bFuture = !b.tglRealisasi.isBefore(now);
-      if (aFuture && bFuture) return a.tglRealisasi.compareTo(b.tglRealisasi);
-      if (!aFuture && !bFuture) return b.tglRealisasi.compareTo(a.tglRealisasi);
-      return aFuture ? -1 : 1;
+      final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
+      final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
+      return bTime.compareTo(aTime);
     });
 
     if (_selectedFilter == null) return active;
@@ -215,7 +216,41 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
+  bool _isPaymentExpired(PesananModel o) {
+    if (o.statusBayar == 'expire') return true;
+    // Snap
+    if (o.linkSnap != null && o.linkSnap!.isNotEmpty) {
+      if (o.expiryTime != null) return o.expiryTime!.isBefore(DateTime.now());
+      final ref = o.createdAt ?? o.updatedAt;
+      if (ref != null) return DateTime.now().difference(ref).inDays >= 30;
+      return false;
+    }
+    // Core: metodeBayar ada tapi paymentNumber1&2 + expiryTime semuanya null
+    final hasMethods = o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
+    if (hasMethods) {
+      final noNum = (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
+          (o.paymentNumber2 == null || o.paymentNumber2!.isEmpty);
+      if (noNum && o.expiryTime == null) {
+        final ref = o.createdAt ?? o.updatedAt;
+        if (ref == null) return true;
+        return DateTime.now().difference(ref).inDays >= 1;
+      }
+    }
+    return false;
+  }
+
   void _openPayment(PesananModel o) {
+    if (_isPaymentExpired(o)) {
+      context.read<NavigationProvider>().navigateToPage(
+            context,
+            DetailOrderPageV2(pesananModel: o),
+            targetTabIndex: 2,
+            targetPage: 'DetailOrderPage',
+            hrsLogin: true,
+          );
+      return;
+    }
+
     if (o.linkSnap != null) {
       context.read<NavigationProvider>().navigateToPage(
             context,
@@ -229,6 +264,32 @@ class _MainOrderPageState extends State<MainOrderPage> {
             targetTabIndex: 2,
           );
     }
+  }
+
+  Future<void> _batalkanPesanan(PesananModel o) async {
+    try {
+      await PesananService().batal(o.noBukti);
+      final history = HistoryOrderService.createDibatalkan(
+        noOrder: o.noBukti,
+        senderId: o.idCustomer ?? '',
+        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
+      );
+      await HistoryOrderService().create(history);
+      if (!mounted) return;
+      await context.read<PesananProvider>().loadOrder(context);
+      CustomSnackbar.showSuccessSnackbar(
+          context, 'Pesanan berhasil dibatalkan.');
+    } catch (e) {
+      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
+    }
+  }
+
+  void _gantiMetodePembayaran(PesananModel o) {
+    context.read<NavigationProvider>().navigateToPage(
+          context,
+          DetailPembayaranPage(existingNoBukti: o.noBukti),
+          targetTabIndex: 2,
+        );
   }
 
   @override
@@ -478,6 +539,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetPage: 'RoomChatPage',
                             ),
                     onPay: () => _openPayment(o),
+                    onBatal: () => _batalkanPesanan(o),
+                    onGantiMetode: (!_isPaymentExpired(o) && (o.paymentNumber1 != null || o.expiryTime != null))
+                        ? () => _gantiMetodePembayaran(o)
+                        : null,
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(

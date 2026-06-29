@@ -52,13 +52,14 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       grandTotal: fields[32] as int,
       createdAt: fields[33] as DateTime?,
       updatedAt: fields[34] as DateTime?,
+      revisi: (fields[35] as int?) ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, PesananModel obj) {
     writer
-      ..writeByte(35)
+      ..writeByte(36)
       ..writeByte(0)
       ..write(obj.noBukti)
       ..writeByte(1)
@@ -128,7 +129,9 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       ..writeByte(33)
       ..write(obj.createdAt)
       ..writeByte(34)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(35)
+      ..write(obj.revisi);
   }
 
   @override

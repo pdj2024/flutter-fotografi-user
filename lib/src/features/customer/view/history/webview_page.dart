@@ -48,6 +48,7 @@ class _WebviewPageState extends State<WebviewPage>
   bool _isLoading = true;
   String? _errorMessage;
   ErrorType? _errorType;
+  Timer? _loadingHideTimer;
 
   // ── Payment state ─────────────────────────────────────────────────────
   final PesananService _pesananService = PesananService();
@@ -102,6 +103,7 @@ class _WebviewPageState extends State<WebviewPage>
 
   @override
   void dispose() {
+    _loadingHideTimer?.cancel();
     _animController.dispose();
     _fcmSubscription?.cancel();
     _pollingTimer?.cancel();
@@ -204,6 +206,7 @@ class _WebviewPageState extends State<WebviewPage>
           builder: (_) => PaymentSuccessSplashScreen(
             orderNumber: updated.noTrackingPesanan ?? '',
             amount: updated.grandTotal,
+            noBukti: updated.noBukti,
           ),
         ),
       );
@@ -243,10 +246,12 @@ class _WebviewPageState extends State<WebviewPage>
       )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
+          _loadingHideTimer?.cancel();
           if (mounted) setState(() => _isLoading = true);
         },
         onPageFinished: (url) {
-          Future.delayed(const Duration(milliseconds: 300), () {
+          _loadingHideTimer?.cancel();
+          _loadingHideTimer = Timer(const Duration(milliseconds: 300), () {
             if (mounted) setState(() => _isLoading = false);
           });
           if (_isPaymentMode) {
@@ -254,6 +259,11 @@ class _WebviewPageState extends State<WebviewPage>
           }
         },
         onHttpError: (err) {
+          // Midtrans Snap menampilkan halaman expired-nya sendiri (mis. #/407).
+          // Jangan timpa dengan overlay error kita.
+          final reqUrl = err.request?.uri.toString() ?? '';
+          if (reqUrl.contains('midtrans.com/snap')) return;
+
           if (mounted) {
             setState(() {
               _errorMessage =

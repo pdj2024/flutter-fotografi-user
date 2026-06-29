@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
@@ -45,9 +44,6 @@ class MediaPreloadService {
   
   /// Failed URLs (untuk retry logic)
   final Map<String, int> _failedUrls = {};
-  
-  /// Active preload tasks
-  final List<Future<void>> _activeTasks = [];
   
   /// Is service currently preloading
   bool _isPreloading = false;
@@ -264,23 +260,9 @@ class MediaPreloadService {
     try {
       debugPrint('[MediaPreload]    📥 Loading: ${_shortUrl(url)}');
 
-      // ✅ Strategy 1: Cache file first
-      final file = await _cacheManager.getSingleFile(url);
-      
-      // ✅ Strategy 2: Decode image to load into memory cache
-      final bytes = await file.readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      
-      // Mark as preloaded
+      await _cacheManager.getSingleFile(url);
       _preloadedUrls.add(url);
       _failedUrls.remove(url);
-      
-      debugPrint('[MediaPreload]    ✅ Loaded: ${_shortUrl(url)} (${(bytes.length / 1024).toStringAsFixed(1)} KB)');
-
-      // Dispose
-      frame.image.dispose();
-      codec.dispose();
 
     } catch (e) {
       final failCount = (_failedUrls[url] ?? 0) + 1;
@@ -305,24 +287,27 @@ class MediaPreloadService {
   /// Extract all media URLs from portfolio
   List<String> _extractMediaUrls(PortofolioModel portfolio) {
     final urls = <String>[];
-    
+
     for (final media in portfolio.mediaUrls) {
-      // Skip if already cached locally
-      if (media.isCached && media.localPath != null) {
-        continue;
+      if (media.isCached && media.localPath != null) continue;
+
+      // Gunakan idMedia agar cocok dengan URL yang di-render PortofolioCard.
+      // Fallback ke url jika idMedia kosong.
+      final displayUrl = media.idMedia ?? media.url;
+      if (displayUrl != null &&
+          displayUrl.isNotEmpty &&
+          displayUrl.startsWith('http')) {
+        urls.add(displayUrl);
       }
-      
-      // Add main URL
-      if (media.url != null && media.url!.isNotEmpty) {
-        urls.add(media.url!);
-      }
-      
-      // Add thumbnail for videos
-      if (media.isVideo && media.thumbUrl != null && media.thumbUrl!.isNotEmpty) {
+
+      // Thumbnail video
+      if (media.isVideo &&
+          media.thumbUrl != null &&
+          media.thumbUrl!.isNotEmpty) {
         urls.add(media.thumbUrl!);
       }
     }
-    
+
     return urls;
   }
 
@@ -351,7 +336,31 @@ class MediaPreloadService {
 
   // ═══════════════════════════════════════════════════════════
   // CACHE MANAGEMENT
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════\
+
+  /// Warm Flutter's in-memory image cache secara parallel.
+  /// Gunakan ini hanya untuk sejumlah kecil URL agar tidak membebani network.
+  Future<void> warmMemoryCache(
+    List<String> urls,
+    BuildContext context, {
+    int maxCount = 5,
+  }) async {
+    if (!context.mounted) return;
+    final targets = urls
+        .where((u) => u.isNotEmpty && u.startsWith('http'))
+        .take(maxCount)
+        .toList();
+
+    await Future.wait(
+      targets.map((url) async {
+        try {
+          if (context.mounted) {
+            await precacheImage(CachedNetworkImageProvider(url), context);
+          }
+        } catch (_) {}
+      }),
+    );
+  }
   
   /// Check if URL is cached
   Future<bool> isCached(String url) async {

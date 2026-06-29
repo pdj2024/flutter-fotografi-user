@@ -43,6 +43,32 @@ class DefaultValueService {
     }
   }
 
+  // ── GET APP CONFIG ───────────────────────────────────────────
+  // Chat_Help : pesan default WA customer service
+  // Batas_Revisi : default revisi saat vendor buat paket baru
+
+  Future<AppConfigModel> getAppConfig() async {
+    try {
+      final response = await _client.get('/$controller/getAll');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final List<dynamic> data = json['Data'] ?? [];
+        if (data.isEmpty) return AppConfigModel.fallback;
+        return AppConfigModel.fromJson(data.first as Map<String, dynamic>);
+      }
+
+      if (response.statusCode == 204) return AppConfigModel.fallback;
+
+      throw Exception('Gagal load $entity (${response.statusCode})');
+    } catch (e, s) {
+      Error.throwWithStackTrace(
+        Exception('Gagal load AppConfig: $e'),
+        s,
+      );
+    }
+  }
+
   Future<VersionModel> getVersionApp() async {
     try {
       final response = await _client.get(

@@ -191,6 +191,14 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
       ]);
       debugPrint('✅ Home page content pre-loaded');
 
+      // 5b️⃣ Download gambar untuk 5 portofolio pertama ke local cache
+      //     selagi splash masih tampil — home page akan langsung tampil
+      //     gambar tanpa shimmer. Timeout 8 detik agar tidak terlalu lama.
+      if (mounted) {
+        _updateMessage('Menyiapkan gambar...');
+        await portoProvider.preloadFirstImages(context);
+      }
+
       // 6️⃣ Background: sync API liked/saved + kota — hanya untuk user login
       if (sessionRestored && userProvider.customer != null) {
         Future.microtask(() async {

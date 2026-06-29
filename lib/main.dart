@@ -56,9 +56,11 @@ var companyNameGlobal = 'PT. ABC';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
   debugPrint('[BGHandler] 📨 Message: ${message.messageId}');
+  debugPrint('[BGHandler] 📨 Message: ${message.data}');
   debugPrint('[BGHandler] Type: ${message.data['type']}');
 
   try {
@@ -265,6 +267,7 @@ class MyApp extends StatelessWidget {
       final chatProvider = context.read<ChatProvider>();
       final historyOrderProvider = context.read<HistoryOrderProvider>();
       final pesananProvider = context.read<PesananProvider>();
+      final penawaranProvider = context.read<PenawaranProvider>();
       final navigationProvider = context.read<NavigationProvider>();
 
       // ── Inject semua provider ke FCMService ─────────────────────────────
@@ -272,6 +275,7 @@ class MyApp extends StatelessWidget {
       FCMService.instance.setChatProvider(chatProvider);
       FCMService.instance.setHistoryOrderProvider(historyOrderProvider);
       FCMService.instance.setPesananProvider(pesananProvider);
+      FCMService.instance.setPenawaranProvider(penawaranProvider);
 
       // ── getSenderName ────────────────────────────────────────────────────
       FCMService.instance.getSenderName = (roomId, senderId) {

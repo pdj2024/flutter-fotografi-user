@@ -35,6 +35,7 @@ class PesananProvider with ChangeNotifier {
   List<PesananModel> _pesananUnpaid = [];
   List<PesananModel> _pesananProgress = [];
   List<PesananModel> _pesananSelesai = [];
+  List<PesananModel> _pesananBatal = [];
 
   final Map<String, List<HistoryOrderModel>> _orderHistories = {};
 
@@ -72,6 +73,7 @@ class PesananProvider with ChangeNotifier {
   List<PesananModel> get pesananUnpaid => _pesananUnpaid;
   List<PesananModel> get pesananProgress => _pesananProgress;
   List<PesananModel> get pesananSelesai => _pesananSelesai;
+  List<PesananModel> get pesananBatal => _pesananBatal;
   List<PesananModel> get allPesanan => _allPesanan;
   bool get isLoadingOrder => _isLoadingOrder;
   bool get isFetchingSingleOrder => _isFetchingSingleOrder;
@@ -124,7 +126,6 @@ class PesananProvider with ChangeNotifier {
     try {
       final orders = await pesananService.getAll(
         noBukti: noBukti,
-        status: 'aktif',
       );
 
       if (orders.isEmpty) return null;
@@ -186,15 +187,18 @@ class PesananProvider with ChangeNotifier {
       debugPrint('[PesananProvider] 📥 loadOrderOnly | force: $forceRefresh');
 
       final allOrders = await pesananService.getAll(
-        status: 'aktif',
         idCustomer: userId,
       );
 
       _allPesanan = allOrders;
       _filterPesanan();
 
-      // Fetch dan simpan histories untuk unpaid + progress (sama seperti loadOrderWithCache)
-      final toFetchHistories = [..._pesananUnpaid, ..._pesananProgress];
+      // Fetch dan simpan histories untuk unpaid + progress + batal
+      final toFetchHistories = [
+        ..._pesananUnpaid,
+        ..._pesananProgress,
+        ..._pesananBatal,
+      ];
       final allHistories = <String, List<HistoryOrderModel>>{};
       for (final order in toFetchHistories) {
         try {
@@ -258,7 +262,6 @@ class PesananProvider with ChangeNotifier {
       // ✅ Bug G fix: satu kali fetch semua, lalu filter di client
       //    Sebelumnya ada 3x getAll() berturut-turut untuk filter berbeda.
       final allOrders = await pesananService.getAll(
-        status: 'aktif',
         idCustomer: userId,
       );
 
@@ -372,6 +375,10 @@ class PesananProvider with ChangeNotifier {
       }
 
       notifyListeners();
+
+      // Refresh full order data in background so the detail page shows
+      // the latest linkUrl, revisi, and other fields from the server.
+      refreshOrder(noBukti);
     } catch (e, st) {
       debugPrint("[PesananProvider] ❌ FCM progress error: $e\n$st");
     }
@@ -497,7 +504,6 @@ class PesananProvider with ChangeNotifier {
     try {
       final orders = await pesananService.getAll(
         noBukti: noOrder,
-        status: 'aktif',
       );
 
       if (orders.isEmpty) return;
@@ -551,24 +557,35 @@ class PesananProvider with ChangeNotifier {
   //    Order seperti ini TIDAK masuk bucket unpaid — mereka
   //    "pending persiapan" dan ditangani oleh _handleSettledPayments
   //    di MainOrderPage.
+  static bool _isInactiveStatus(String? status) =>
+      status == "batal" || status == "expired";
+
   void _filterPesanan() {
     _pesananUnpaid = _allPesanan.where((p) {
+      if (_isInactiveStatus(p.status)) return false;
       return p.statusProgresPesanan == "menunggu bayar" &&
           !isPaymentSettled(p.statusBayar);
     }).toList();
 
     _pesananProgress = _allPesanan.where((p) {
+      if (_isInactiveStatus(p.status)) return false;
       if (["persiapan", "proses", "review", "revisi"]
-          .contains(p.statusProgresPesanan)) return true;
+          .contains(p.statusProgresPesanan)) { return true; }
       // Pesanan statusBayar sudah settled tapi server belum geser statusProgres →
       // tampilkan di progress (bukan unpaid) agar summary count akurat
       if (p.statusProgresPesanan == "menunggu bayar" &&
-          isPaymentSettled(p.statusBayar)) return true;
+          isPaymentSettled(p.statusBayar)) { return true; }
       return false;
     }).toList();
 
-    _pesananSelesai =
-        _allPesanan.where((p) => p.statusProgresPesanan == "selesai").toList();
+    _pesananSelesai = _allPesanan
+        .where((p) =>
+            !_isInactiveStatus(p.status) &&
+            p.statusProgresPesanan == "selesai")
+        .toList();
+
+    _pesananBatal =
+        _allPesanan.where((p) => _isInactiveStatus(p.status)).toList();
   }
 
   // ═══════════════════════════════════════════════════════════

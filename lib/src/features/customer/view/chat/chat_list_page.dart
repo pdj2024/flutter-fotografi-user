@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
@@ -94,6 +95,7 @@ class _ChatListPageState extends State<ChatListPage>
       return;
     }
     try {
+      unawaited(context.read<ChatProvider>().markAllSentAsReceived());
       await context.read<ChatProvider>().loadRooms(
             forceRefresh: true,
             silent: false,

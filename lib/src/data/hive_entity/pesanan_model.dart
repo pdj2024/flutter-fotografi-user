@@ -133,6 +133,9 @@ class PesananModel {
   @HiveField(34)
   final DateTime? updatedAt;
 
+  @HiveField(35)
+  final int revisi;
+
   PesananModel({
     required this.noBukti,
     this.noTrackingPesanan,
@@ -169,6 +172,7 @@ class PesananModel {
     required this.grandTotal,
     this.createdAt,
     this.updatedAt,
+    this.revisi = 0,
   });
 
   // =======================
@@ -233,6 +237,7 @@ class PesananModel {
       grandTotal: parseInt(json['Grand_Total']),
       createdAt: parseDate(json['Created_At']),
       updatedAt: parseDate(json['Updated_At']),
+      revisi: parseInt(json['Revisi']),
     );
   }
 
@@ -276,6 +281,7 @@ class PesananModel {
       'Grand_Total': grandTotal,
       'Created_At': createdAt?.toIso8601String(),
       'Updated_At': updatedAt?.toIso8601String(),
+      'Revisi': revisi,
     };
   }
 
@@ -297,6 +303,7 @@ class PesananModel {
       'status_bayar': statusBayar,
       'payment_type': metodeBayar,
       'id_payment_gateway': idPaymentGateway,
+      'revisi': revisi,
     };
   }
 
@@ -355,6 +362,7 @@ class PesananModel {
     int? grandTotal,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? revisi,
   }) {
     return PesananModel(
       noBukti: noBukti ?? this.noBukti,
@@ -393,6 +401,7 @@ class PesananModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       idMediaVendor: idMediaVendor ?? this.idMediaVendor,
+      revisi: revisi ?? this.revisi,
     );
   }
 }

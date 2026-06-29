@@ -20,6 +20,7 @@ import 'chat_storage_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 const _kOfflineQueueKey = 'chat_offline_send_queue';
+const _kCancelledPenawaranKey = 'chat_cancelled_penawaran_ids';
 
 class ChatSyncService {
   static final ChatSyncService instance = ChatSyncService._internal();
@@ -624,14 +625,58 @@ class ChatSyncService {
           return;
         }
         final entities = await _buildEntitiesWithEmbedded(messages);
-        await _isar.replaceRoomMessages(roomId: roomId, newEntities: entities);
-        debugPrint('[ChatSync] ✅ BG replace: ${entities.length} for $roomId');
+        await _isar.saveAllMessages(entities);
+
+        final activeIds = messages.map((m) => m.messageId).toSet();
+        await _removeStaleMessages(roomId: roomId, activeMessageIds: activeIds);
+
+        debugPrint('[ChatSync] ✅ BG sync done: ${entities.length} for $roomId');
       } catch (e) {
         debugPrint('[ChatSync] ⚠️ BG sync error: $e');
       } finally {
         _syncingRooms.remove(roomId);
       }
     });
+  }
+
+  Future<void> _removeStaleMessages({
+    required String roomId,
+    required Set<String> activeMessageIds,
+  }) async {
+    try {
+      final localMessages = await _isar.getMessagesByRoom(roomId);
+      final cancelledIds = await _loadCancelledPenawaranIds();
+
+      for (final local in localMessages) {
+        if (local.noPenawaran?.isEmpty != false) continue;
+        if (local.messageId.startsWith('local-')) continue;
+        if (activeMessageIds.contains(local.messageId)) continue;
+
+        await _isar.deleteMessage(local.messageId);
+        await markPenawaranCancelled(local.noPenawaran!);
+
+        if (!cancelledIds.contains(local.noPenawaran)) {
+          debugPrint('[ChatSync] 🗑 Stale penawaran msg removed: ${local.messageId} '
+              '(no_penawaran: ${local.noPenawaran})');
+        }
+      }
+    } catch (e) {
+      debugPrint('[ChatSync] ⚠️ _removeStaleMessages: $e');
+    }
+  }
+
+  Future<Set<String>> _loadCancelledPenawaranIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_kCancelledPenawaranKey) ?? []).toSet();
+  }
+
+  Future<void> markPenawaranCancelled(String noPenawaran) async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getStringList(_kCancelledPenawaranKey) ?? [];
+    if (!existing.contains(noPenawaran)) {
+      existing.add(noPenawaran);
+      await prefs.setStringList(_kCancelledPenawaranKey, existing);
+    }
   }
 
   Future<List<ChatMessageEntity>> _buildEntitiesWithEmbedded(
@@ -702,7 +747,7 @@ class ChatSyncService {
       await Future.wait(ids.map((id) async {
         try {
           final list =
-              await PesananService().getAll(noBukti: id, status: 'aktif');
+              await PesananService().getAll(noBukti: id);
           if (list.isNotEmpty) result[id] = list.first;
         } catch (e) {
           debugPrint('[ChatSync] ⚠️ Pesanan $id: $e');

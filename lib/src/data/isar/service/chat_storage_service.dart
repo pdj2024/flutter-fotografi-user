@@ -15,6 +15,7 @@ import 'chat_isar_service.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:mpjnew/src/features/customer/view/chat/data/service/chat_api_service.dart';
 
 const _kBgQueueKey = 'chat_bg_queue';
 const _kActiveRoomKey = 'chat_active_room_id';
@@ -70,8 +71,8 @@ class ChatStorageService {
 
       final existsByMessageId = await _isar.messageExists(chatModel.messageId);
       if (existsByMessageId) {
-        await _isar.updateMessageStatus(
-            chatModel.messageId, chatModel.sendStatus);
+        await _isar.updateMessageStatusIfHigher(
+            chatModel.messageId, chatModel.sendStatus, _statusPriority);
         return false;
       }
 
@@ -333,22 +334,24 @@ class ChatStorageService {
         _activeRoomId!.isNotEmpty &&
         _activeRoomId == chatModel.roomId;
 
-    final String targetStatus = isUserInSameRoom ? 'read' : 'received';
+    // Status sudah ditentukan oleh FCM handler sebelum memanggil _handleIncoming:
+    //   Scenario 5 (pesan baru): chatModel.sendStatus sudah 'read' atau 'received'
+    //   Scenario 4 (status echo): chatModel.sendStatus = 'received' → jangan di-override ke 'read'
+    // Override isUserInSameRoom di sini menyebabkan race condition: status echo 'received'
+    // ter-override menjadi 'read' ketika user sedang di room.
+    final String targetStatus = chatModel.sendStatus;
 
-    final modelWithStatus = chatModel.copyWith(sendStatus: targetStatus);
-    await _isar.saveMessage(ChatMessageEntity.fromChatModel(modelWithStatus));
-    await _updateRoomLastMessage(modelWithStatus);
+    await _isar.saveMessage(ChatMessageEntity.fromChatModel(chatModel));
+    await _updateRoomLastMessage(chatModel);
 
-    if (!isUserInSameRoom) {
-      await _incrementRoomReceived(modelWithStatus);
+    if (targetStatus != 'read') {
+      await _incrementRoomReceived(chatModel);
     } else {
-      unawaited(_updateStatusViaHttp(
-        messageId: chatModel.messageId,
-        newStatus: 'read',
-      ));
       debugPrint(
           '[ChatStorage] 👁️ User in room, skip unread increment: ${chatModel.roomId}');
     }
+    // HTTP update untuk pesan baru (Scenario 5) sudah dipanggil via onUpdateMessageStatus
+    // di FCM handler. Status echo (Scenario 4) tidak memerlukan HTTP update di sini.
 
     if (isNewRoom) {
       await _enqueuePendingRoomFetch(chatModel.roomId);
@@ -548,6 +551,23 @@ class ChatStorageService {
 
       debugPrint('[ChatStorage] 📦 Enqueued: $messageId (${trimmed.length})');
 
+      // Simpan pesan ke SQLite langsung agar Room Chat bisa tampilkan segera
+      // tanpa menunggu drainBackgroundQueue. Status 'received' — bukan 'sent'.
+      try {
+        final db = ChatIsarService.instance;
+        if (!db.isInitialized) await db.initialize();
+        final alreadyExists = await db.messageExists(messageId);
+        if (!alreadyExists) {
+          final chatModel = ChatModel.fromJson(_normalizeDetailKeys(detail));
+          final msgWithStatus = chatModel.copyWith(sendStatus: 'received');
+          await db.saveMessage(ChatMessageEntity.fromChatModel(msgWithStatus));
+          debugPrint('[ChatStorage] 💾 BG message saved to SQLite: $messageId');
+        }
+      } catch (e) {
+        debugPrint('[ChatStorage] ⚠️ BG SQLite save failed: $e');
+        // SharedPrefs queue tetap ada sebagai fallback
+      }
+
       unawaited(
           _updateStatusViaHttp(messageId: messageId, newStatus: 'received'));
       return true;
@@ -609,14 +629,10 @@ class ChatStorageService {
           );
           await isar.saveRoom(updated);
           debugPrint(
-              '[ChatStorage] 👁️ BG skip unread (user in room): $roomId');
-
-          if (messageId.isNotEmpty) {
-            unawaited(_updateStatusViaHttp(
-              messageId: messageId,
-              newStatus: 'read',
-            ));
-          }
+              '[ChatStorage] 👁️ BG skip unread (user in room when minimized): $roomId');
+          // Status 'read' hanya di-set saat user benar-benar membuka room (drainQueue)
+          // Jangan panggil _updateStatusViaHttp('read') di sini — activeRoomId di SharedPrefs
+          // bisa stale jika app di-force close saat di room.
         }
       } else {
         final unreadCount = isUserInSameRoom ? 0 : 1;
@@ -637,13 +653,6 @@ class ChatStorageService {
           ..userIds = [];
 
         await isar.saveRoom(newRoom);
-
-        if (isUserInSameRoom && messageId.isNotEmpty) {
-          unawaited(_updateStatusViaHttp(
-            messageId: messageId,
-            newStatus: 'read',
-          ));
-        }
 
         final pendingIds = prefs.getStringList(_kPendingRoomFetchKey) ?? [];
         if (!pendingIds.contains(roomId)) {
@@ -719,12 +728,10 @@ class ChatStorageService {
             if (!isOwnEchoMsg) {
               await _isar.updateMessageStatus(
                   chatModel.messageId, targetStatus);
-              if (isActiveRoom) {
-                unawaited(_updateStatusViaHttp(
-                  messageId: chatModel.messageId,
-                  newStatus: targetStatus,
-                ));
-              }
+              unawaited(_updateStatusViaHttp(
+                messageId: chatModel.messageId,
+                newStatus: targetStatus,
+              ));
             } else {
               debugPrint(
                   '[ChatStorage] ⏭️ Drain own echo duplicate, skip status update: '
@@ -828,11 +835,11 @@ class ChatStorageService {
           }
 
           if (!isOwnEcho) {
+            unawaited(_updateStatusViaHttp(
+              messageId: chatModel.messageId,
+              newStatus: isActiveRoom ? 'read' : 'received',
+            ));
             if (isActiveRoom) {
-              unawaited(_updateStatusViaHttp(
-                messageId: chatModel.messageId,
-                newStatus: 'read',
-              ));
               readCount++;
             } else {
               receivedCount++;
@@ -945,18 +952,29 @@ class ChatStorageService {
   }) async {
     if (rooms.isEmpty) return;
 
+    final aktifRooms = rooms.where((r) => r.status == 'aktif').toList();
+    final nonaktifIds = rooms
+        .where((r) => r.status != 'aktif')
+        .map((r) => r.roomId)
+        .toSet();
+
+    if (nonaktifIds.isNotEmpty) {
+      debugPrint('[ChatStorage] 🗑 Nonaktif dari API: ${nonaktifIds.length} room(s)');
+    }
+
     try {
       if (replace) {
-        final entities = rooms.map((room) {
+        final entities = aktifRooms.map((room) {
           return RoomChatEntity.fromRoomChatModel(room)
             ..countStatusReceived = 0
             ..listIdMessageReceived = [];
         }).toList();
 
         await _isar.replaceAllRooms(entities);
-        debugPrint('[ChatStorage] 🔄 Rooms replaced: ${rooms.length}');
+        debugPrint('[ChatStorage] 🔄 Rooms replaced: ${aktifRooms.length}'
+            '${nonaktifIds.isNotEmpty ? " (${nonaktifIds.length} nonaktif dibuang)" : ""}');
       } else {
-        for (final room in rooms) {
+        for (final room in aktifRooms) {
           final existing = await _isar.getRoomById(room.roomId);
 
           if (existing != null) {
@@ -1007,7 +1025,17 @@ class ChatStorageService {
             await _isar.saveRoom(entity);
           }
         }
-        debugPrint('[ChatStorage] 💾 Rooms upserted: ${rooms.length}');
+
+        for (final roomId in nonaktifIds) {
+          final existing = await _isar.getRoomById(roomId);
+          if (existing != null) {
+            await _isar.deleteRoom(roomId);
+            debugPrint('[ChatStorage] 🗑 Room nonaktif dihapus: $roomId');
+          }
+        }
+
+        debugPrint('[ChatStorage] 💾 Rooms upserted: ${aktifRooms.length}'
+            '${nonaktifIds.isNotEmpty ? " (+${nonaktifIds.length} nonaktif dihapus)" : ""}');
       }
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ persistRoomsFromApi: $e\n$st');
@@ -1109,13 +1137,38 @@ class ChatStorageService {
           '[ChatStorage] 👁️ Room read: $roomId (${unreadIds.length} msgs)');
 
       if (unreadIds.isNotEmpty) {
-        unawaited(_updateRoomStatusViaHttp(
-          messageIds: unreadIds,
-          newStatus: 'read',
+        final chatApi = ChatApiService();
+        unawaited(Future.wait(
+          unreadIds.map((id) => chatApi.updateMessageStatus(
+                messageId: id,
+                status: 'read',
+              )),
+          eagerError: false,
         ));
       }
     } catch (e, st) {
       debugPrint('[ChatStorage] ❌ markRoomAsRead: $e\n$st');
+    }
+  }
+
+  Future<void> markAllSentAsReceived() async {
+    if (currentUserId == null) return;
+    try {
+      final updatedIds =
+          await _isar.markSentMessagesAsReceived(currentUserId!);
+      debugPrint('[ChatStorage] 📬 ${updatedIds.length} msgs sent→received');
+      if (updatedIds.isNotEmpty) {
+        final chatApi = ChatApiService();
+        unawaited(Future.wait(
+          updatedIds.map((id) => chatApi.updateMessageStatus(
+                messageId: id,
+                status: 'received',
+              )),
+          eagerError: false,
+        ));
+      }
+    } catch (e, st) {
+      debugPrint('[ChatStorage] ❌ markAllSentAsReceived: $e\n$st');
     }
   }
 

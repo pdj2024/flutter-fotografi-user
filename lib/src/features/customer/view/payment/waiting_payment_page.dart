@@ -282,6 +282,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
           builder: (_) => PaymentSuccessSplashScreen(
             orderNumber: _currentData.noTrackingPesanan ?? '',
             amount: _currentData.grandTotal,
+            noBukti: _currentData.noBukti,
           ),
         ),
       );

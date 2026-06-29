@@ -35,13 +35,14 @@ class PenawaranModelAdapter extends TypeAdapter<PenawaranModel> {
       tglRealisasi: fields[15] as DateTime,
       createdAt: fields[16] as DateTime,
       updatedAt: fields[17] as DateTime?,
+      revisi: (fields[18] as int?) ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, PenawaranModel obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.noId)
       ..writeByte(1)
@@ -77,7 +78,9 @@ class PenawaranModelAdapter extends TypeAdapter<PenawaranModel> {
       ..writeByte(16)
       ..write(obj.createdAt)
       ..writeByte(17)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(18)
+      ..write(obj.revisi);
   }
 
   @override

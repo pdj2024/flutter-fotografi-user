@@ -294,11 +294,8 @@ class ChatProvider extends ChangeNotifier {
                 ? await _loadPenawaranModel(message.noPenawaran!)
                 : null;
 
-        final needsUpdate = (paket != null && entity.paket == null) ||
-            (penawaran != null && entity.penawaran == null) ||
-            (pesanan != null && entity.pesanan == null);
-
-        if (needsUpdate) {
+        // Always update the new message with fresh embedded data
+        if (paket != null || penawaran != null || pesanan != null) {
           await _isar.saveMessage(entity.copyWith(
             paket:
                 paket != null ? EmbeddedPaket.fromModel(paket) : entity.paket,
@@ -313,9 +310,64 @@ class ChatProvider extends ChangeNotifier {
           ));
           debugPrint(
               '[ChatProvider] ✅ FCM message enriched: ${message.messageId}');
+
+          // Also refresh all other messages in this room that embed the same
+          // penawaran/pesanan so their cards show the latest data.
+          if (penawaran != null) {
+            _refreshRelatedPenawaranMessages(
+                message.roomId, penawaran.noId, penawaran);
+          }
+          if (pesanan != null) {
+            _refreshRelatedPesananMessages(
+                message.roomId, pesanan.noBukti, pesanan);
+          }
         }
       } catch (e) {
         debugPrint('[ChatProvider] ⚠️ _triggerEmbeddedEnrich: $e');
+      }
+    });
+  }
+
+  void _refreshRelatedPenawaranMessages(
+      String roomId, String noId, PenawaranModel fresh) {
+    Future(() async {
+      try {
+        final all = await _isar.getMessagesByRoom(roomId);
+        for (final e in all) {
+          if (e.hasPenawaran &&
+              e.penawaran!.noId == noId &&
+              e.messageId != '') {
+            await _isar.saveMessage(e.copyWith(
+              penawaran: EmbeddedPenawaran.fromModel(fresh),
+            ));
+          }
+        }
+        debugPrint(
+            '[ChatProvider] 🔄 Refreshed penawaran $noId in room $roomId');
+      } catch (e) {
+        debugPrint('[ChatProvider] ⚠️ _refreshRelatedPenawaranMessages: $e');
+      }
+    });
+  }
+
+  void _refreshRelatedPesananMessages(
+      String roomId, String noBukti, PesananModel fresh) {
+    Future(() async {
+      try {
+        final all = await _isar.getMessagesByRoom(roomId);
+        for (final e in all) {
+          if (e.hasPesanan &&
+              e.pesanan!.noBukti == noBukti &&
+              e.messageId != '') {
+            await _isar.saveMessage(e.copyWith(
+              pesanan: EmbeddedPesanan.fromModel(fresh),
+            ));
+          }
+        }
+        debugPrint(
+            '[ChatProvider] 🔄 Refreshed pesanan $noBukti in room $roomId');
+      } catch (e) {
+        debugPrint('[ChatProvider] ⚠️ _refreshRelatedPesananMessages: $e');
       }
     });
   }
@@ -546,6 +598,15 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> markAllSentAsReceived() async {
+    if (_currentUserId == null) return;
+    try {
+      await _storage.markAllSentAsReceived();
+    } catch (e) {
+      debugPrint('[ChatProvider] ❌ markAllSentAsReceived: $e');
+    }
+  }
+
   Future<bool> updatePenawaranToPesanan({
     required ChatModel message,
     required String pesananId,
@@ -632,6 +693,22 @@ class ChatProvider extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> refreshEmbeddedPenawaranInRoom(
+      String roomId, String noPenawaran) async {
+    if (roomId.isEmpty || noPenawaran.isEmpty) return;
+    final fresh = await _loadPenawaranModel(noPenawaran);
+    if (fresh == null) return;
+    _refreshRelatedPenawaranMessages(roomId, fresh.noId, fresh);
+  }
+
+  Future<void> refreshEmbeddedPesananInRoom(
+      String roomId, String noInvoice) async {
+    if (roomId.isEmpty || noInvoice.isEmpty) return;
+    final fresh = await _loadPesananModel(noInvoice);
+    if (fresh == null) return;
+    _refreshRelatedPesananMessages(roomId, fresh.noBukti, fresh);
   }
 
   Future<PenawaranModel?> _loadPenawaranModel(String id) async {

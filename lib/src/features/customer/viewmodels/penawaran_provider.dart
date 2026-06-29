@@ -55,6 +55,25 @@ class PenawaranProvider with ChangeNotifier {
     await loadOffer(userId: userId);
   }
 
+  Future<void> refreshSinglePenawaran(String noPenawaran) async {
+    if (noPenawaran.isEmpty) return;
+    debugPrint('[PenawaranProvider] 🔄 Refreshing penawaran: $noPenawaran');
+    try {
+      final result = await penawaranService.getAll(noId: noPenawaran);
+      if (result.isEmpty) return;
+      final updated = result.first;
+      final idx = _penawaranList.indexWhere((p) => p.noId == noPenawaran);
+      if (idx >= 0) {
+        _penawaranList[idx] = updated;
+      } else {
+        _penawaranList.add(updated);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[PenawaranProvider] ❌ refreshSinglePenawaran error: $e');
+    }
+  }
+
   Future<List<PenawaranModel>> fetchPenawaranFromRoom(
       List<ChatModel> messages) async {
     _errorOffer = null;

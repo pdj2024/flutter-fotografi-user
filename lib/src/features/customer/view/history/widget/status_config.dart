@@ -32,6 +32,8 @@ const _colorTable = <String, (Color, IconData)>{
   'revisi': (Color(0xFF0D9488), Icons.edit_note_rounded), // Teal
   'selesai': (Color(0xFF16A34A), Icons.check_circle_outline_rounded), // Hijau
   'dibatalkan': (Color(0xFFDC2626), Icons.cancel_outlined), // Merah
+  'batal': (Color(0xFFDC2626), Icons.cancel_rounded), // Merah
+  'expired': (Color(0xFFD97706), Icons.timer_off_rounded), // Oranye
 };
 
 const _fallbackColor = Color(0xFF64748B);
