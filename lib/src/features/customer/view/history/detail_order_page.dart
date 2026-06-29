@@ -399,26 +399,32 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: PesananProvider.isPaymentSettled(pesanan!.statusBayar)
-                                                ? Colors.green.shade50
-                                                : Colors.orange.shade50,
+                                        color: PesananProvider.isPaymentSettled(
+                                                pesanan!.statusBayar)
+                                            ? Colors.green.shade50
+                                            : Colors.orange.shade50,
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(
-                                          color: PesananProvider.isPaymentSettled(pesanan!.statusBayar)
-                                              ? Colors.green.shade200
-                                              : Colors.orange.shade200,
+                                          color:
+                                              PesananProvider.isPaymentSettled(
+                                                      pesanan!.statusBayar)
+                                                  ? Colors.green.shade200
+                                                  : Colors.orange.shade200,
                                         ),
                                       ),
                                       child: Text(
-                                        PesananProvider.isPaymentSettled(pesanan!.statusBayar)
+                                        PesananProvider.isPaymentSettled(
+                                                pesanan!.statusBayar)
                                             ? "Sudah Bayar"
                                             : "Belum Bayar",
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
-                                          color: PesananProvider.isPaymentSettled(pesanan!.statusBayar)
-                                              ? Colors.green.shade700
-                                              : Colors.orange.shade700,
+                                          color:
+                                              PesananProvider.isPaymentSettled(
+                                                      pesanan!.statusBayar)
+                                                  ? Colors.green.shade700
+                                                  : Colors.orange.shade700,
                                         ),
                                       ),
                                     ),
@@ -465,10 +471,12 @@ class _DetailOrderPageState extends State<DetailOrderPage> {
                         _buildInfoRow(
                           label: "Status Pembayaran",
                           icon: Icons.schedule_outlined,
-                          value: PesananProvider.isPaymentSettled(pesanan!.statusBayar)
+                          value: PesananProvider.isPaymentSettled(
+                                  pesanan!.statusBayar)
                               ? "Sudah Bayar"
                               : "Belum Bayar",
-                          valueColor: PesananProvider.isPaymentSettled(pesanan!.statusBayar)
+                          valueColor: PesananProvider.isPaymentSettled(
+                                  pesanan!.statusBayar)
                               ? Colors.green
                               : Colors.orange,
                         ),

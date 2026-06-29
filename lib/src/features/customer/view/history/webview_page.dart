@@ -206,6 +206,7 @@ class _WebviewPageState extends State<WebviewPage>
           builder: (_) => PaymentSuccessSplashScreen(
             orderNumber: updated.noTrackingPesanan ?? '',
             amount: updated.grandTotal,
+            noBukti: updated.noBukti,
           ),
         ),
       );

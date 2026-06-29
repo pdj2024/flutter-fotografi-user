@@ -55,7 +55,7 @@ class ChatPesananCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Constants.primaryColor.withOpacity(0.1),
+              color: _getHeaderColor(),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -84,7 +84,9 @@ class ChatPesananCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Constants.primaryColor,
+                          color: _isTerminal()
+                              ? Colors.grey.shade600
+                              : Constants.primaryColor,
                         ),
                       ),
                     ],
@@ -97,8 +99,35 @@ class ChatPesananCard extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // Status Progress Badge
-                        if (PesananProvider.isPaymentSettled(
+                        // Status badge — terminal state (batal/expired) atau progress (settled)
+                        if (_isTerminal())
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getTerminalBadgeColor(),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(_getTerminalBadgeIcon(),
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _getTerminalBadgeText(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (PesananProvider.isPaymentSettled(
                             pesanan.statusBayar))
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -118,8 +147,9 @@ class ChatPesananCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                        // Payment Status Badge
-                        if (pesanan.statusBayar != null &&
+                        // Payment Status Badge — disembunyikan saat terminal
+                        if (!_isTerminal() &&
+                            pesanan.statusBayar != null &&
                             pesanan.statusBayar!.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Container(
@@ -156,7 +186,7 @@ class ChatPesananCard extends StatelessWidget {
                     ),
                     // Menu ⋮ untuk batalkan / ganti metode
                     if (_canShowMenu()) ...[
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => _showActionSheet(context),
                         child: Container(
@@ -357,6 +387,8 @@ class ChatPesananCard extends StatelessWidget {
   }
 
   bool _shouldShowExpiry() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    if (s == 'expired') return true;
     return pesanan.expiryTime != null &&
         pesanan.statusBayar?.toLowerCase() == 'belum bayar' &&
         (pesanan.statusProgresPesanan?.toLowerCase() == 'menunggu bayar' ||
@@ -364,6 +396,29 @@ class ChatPesananCard extends StatelessWidget {
   }
 
   Widget _buildExpiryInfo() {
+    if (pesanan.expiryTime == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.error_outline, size: 18, color: Colors.red),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Pembayaran telah kadaluarsa',
+                style: TextStyle(fontSize: 12, color: Colors.red, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final now = DateTime.now();
     final expiry = pesanan.expiryTime!;
     final isExpired = expiry.isBefore(now);
@@ -425,6 +480,40 @@ class ChatPesananCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // ========================================
+  // TERMINAL STATE (batal / expired)
+  // ========================================
+
+  bool _isTerminal() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    return s == 'batal' || s == 'expired';
+  }
+
+  Color _getHeaderColor() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    if (s == 'batal') return Colors.red.withValues(alpha: 0.08);
+    if (s == 'expired') return Colors.orange.withValues(alpha: 0.08);
+    return Constants.primaryColor.withOpacity(0.1);
+  }
+
+  Color _getTerminalBadgeColor() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    if (s == 'batal') return Colors.red.shade700;
+    return Colors.orange.shade700;
+  }
+
+  IconData _getTerminalBadgeIcon() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    if (s == 'batal') return Icons.cancel_outlined;
+    return Icons.timer_off_outlined;
+  }
+
+  String _getTerminalBadgeText() {
+    final s = pesanan.status?.toLowerCase() ?? '';
+    if (s == 'batal') return 'Dibatalkan';
+    return 'Kadaluarsa';
   }
 
   // ========================================
@@ -525,11 +614,13 @@ class ChatPesananCard extends StatelessWidget {
   // BUTTON CONFIGURATION
   // ========================================
   String _getButtonText() {
+    final orderStatus = pesanan.status?.toLowerCase() ?? '';
     final paymentStatus = pesanan.statusBayar?.toLowerCase() ?? '';
     final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
 
-    // Prioritas berdasarkan status pembayaran dan progress
-    if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
+    if (orderStatus == 'batal' || orderStatus == 'expired') {
+      return 'Lihat Detail';
+    } else if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
       return 'Bayar Sekarang';
     } else if (PesananProvider.isPaymentSettled(pesanan.statusBayar)) {
       if (progressStatus == 'selesai') {
@@ -547,10 +638,12 @@ class ChatPesananCard extends StatelessWidget {
   }
 
   Color _getButtonColor() {
-    final paymentStatus = pesanan.statusBayar?.toLowerCase() ?? '';
+    final orderStatus = pesanan.status?.toLowerCase() ?? '';
     final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
 
-    if (progressStatus == 'dibatalkan') {
+    if (orderStatus == 'batal' ||
+        orderStatus == 'expired' ||
+        progressStatus == 'dibatalkan') {
       return Colors.grey;
     } else {
       return Constants.primaryColor;
@@ -558,10 +651,13 @@ class ChatPesananCard extends StatelessWidget {
   }
 
   IconData _getButtonIcon() {
+    final orderStatus = pesanan.status?.toLowerCase() ?? '';
     final paymentStatus = pesanan.statusBayar?.toLowerCase() ?? '';
     final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
 
-    if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
+    if (orderStatus == 'batal' || orderStatus == 'expired') {
+      return Icons.info_outline;
+    } else if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
       return Icons.payment;
     } else if (progressStatus == 'review' || progressStatus == 'revisi') {
       return Icons.rate_review_outlined;
@@ -577,11 +673,15 @@ class ChatPesananCard extends StatelessWidget {
   // ========================================
 
   bool _canShowMenu() {
-    final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
+    final orderStatus = pesanan.status?.toLowerCase() ?? '';
+    final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
     final bayar = pesanan.statusBayar?.toLowerCase() ?? '';
-    return bayar != 'settlement' &&
-        status != 'selesai' &&
-        status != 'dibatalkan';
+    return orderStatus != 'batal' &&
+        orderStatus != 'expired' &&
+        bayar != 'settlement' &&
+        bayar != 'capture' &&
+        progressStatus != 'selesai' &&
+        progressStatus != 'dibatalkan';
   }
 
   void _showActionSheet(BuildContext context) {

@@ -27,10 +27,18 @@ import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart'
 import 'package:provider/provider.dart';
 
 class DetailPembayaranPage extends StatefulWidget {
-  final String penawaranId;
-  final ChatModel message;
-  const DetailPembayaranPage(
-      {super.key, required this.penawaranId, required this.message});
+  final String? penawaranId;
+  final ChatModel? message;
+
+  /// Jika diisi, page bermode "ganti metode bayar" — skip fetch penawaran/paket.
+  final String? existingNoBukti;
+
+  const DetailPembayaranPage({
+    super.key,
+    this.penawaranId,
+    this.message,
+    this.existingNoBukti,
+  });
 
   @override
   State<DetailPembayaranPage> createState() => _DetailPembayaranPageState();
@@ -78,15 +86,33 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
   // ─────────────────────────────────────────────────────────────
 
+  bool get _isChangeMode => widget.existingNoBukti != null;
+
   @override
   void initState() {
     super.initState();
-    getData(widget.penawaranId);
+    if (_isChangeMode) {
+      _loadOnlyMetode();
+    } else {
+      getData(widget.penawaranId!);
+    }
   }
 
   @override
   void dispose() {
     super.dispose();
+  }
+
+  Future<void> _loadOnlyMetode() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+    try {
+      await getMetodePembayaran();
+    } finally {
+      setState(() => isLoading = false);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -258,11 +284,11 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
 
       try {
         debugPrint('💬 [createPesanan] Mengupdate chat penawaran → pesanan...');
-        debugPrint('   message.id  : ${widget.message.messageId}');
+        debugPrint('   message.id  : ${widget.message!.messageId}');
         debugPrint('   pesananId   : ${pesanan.first.noBukti}');
         final chatUpdated =
             await context.read<ChatProvider>().updatePenawaranToPesanan(
-                  message: widget.message,
+                  message: widget.message!,
                   pesananId: pesanan.first.noBukti,
                 );
         debugPrint(chatUpdated
@@ -327,6 +353,72 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   }
 
   // ══════════════════════════════════════════════════════════════
+  // CHANGE PAYMENT
+  // ══════════════════════════════════════════════════════════════
+
+  Future<void> changePayment() async {
+    if (kodeMetode == null) return;
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+    try {
+      // 1. Panggil API — throws on error, noBukti tidak berubah
+      await pesananService.changePayment(widget.existingNoBukti!, kodeMetode!);
+
+      // 2. Load pesanan dengan noBukti yang sama
+      final pesananList =
+          await pesananService.getAll(noBukti: widget.existingNoBukti!);
+      if (pesananList.isEmpty) throw Exception('Pesanan tidak ditemukan');
+      final pesanan = pesananList.first;
+
+      // 3. Buat history "menunggu bayar" dengan deskripsi ganti metode
+      final history = HistoryOrderService.createMenungguPembayaran(
+        noOrder: widget.existingNoBukti!,
+        senderId: pesanan.idCustomer,
+        deskripsi: 'Metode pembayaran berhasil diubah',
+      );
+      await historyOrderService.create(history);
+
+      if (!context.mounted) return;
+
+      CustomSnackbar.showSuccessSnackbar(
+          context, 'Metode pembayaran berhasil diubah');
+      context.read<NavigationProvider>().popAllToRoot();
+
+      // 4. Navigasi berdasarkan linkSnap
+      if (pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty) {
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              targetTabIndex: 2,
+              WebviewPage(url: pesanan.linkSnap!, paymentData: pesanan),
+            );
+      } else {
+        context.read<NavigationProvider>().navigateToPage(
+              context,
+              targetTabIndex: 2,
+              WaitingPaymentPage(paymentData: pesanan),
+            );
+      }
+    } catch (e) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      errorMessage = msg;
+      if (mounted) {
+        final nav = context.read<NavigationProvider>();
+        await CustomDialog.showWarningDialog(
+          context: context,
+          title: 'Ganti Metode Gagal',
+          message: msg,
+          buttonText: 'Kembali ke Pesanan',
+          onConfirm: nav.popAllToRoot,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
   // BUILD
   // ══════════════════════════════════════════════════════════════
 
@@ -337,9 +429,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          "Detail Pembayaran",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        title: Text(
+          _isChangeMode ? "Ganti Metode Bayar" : "Detail Pembayaran",
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       body: Builder(
@@ -374,7 +466,9 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                   Text(errorMessage!, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => getData(widget.penawaranId),
+                    onPressed: () => _isChangeMode
+                        ? _loadOnlyMetode()
+                        : getData(widget.penawaranId!),
                     child: const Text("Coba Lagi"),
                   ),
                 ],
@@ -383,11 +477,55 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
           }
 
           /// 3️⃣ EMPTY
-          if (penawaran == null || paket == null) {
+          if (!_isChangeMode && (penawaran == null || paket == null)) {
             return const Center(child: Text("Data penawaran tidak tersedia"));
           }
 
-          /// 4️⃣ SUCCESS
+          /// 4️⃣ SUCCESS — Change Mode: hanya tampil metode picker
+          if (_isChangeMode) {
+            return Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(10, 20, 10, 20),
+                    child: _buildCardSection(
+                      title: "Metode Pembayaran Baru",
+                      isRequired: true,
+                      content: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pesanan lama akan dibatalkan dan pesanan baru akan dibuat dengan metode yang dipilih.',
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 16),
+                          GestureDetector(
+                            onTap: () => CustomDialog.showPaymentMethodDialog(
+                              context: context,
+                              metodePembayaran: metodePembayaran,
+                              currentKodeMetode: kodeMetode,
+                              onSelected: (kode, text, fee) {
+                                setState(() {
+                                  kodeMetode = kode;
+                                  textMetode = text;
+                                  biayaPembayaran = fee;
+                                });
+                              },
+                            ),
+                            child: _buildMetodePicker(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _buildExpandableBottomBar(),
+              ],
+            );
+          }
+
+          /// 4️⃣ SUCCESS — Create Mode
           final tanggal = DateFormat("dd MMM yyyy", "id_ID")
               .format(penawaran!.tglRealisasi);
           final waktu = Helper.toLocalTime(penawaran!.tglRealisasi);
@@ -449,69 +587,10 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
                                   textMetode = text;
                                   biayaPembayaran = fee;
                                 });
-                                // Hitung ulang total setelah metode dipilih
                                 _hitungHarga();
                               },
                             ),
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: kodeMetode == null
-                                    ? Colors.grey.shade50
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: kodeMetode == null
-                                      ? Colors.grey.shade300
-                                      : Constants.primaryColor,
-                                  width: kodeMetode == null ? 1 : 2,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade200
-                                              : Constants.primaryColor
-                                                  .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(
-                                          CustomIcons.getMetodeIcon(
-                                              kodeMetode ?? ""),
-                                          size: 24,
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade600
-                                              : Constants.primaryColor,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        textMetode ?? "Pilih Metode Pembayaran",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: kodeMetode == null
-                                              ? Colors.grey.shade600
-                                              : Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ],
-                              ),
-                            ),
+                            child: _buildMetodePicker(),
                           ),
                         ),
 
@@ -666,6 +745,58 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   // ══════════════════════════════════════════════════════════════
   // WIDGET BUILDERS
   // ══════════════════════════════════════════════════════════════
+
+  Widget _buildMetodePicker() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kodeMetode == null ? Colors.grey.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: kodeMetode == null
+              ? Colors.grey.shade300
+              : Constants.primaryColor,
+          width: kodeMetode == null ? 1 : 2,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: kodeMetode == null
+                      ? Colors.grey.shade200
+                      : Constants.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  CustomIcons.getMetodeIcon(kodeMetode ?? ""),
+                  size: 24,
+                  color: kodeMetode == null
+                      ? Colors.grey.shade600
+                      : Constants.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                textMetode ?? "Pilih Metode Pembayaran",
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: kodeMetode == null
+                      ? Colors.grey.shade600
+                      : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade600),
+        ],
+      ),
+    );
+  }
 
   Widget _buildCardSection({
     required String title,
@@ -829,6 +960,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
     );
   }
 
+
   Widget _buildRevisiChip(int revisi) {
     final isUnlimited = revisi == 0;
     final label = isUnlimited ? 'Tidak terbatas' : '$revisi kali';
@@ -866,6 +998,47 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
   }
 
   Widget _buildExpandableBottomBar() {
+    // ── Change mode: bottom bar sederhana tanpa ringkasan harga ──
+    if (_isChangeMode) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kodeMetode == null
+                  ? Colors.grey.shade300
+                  : Constants.primaryColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              elevation: kodeMetode == null ? 0 : 2,
+            ),
+            onPressed: isLoading || kodeMetode == null
+                ? null
+                : () async => await changePayment(),
+            child: isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    'Ganti Metode Bayar',
+                    style: TextStyle(
+                      color: kodeMetode == null
+                          ? Colors.grey.shade600
+                          : Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+          ),
+        ),
+      );
+    }
+
     // Untuk label, gunakan admin fee yang belum kena PPN (DPP admin)
     // agar customer paham berapa fee asli sebelum pajak
     final displayAdminFee = biayaPembayaran;
@@ -991,7 +1164,7 @@ class _DetailPembayaranPageState extends State<DetailPembayaranPage> {
             duration: const Duration(milliseconds: 300),
           ),
 
-          // ── Tombol Bayar ───────────────────────────────────
+          // ── Tombol Bayar / Ganti Metode ────────────────────
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

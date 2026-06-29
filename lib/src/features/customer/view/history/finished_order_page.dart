@@ -24,8 +24,11 @@ class FinishedOrderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rawOrders = context.watch<PesananProvider>().pesananSelesai;
-    final orders = [...rawOrders]..sort((a, b) {
+    final provider = context.watch<PesananProvider>();
+    final orders = [
+      ...provider.pesananSelesai,
+      ...provider.pesananBatal,
+    ]..sort((a, b) {
         final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
         final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
         return bTime.compareTo(aTime);
@@ -208,8 +211,10 @@ class _FinishedCardState extends State<_FinishedCard> {
 
                 const SizedBox(height: 14),
 
-                // ── Rating / Ulasan section ────────────────
-                _buildUlasanSection(),
+                // ── Rating / Ulasan section (hanya untuk selesai) ──
+                if (widget.order.status != 'batal' &&
+                    widget.order.status != 'expired')
+                  _buildUlasanSection(),
 
                 const SizedBox(height: 12),
 
@@ -225,33 +230,63 @@ class _FinishedCardState extends State<_FinishedCard> {
 
   // ─── Status bar ──────────────────────────────────────────────
   Widget _buildStatusBar() {
+    final isExpired = widget.order.status == "expired";
+    final isBatal = widget.order.status == "batal";
+
+    final Color bgColor;
+    final Color iconColor;
+    final Color textColor;
+    final IconData icon;
+    final String label;
+
+    if (isExpired) {
+      bgColor = const Color(0xFFFFF3E0);
+      iconColor = const Color(0xFFE65100);
+      textColor = const Color(0xFFE65100);
+      icon = Icons.timer_off_rounded;
+      label = 'Expired';
+    } else if (isBatal) {
+      bgColor = const Color(0xFFFFEBEE);
+      iconColor = const Color(0xFFC62828);
+      textColor = const Color(0xFFC62828);
+      icon = Icons.cancel_rounded;
+      label = 'Dibatalkan';
+    } else {
+      bgColor = const Color(0xFFE8F5E9);
+      iconColor = const Color(0xFF2E7D32);
+      textColor = const Color(0xFF2E7D32);
+      icon = Icons.check_circle_rounded;
+      label = 'Selesai';
+    }
+
+    final noBuktiShort = widget.order.noBukti.length > 8
+        ? '#${widget.order.noBukti.substring(widget.order.noBukti.length - 8)}'
+        : '#${widget.order.noBukti}';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFFE8F5E9),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded,
-              size: 14, color: Color(0xFF2E7D32)),
+          Icon(icon, size: 14, color: iconColor),
           const SizedBox(width: 6),
-          const Text(
-            'Selesai',
+          Text(
+            label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF2E7D32),
+              color: textColor,
             ),
           ),
           const Spacer(),
           Text(
-            widget.order.noBukti.length > 8
-                ? '#${widget.order.noBukti.substring(widget.order.noBukti.length - 8)}'
-                : '#${widget.order.noBukti}',
-            style: const TextStyle(
+            noBuktiShort,
+            style: TextStyle(
               fontSize: 11,
-              color: Color(0xFF388E3C),
+              color: textColor,
               fontWeight: FontWeight.w600,
             ),
           ),

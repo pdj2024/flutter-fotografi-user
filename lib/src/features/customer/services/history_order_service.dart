@@ -163,12 +163,13 @@ class HistoryOrderService {
   static HistoryOrderModel createMenungguPembayaran({
     required String noOrder,
     required String senderId,
+    String deskripsi = 'Pesanan berhasil dibuat',
   }) {
     return HistoryOrderModel(
       noId: '',
       noOrder: noOrder,
       tglProgress: DateTime.now(),
-      deskripsi: 'Pesanan berhasil dibuat',
+      deskripsi: deskripsi,
       senderId: senderId,
       tipeUser: 'Customer',
       namaSender: '',

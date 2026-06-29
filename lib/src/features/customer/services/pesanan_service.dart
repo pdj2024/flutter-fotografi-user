@@ -99,6 +99,38 @@ class PesananService {
     return CreatePesananResult.fromJson(decoded);
   }
 
+  /// CHANGE PAYMENT
+  Future<void> changePayment(String noBukti, String paymentType) async {
+    final response = await apiClient.post(
+      '/$controller/change-payment',
+      body: jsonEncode({'No_Bukti': noBukti, 'Payment_Type': paymentType}),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    debugPrint('==============================');
+    debugPrint('URL: ${response.request?.url}');
+    debugPrint('Status Code: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+    debugPrint('==============================');
+
+    if (response.statusCode != 200) {
+      String errorMsg =
+          'Gagal mengganti metode pembayaran (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded['Message'] != null) errorMsg = decoded['Message'] as String;
+      } catch (_) {}
+      throw Exception(errorMsg);
+    }
+
+    final decoded = jsonDecode(response.body);
+    final cancelResult = decoded['CancelResult'];
+    if (cancelResult != null && cancelResult['Status'] != 200) {
+      throw Exception(
+          cancelResult['Message'] ?? 'Gagal membatalkan pembayaran lama');
+    }
+  }
+
   /// UPDATE
   Future<void> update(PesananModel model) async {
     final response = await apiClient.put(

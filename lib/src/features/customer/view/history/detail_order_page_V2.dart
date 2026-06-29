@@ -17,6 +17,7 @@ import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
@@ -105,9 +106,11 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       setState(() => isLoading = true);
 
       final pesananProvider = context.read<PesananProvider>();
-
+      final orderStatus = widget.pesananModel.status?.toLowerCase() ?? '';
+      final isTerminal = orderStatus == 'batal' || orderStatus == 'expired';
       if (pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti) ==
-          null) {
+              null ||
+          isTerminal) {
         await pesananProvider.refreshOrder(widget.pesananModel.noBukti);
       }
 
@@ -115,28 +118,27 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       await historyProvider.fetchHistoryForOrder(widget.pesananModel.noBukti);
 
       final pesanan =
-          pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti);
-      if (pesanan != null) {
-        paket =
-            (await PaketService().getAll(noId: pesanan.idPaket)).firstOrNull;
+          pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti) ??
+              widget.pesananModel;
+      paket =
+          (await PaketService().getAll(noId: pesanan.idPaket)).firstOrNull;
 
-        if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
-          final hasLinkSnap =
-              pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty;
+      if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
+        final hasLinkSnap =
+            pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty;
 
-          final metodeList = hasLinkSnap
-              ? await MetodePembayaranService()
-                  .getAll(paymentSnap: pesanan.metodeBayar)
-              : await MetodePembayaranService()
-                  .getAll(caraBayar: pesanan.metodeBayar);
+        final metodeList = hasLinkSnap
+            ? await MetodePembayaranService()
+                .getAll(paymentSnap: pesanan.metodeBayar)
+            : await MetodePembayaranService()
+                .getAll(caraBayar: pesanan.metodeBayar);
 
-          metodePembayaran = metodeList.firstOrNull;
-        }
+        metodePembayaran = metodeList.firstOrNull;
+      }
 
-        if (pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
-          final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
-          ulasan = list.isNotEmpty ? list.first : null;
-        }
+      if (pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
+        final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
+        ulasan = list.isNotEmpty ? list.first : null;
       }
     } catch (e) {
       if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
@@ -308,14 +310,20 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       ),
       body: Consumer<PesananProvider>(
         builder: (context, pesananProvider, _) {
-          final pesanan =
+          final pesananFromProvider =
               pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti);
 
-          if (isLoading || pesanan == null) {
+          if (isLoading && pesananFromProvider == null) {
             return DetailOrderShimmer(fetchData: fetchData);
           }
 
-          final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
+          final pesanan = pesananFromProvider ?? widget.pesananModel;
+          final orderStatus = pesanan.status?.toLowerCase() ?? '';
+          final isTerminalOrder =
+              orderStatus == 'batal' || orderStatus == 'expired';
+          final status = isTerminalOrder
+              ? orderStatus
+              : pesanan.statusProgresPesanan?.toLowerCase() ?? '';
 
           return Scaffold(
             backgroundColor: const Color(0xFFF9F9F9),
@@ -733,9 +741,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     return Consumer<HistoryOrderProvider>(
       builder: (context, hp, _) {
         final histories = hp.getHistoryForOrder(pesanan.noBukti);
-        final revisiCount = histories
-            .where((h) => h.statusProgressPesanan == 'revisi')
-            .length;
+        final revisiCount =
+            histories.where((h) => h.statusProgressPesanan == 'revisi').length;
         final maxRevisi = pesanan.revisi;
         final revisiHabis = maxRevisi >= 0 && revisiCount >= maxRevisi;
 
@@ -821,8 +828,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                               width: 14,
                               height: 14,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _cfg('revisi').color))
+                                  strokeWidth: 2, color: _cfg('revisi').color))
                           : Icon(_cfg('revisi').icon, size: 18),
                       label: Text(
                         OrderStatusFlow.get('review', 'revisi')?.actionLabel ??
@@ -831,8 +837,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _cfg('revisi').color,
-                        side: BorderSide(
-                            color: _cfg('revisi').color, width: 1.5),
+                        side:
+                            BorderSide(color: _cfg('revisi').color, width: 1.5),
                         padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
@@ -842,7 +848,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isSubmittingStatus ? null : _selesaikanPesanan,
+                      onPressed:
+                          _isSubmittingStatus ? null : _selesaikanPesanan,
                       icon: _isSubmittingStatus
                           ? const SizedBox(
                               width: 14,
@@ -910,11 +917,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (pesanan.revisi > 0) ...[
-                      _buildRevisiUsageChip(
-                          used: revisiCount, max: pesanan.revisi),
-                      const SizedBox(height: 12),
-                    ],
                     ...List.generate(
                       histories.length,
                       (i) => _buildTimelineItem(
@@ -1029,8 +1031,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                     children: [
                       Text(
                         '${Helper.formatTanggal(history.tglProgress)}, ${Helper.toLocalTime(history.tglProgress)}',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600),
                       ),
                       if (revisiNumber != null)
                         Container(
@@ -1045,9 +1047,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: isFirst
-                                    ? cfg.color
-                                    : Colors.grey.shade500),
+                                color:
+                                    isFirst ? cfg.color : Colors.grey.shade500),
                           ),
                         ),
                     ],
@@ -1110,40 +1111,9 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     );
   }
 
-  Widget _buildRevisiUsageChip({required int used, required int max}) {
-    final isExhausted = used >= max;
-    final color = isExhausted ? Colors.red : Colors.teal;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.shade200),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.loop_rounded, size: 14, color: color.shade600),
-          const SizedBox(width: 6),
-          Text(
-            'Revisi: $used dari $max digunakan',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color.shade700,
-            ),
-          ),
-          if (isExhausted) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.warning_amber_rounded, size: 13, color: color.shade600),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildProgressEmpty() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Icon(Icons.timeline_rounded, size: 52, color: Colors.grey.shade300),
         const SizedBox(height: 8),
@@ -1581,9 +1551,11 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     final int adminFee = metodePembayaran?.fee ?? 0;
 
     // Snap expired
-    bool isPaymentExpired = false;
-    if (!isPaid) {
-      if (pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty) {
+    bool isPaymentExpired = pesanan.status?.toLowerCase() == 'expired';
+    if (!isPaid && !isPaymentExpired) {
+      if (pesanan.statusBayar == 'expire') {
+        isPaymentExpired = true;
+      } else if (pesanan.linkSnap != null && pesanan.linkSnap!.isNotEmpty) {
         if (pesanan.expiryTime != null) {
           isPaymentExpired = pesanan.expiryTime!.isBefore(DateTime.now());
         } else {
@@ -1597,8 +1569,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         final hasMethods =
             pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty;
         if (hasMethods) {
-          final noNum =
-              (pesanan.paymentNumber1 == null ||
+          final noNum = (pesanan.paymentNumber1 == null ||
                   pesanan.paymentNumber1!.isEmpty) &&
               (pesanan.paymentNumber2 == null ||
                   pesanan.paymentNumber2!.isEmpty);
@@ -1631,9 +1602,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                   child: Text(
                     'Pembayaran sudah expired. Hubungi vendor atau buat pesanan baru jika diperlukan.',
                     style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        height: 1.4),
+                        fontSize: 12, color: Colors.grey.shade600, height: 1.4),
                   ),
                 ),
               ],
@@ -1723,6 +1692,32 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           isBold: true,
           valueColor: Constants.primaryColorVendor,
         ),
+
+        // ── Tombol Ganti Metode ──────────────────────────
+        if (!isPaid &&
+            !isPaymentExpired &&
+            (pesanan.paymentNumber1 != null || pesanan.expiryTime != null)) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                context.read<NavigationProvider>().navigateToPage(
+                      context,
+                      targetTabIndex: 2,
+                      DetailPembayaranPage(existingNoBukti: pesanan.noBukti),
+                    );
+              },
+              icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+              label: const Text('Ganti Metode Bayar'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

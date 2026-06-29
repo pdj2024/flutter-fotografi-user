@@ -2,17 +2,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
+import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:provider/provider.dart';
 
 class PaymentSuccessSplashScreen extends StatefulWidget {
   final String orderNumber;
   final int amount;
+  final String noBukti;
 
   const PaymentSuccessSplashScreen({
     super.key,
     required this.orderNumber,
     required this.amount,
+    required this.noBukti,
   });
 
   @override
@@ -68,11 +71,27 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
 
     _controller.forward();
 
-    // Navigate after 3 seconds
+    // Navigate after 3 seconds → detail order page
     Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        context.read<NavigationProvider>().popAllToRoot();
-        context.read<NavigationProvider>().changeTab(2, context);
+      if (!mounted) return;
+      final nav = context.read<NavigationProvider>();
+      final pesananProvider = context.read<PesananProvider>();
+      final matches = pesananProvider.allPesanan
+          .where((p) => p.noBukti == widget.noBukti)
+          .toList();
+
+      nav.popAllToRoot();
+
+      if (matches.isNotEmpty) {
+        nav.navigateToPage(
+          context,
+          DetailOrderPageV2(pesananModel: matches.first),
+          targetTabIndex: 2,
+          targetPage: 'DetailOrderPage',
+          hrsLogin: true,
+        );
+      } else {
+        nav.changeTab(2, context);
       }
     });
   }

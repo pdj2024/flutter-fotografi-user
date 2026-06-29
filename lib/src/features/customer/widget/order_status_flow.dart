@@ -151,7 +151,10 @@ class OrderStatusFlow {
       case 'menunggu bayar':
         return 'Menunggu Pembayaran';
       case 'dibatalkan':
+      case 'batal':
         return 'Dibatalkan';
+      case 'expired':
+        return 'Kadaluarsa';
       default:
         return status;
     }
@@ -245,10 +248,17 @@ class OrderStatusFlow {
               'Pesanan akan diproses setelah pembayaran dikonfirmasi.',
         );
       case 'dibatalkan':
+      case 'batal':
         return const StatusInfoLabel(
           icon: '❌',
           title: 'Pesanan Dibatalkan',
           body: 'Pesanan ini telah dibatalkan dan tidak dapat dilanjutkan.',
+        );
+      case 'expired':
+        return const StatusInfoLabel(
+          icon: '⏰',
+          title: 'Pembayaran Kadaluarsa',
+          body: 'Batas waktu pembayaran telah habis. Pesanan ini tidak dapat diproses.',
         );
       default:
         return StatusInfoLabel(
@@ -308,11 +318,19 @@ class OrderStatusFlow {
               'agar vendor dapat segera memproses pesanan Anda.',
         );
       case 'dibatalkan':
+      case 'batal':
         return const StatusInfoLabel(
           icon: '❌',
           title: 'Pesanan Dibatalkan',
           body: 'Pesanan ini telah dibatalkan. '
               'Hubungi kami jika Anda memiliki pertanyaan.',
+        );
+      case 'expired':
+        return const StatusInfoLabel(
+          icon: '⏰',
+          title: 'Pembayaran Kadaluarsa',
+          body: 'Batas waktu pembayaran telah habis dan pesanan ini tidak dapat diproses. '
+              'Silakan buat pesanan baru jika masih membutuhkan layanan ini.',
         );
       default:
         return StatusInfoLabel(

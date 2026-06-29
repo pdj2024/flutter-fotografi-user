@@ -17,6 +17,7 @@ import 'package:mpjnew/src/features/customer/view/history/widget/status_config.d
 import 'package:mpjnew/src/features/customer/view/history/widget/summary_card.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
@@ -72,7 +73,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
     if (_lastUserId != null && _lastUserId != userId) {
       _paymentCheckDone = false;
     }
-    
+
     if (_isInitialized && _lastUserId == userId) return;
 
     await context.read<PesananProvider>().loadOrder(context);
@@ -216,6 +217,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
   }
 
   bool _isPaymentExpired(PesananModel o) {
+    if (o.statusBayar == 'expire') return true;
     // Snap
     if (o.linkSnap != null && o.linkSnap!.isNotEmpty) {
       if (o.expiryTime != null) return o.expiryTime!.isBefore(DateTime.now());
@@ -226,8 +228,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
     // Core: metodeBayar ada tapi paymentNumber1&2 + expiryTime semuanya null
     final hasMethods = o.metodeBayar != null && o.metodeBayar!.isNotEmpty;
     if (hasMethods) {
-      final noNum =
-          (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
+      final noNum = (o.paymentNumber1 == null || o.paymentNumber1!.isEmpty) &&
           (o.paymentNumber2 == null || o.paymentNumber2!.isEmpty);
       if (noNum && o.expiryTime == null) {
         final ref = o.createdAt ?? o.updatedAt;
@@ -276,7 +277,8 @@ class _MainOrderPageState extends State<MainOrderPage> {
       await HistoryOrderService().create(history);
       if (!mounted) return;
       await context.read<PesananProvider>().loadOrder(context);
-      CustomSnackbar.showSuccessSnackbar(context, 'Pesanan berhasil dibatalkan.');
+      CustomSnackbar.showSuccessSnackbar(
+          context, 'Pesanan berhasil dibatalkan.');
     } catch (e) {
       if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
     }
@@ -284,10 +286,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   void _gantiMetodePembayaran(PesananModel o) {
     context.read<NavigationProvider>().navigateToPage(
-      context,
-      WaitingPaymentPage(paymentData: o),
-      targetTabIndex: 2,
-    );
+          context,
+          DetailPembayaranPage(existingNoBukti: o.noBukti),
+          targetTabIndex: 2,
+        );
   }
 
   @override
@@ -538,7 +540,9 @@ class _MainOrderPageState extends State<MainOrderPage> {
                             ),
                     onPay: () => _openPayment(o),
                     onBatal: () => _batalkanPesanan(o),
-                    onGantiMetode: () => _gantiMetodePembayaran(o),
+                    onGantiMetode: (!_isPaymentExpired(o) && (o.paymentNumber1 != null || o.expiryTime != null))
+                        ? () => _gantiMetodePembayaran(o)
+                        : null,
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(
