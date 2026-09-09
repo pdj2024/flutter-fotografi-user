@@ -15,10 +15,15 @@ import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/complain_thread_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/create_complain_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.dart';
 import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
+import 'package:mpjnew/src/features/customer/view/history/widget/header_info_card.dart';
+import 'package:mpjnew/src/features/customer/view/history/widget/sticky_button_bar.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
@@ -105,6 +110,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     try {
       setState(() => isLoading = true);
 
+      context
+          .read<ComplainProvider>()
+          .checkForOrder(widget.pesananModel.noBukti);
+
       final pesananProvider = context.read<PesananProvider>();
       final orderStatus = widget.pesananModel.status?.toLowerCase() ?? '';
       final isTerminal = orderStatus == 'batal' || orderStatus == 'expired';
@@ -120,8 +129,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       final pesanan =
           pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti) ??
               widget.pesananModel;
-      paket =
-          (await PaketService().getAll(noId: pesanan.idPaket)).firstOrNull;
+      paket = (await PaketService().getAll(noId: pesanan.idPaket)).firstOrNull;
 
       if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
         final hasLinkSnap =
@@ -153,6 +161,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       return;
     }
     try {
+      context
+          .read<ComplainProvider>()
+          .checkForOrder(widget.pesananModel.noBukti);
+
       final pesananProvider = context.read<PesananProvider>();
       await pesananProvider.refreshOrder(widget.pesananModel.noBukti);
       await historyProvider.fetchHistoryForOrder(widget.pesananModel.noBukti);
@@ -307,9 +319,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
         elevation: 0,
         title: const Text('Detail Pesanan',
             style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        actions: [_buildComplainMenuAction()],
       ),
-      body: Consumer<PesananProvider>(
-        builder: (context, pesananProvider, _) {
+      body: Consumer2<PesananProvider, ComplainProvider>(
+        builder: (context, pesananProvider, complainProvider, _) {
           final pesananFromProvider =
               pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti);
 
@@ -325,11 +338,67 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               ? orderStatus
               : pesanan.statusProgresPesanan?.toLowerCase() ?? '';
 
+          final transition = OrderStatusFlow.get('persiapan', 'proses');
+          final btnLabel =
+              transition?.actionLabel ?? 'Konfirmasi Pemotretan Selesai';
+
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final tglShoot = pesanan.tglRealisasi != null
+              ? DateTime(pesanan.tglRealisasi.year, pesanan.tglRealisasi.month,
+                  pesanan.tglRealisasi.day)
+              : null;
+
+          final bool isBeforeShoot =
+              tglShoot != null && today.isBefore(tglShoot);
+          final bool isOnShootDay =
+              tglShoot != null && today.isAtSameMomentAs(tglShoot);
+
+          final dotColor = _cfg(pesanan.statusProgresPesanan ?? "").color;
+          final shootLabel = isBeforeShoot
+              ? 'Dijadwalkan ${Helper.formatTanggal(pesanan.tglRealisasi)}'
+              : isOnShootDay
+                  ? 'Sesi pemotretan hari ini'
+                  : 'Sesi pemotretan sudah berlangsung';
+
+          // for Complain
+          final checking = complainProvider.isChecking(pesanan.noBukti);
+          final error = complainProvider.getCheckError(pesanan.noBukti);
+          final complain = complainProvider.getCachedForOrder(pesanan.noBukti);
           return Scaffold(
             backgroundColor: const Color(0xFFF9F9F9),
-            bottomNavigationBar: status == 'persiapan'
-                ? _buildStickyKonfirmasiBar(pesanan)
-                : null,
+            bottomNavigationBar: complain != null
+                ? StickyButtonBar(
+                    btnLabel: "Lihat Complain",
+                    dotColor: dotColor,
+                    icon: Icons.report_outlined,
+                    keterangan: "Complain sedang berlangsung",
+                    onTap: checking
+                        ? null
+                        : () async {
+                            if (error != null) {
+                              await complainProvider
+                                  .checkForOrder(pesanan.noBukti);
+                              return;
+                            }
+                            Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => ComplainThreadPage(
+                                noComplain: complain.noComplain,
+                                noOrder: pesanan.noBukti,
+                                showOrderAction: false,
+                              ),
+                            ));
+                          },
+                  )
+                : status == 'persiapan'
+                    ? StickyButtonBar(
+                        btnLabel: btnLabel,
+                        dotColor: dotColor,
+                        icon: Icons.camera_alt_rounded,
+                        keterangan: shootLabel,
+                        onTap: _konfirmasiPemotretan,
+                      )
+                    : null,
             body: SmartRefresher(
               controller: _refreshController,
               onRefresh: _onRefresh,
@@ -342,7 +411,11 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildStatusInfoCard(status, pesanan),
+                    HeaderInfoCard(
+                      status: status,
+                      pesanan: pesanan,
+                      haveComplain: complain != null,
+                    ),
                     const SizedBox(height: 12),
                     _buildProfileCard(pesanan),
                     const SizedBox(height: 12),
@@ -382,142 +455,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       ),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STATUS INFO CARD
-  // ✅ Gunakan OrderStatusFlow.customerInfoLabel() — return StatusInfoLabel
-  // ═══════════════════════════════════════════════════════════════
-
-  Widget _buildStatusInfoCard(String status, PesananModel pesanan) {
-    // ── Ambil info dari customerInfoLabel — teks & icon dari satu sumber ──
-    final infoLabel = OrderStatusFlow.customerInfoLabel(status);
-
-    StatusConfig cfg = _cfg(status);
-    Color borderColor = cfg.color;
-    Color bgColor = cfg.bgColor;
-    IconData icon = cfg.icon;
-
-    String shortText;
-    String fullText = infoLabel.body;
-
-    // Override khusus untuk status persiapan berdasarkan tanggal
-    if (status == 'persiapan') {
-      final now = DateTime.now();
-      final tglRealisasi = pesanan.tglRealisasi;
-      final today = DateTime(now.year, now.month, now.day);
-      final tglShoot = tglRealisasi != null
-          ? DateTime(tglRealisasi.year, tglRealisasi.month, tglRealisasi.day)
-          : null;
-
-      if (tglShoot == null) {
-        fullText = infoLabel.body;
-      } else if (today.isBefore(tglShoot)) {
-        bgColor = Colors.grey.shade50;
-        borderColor = Colors.grey.shade400;
-        icon = Icons.schedule_rounded;
-        fullText =
-            'Pemotretan dijadwalkan pada ${Helper.formatTanggal(tglRealisasi!)}. '
-            'Tombol konfirmasi sudah tersedia — tekan kapan saja setelah sesi pemotretan selesai dilaksanakan.';
-      } else if (today.isAtSameMomentAs(tglShoot)) {
-        icon = Icons.camera_alt_outlined;
-        fullText = 'Pemotretan dijadwalkan hari ini. Setelah sesi selesai, '
-            'segera tekan tombol Konfirmasi Pemotretan Selesai di bawah '
-            'agar vendor dapat mulai mengerjakan hasil foto Anda.';
-      } else {
-        bgColor = _cfg('proses').bgColor;
-        borderColor = _cfg('proses').color;
-        icon = Icons.warning_amber_rounded;
-        fullText = 'Pemotretan sudah melewati tanggal yang dijadwalkan '
-            '(${Helper.formatTanggal(tglRealisasi!)}). '
-            'Segera konfirmasi jika sesi telah selesai dilaksanakan.';
-      }
-    }
-
-    if (fullText.isEmpty) return const SizedBox.shrink();
-
-    // Potong kalimat pertama untuk shortText
-    final dotSpace = fullText.indexOf('. ');
-    if (dotSpace != -1) {
-      shortText = fullText.substring(0, dotSpace + 1);
-    } else {
-      const maxShort = 60;
-      shortText = fullText.length > maxShort
-          ? '${fullText.substring(0, maxShort).trimRight()}...'
-          : fullText;
-    }
-
-    final bool canExpand = shortText.trim() != fullText.trim();
-
-    return GestureDetector(
-      onTap: canExpand
-          ? () => setState(() => _isStatusInfoExpanded = !_isStatusInfoExpanded)
-          : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 18, color: borderColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: AnimatedCrossFade(
-                    firstChild: Text(
-                      shortText,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade800,
-                          height: 1.5),
-                    ),
-                    secondChild: Text(
-                      fullText,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade800,
-                          height: 1.5),
-                    ),
-                    crossFadeState: _isStatusInfoExpanded
-                        ? CrossFadeState.showSecond
-                        : CrossFadeState.showFirst,
-                    duration: const Duration(milliseconds: 250),
-                  ),
-                ),
-              ],
-            ),
-            if (canExpand) ...[
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.only(left: 28),
-                child: Text(
-                  _isStatusInfoExpanded ? 'Sembunyikan' : 'Selengkapnya',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: borderColor,
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.underline,
-                    decorationColor: borderColor,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // REVISI WAITING BANNER
-  // ═══════════════════════════════════════════════════════════════
 
   // ═══════════════════════════════════════════════════════════════
   // LINK HASIL KERJA
@@ -624,107 +561,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
             const SizedBox(height: 10),
             _buildCustomerActionArea('review', pesanan),
           ],
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STICKY BOTTOM BAR
-  // ═══════════════════════════════════════════════════════════════
-
-  Widget _buildStickyKonfirmasiBar(PesananModel pesanan) {
-    final now = DateTime.now();
-    final tglRealisasi = pesanan.tglRealisasi;
-    final today = DateTime(now.year, now.month, now.day);
-    final tglShoot = tglRealisasi != null
-        ? DateTime(tglRealisasi.year, tglRealisasi.month, tglRealisasi.day)
-        : null;
-
-    final bool isBeforeShoot = tglShoot != null && today.isBefore(tglShoot);
-    final bool isOnShootDay =
-        tglShoot != null && today.isAtSameMomentAs(tglShoot);
-
-    // ✅ Warna dot dari _cfg — tidak ada magic color manual
-    final dotColor = isBeforeShoot
-        ? Colors.grey
-        : isOnShootDay
-            ? _cfg('persiapan').color
-            : _cfg('proses').color;
-
-    final shootLabel = isBeforeShoot
-        ? 'Dijadwalkan ${Helper.formatTanggal(tglRealisasi)}'
-        : isOnShootDay
-            ? 'Sesi pemotretan hari ini'
-            : 'Sesi pemotretan sudah berlangsung';
-
-    // ✅ Label tombol dari OrderStatusFlow.transitions
-    final transition = OrderStatusFlow.get('persiapan', 'proses');
-    final btnLabel = transition?.actionLabel ?? 'Konfirmasi Pemotretan Selesai';
-
-    return Container(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 12,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-        boxShadow: const [
-          BoxShadow(
-              color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration:
-                    BoxDecoration(color: dotColor, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  shootLabel,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _konfirmasiPemotretan,
-              icon: const Icon(Icons.camera_alt_rounded, size: 20),
-              label: Text(
-                btnLabel, // ✅ dari OrderStatusFlow.transitions
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Constants.primaryColor,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey.shade300,
-                disabledForegroundColor: Colors.grey.shade500,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
         ],
       ),
     );
@@ -1463,6 +1299,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               SizedBox(
                 height: 40,
                 width: 40,
@@ -1493,6 +1330,100 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           ],
         ],
       ),
+    );
+  }
+
+  /// Menu titik-tiga di AppBar — sengaja disembunyikan di balik satu tap
+  /// tambahan (bukan tombol langsung di profile card) supaya Complain tidak
+  /// terlalu menonjol di halaman detail order.
+  Widget _buildComplainMenuAction() {
+    return Consumer2<PesananProvider, ComplainProvider>(
+      builder: (context, pesananProvider, complainProv, _) {
+        final pesanan =
+            pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti) ??
+                widget.pesananModel;
+        final noOrder = pesanan.noBukti;
+        final checking = complainProv.isChecking(noOrder);
+        final error = complainProv.getCheckError(noOrder);
+        final existing = complainProv.getCachedForOrder(noOrder);
+
+        if (existing != null) {
+          return SizedBox.shrink();
+        }
+
+        Color dotColor = Colors.grey;
+        if (existing != null) {
+          dotColor = existing.isClosed ? Colors.green : Colors.orange;
+        }
+
+        return PopupMenuButton<String>(
+          color: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.black26,
+          popUpAnimationStyle: AnimationStyle(
+            duration: const Duration(milliseconds: 150),
+          ),
+          icon: const Icon(Icons.more_vert, color: Colors.black87),
+          onSelected: (value) {
+            if (value != 'complain') return;
+            if (checking) return;
+            if (error != null) {
+              complainProv.checkForOrder(noOrder);
+              return;
+            }
+            if (existing == null) {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CreateComplainPage(pesanan: pesanan),
+              ));
+            } else {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ComplainThreadPage(
+                  noComplain: existing.noComplain,
+                  noOrder: noOrder,
+                  showOrderAction: false,
+                ),
+              ));
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'complain',
+              child: Container(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.report_problem_outlined,
+                        size: 18, color: Colors.grey.shade700),
+                    const SizedBox(width: 10),
+                    Text(
+                      error != null
+                          ? 'Complain (coba lagi)'
+                          : checking
+                              ? 'Memuat...'
+                              : existing == null
+                                  ? 'Ajukan Complain'
+                                  : 'Lihat Complain',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (existing != null && error == null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle, color: dotColor),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

@@ -245,8 +245,12 @@ class _FilterOverlayState extends State<FilterOverlay>
   Future<void> fetchCategorysFromApi(String? noId, String? query) async {
     setState(() => isCategoryLoading = true);
     try {
-      final res = await KategoriService()
-          .getAll(orderBy: 'nama_kategori', namaKategori: query, noId: noId);
+      final res = await KategoriService().getAll(
+        orderBy: 'nama_kategori',
+        namaKategori: query,
+        noId: noId,
+        canSearch: 'ya',
+      );
       final list =
           res.map((e) => {'id': e.no_id, 'label': e.nama_kategori}).toList();
       setState(() {

@@ -14,12 +14,13 @@ class CustomBackButton extends StatelessWidget {
 
   Future<void> _handleBack(BuildContext context) async {
     final navProvider = context.read<NavigationProvider>();
-    final didPop = await navProvider.onWillPop(context);
+    // onWillPop ikut konvensi WillPopScope: false = sudah ditangani sendiri
+    // (berhasil pop navigator tab, pindah tab, atau blok untuk konfirmasi
+    // keluar) -- JANGAN pop lagi. true = belum ditangani, baru di situ kita
+    // lakukan pop biasa.
+    final shouldPop = await navProvider.onWillPop(context);
 
-    debugPrint("bisa back? $didPop");
-
-    if (!didPop) {
-      // Fallback jika tidak bisa pop
+    if (shouldPop) {
       Navigator.of(context).maybePop();
     }
   }

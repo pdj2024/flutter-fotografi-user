@@ -670,7 +670,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
         icon: Icons.arrow_forward_rounded,
         label: 'Detail',
         onTap: widget.onTap,
-        color: Colors.green.shade700,
+        color: Constants.primaryColor,
       );
     } else if (_isUnpaid) {
       // Pembayaran expired → langsung ke detail, jangan buka WebView
@@ -690,7 +690,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
             icon: Icons.payment_rounded,
             label: 'Bayar Sekarang',
             onTap: widget.onPay,
-            color: const Color(0xFF1565C0),
+            color: Constants.primaryColor,
           );
         } else if (status.isExpired) {
           // Expired → Coba Lagi (orange)
@@ -706,7 +706,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
             icon: Icons.payment_rounded,
             label: 'Lanjut Bayar',
             onTap: widget.onPay,
-            color: Colors.orange.shade700,
+            color: Constants.primaryColor,
           );
         } else {
           // Belum mulai → Bayar Sekarang (biru)
@@ -723,7 +723,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
         icon: Icons.arrow_forward_rounded,
         label: 'Detail',
         onTap: widget.onTap,
-        color: const Color(0xFF8B5CF6), // Sesuai StatusProgresConstant review
+        color: Constants.primaryColor, // Sesuai StatusProgresConstant review
       );
     } else {
       primaryButton = PrimaryButton(

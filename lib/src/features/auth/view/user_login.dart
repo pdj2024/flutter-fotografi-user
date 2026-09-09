@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/agreement_check_service.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
@@ -13,7 +14,6 @@ import 'package:mpjnew/src/features/customer/view/account/customer_account_page.
 import 'package:mpjnew/src/features/customer/view/history/main_order_page.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
@@ -100,7 +100,6 @@ class _UserLoginState extends State<UserLogin>
       final provider = context.read<UserProvider>();
       final navigationProvider = context.read<NavigationProvider>();
       final chatProv = context.read<ChatProvider>();
-      final historyOrderProv = context.read<HistoryOrderProvider>();
       final pesananProv = context.read<PesananProvider>();
 
       final result = await provider.checkLoginGoogle(
@@ -126,8 +125,7 @@ class _UserLoginState extends State<UserLogin>
 
         // Gelombang 2: order, FCM, kota, liked/saved
         await Future.wait([
-          _initializeHistoryOrderProvider(
-              context, provider, historyOrderProv, pesananProv),
+          _initializeHistoryOrderProvider(context, pesananProv),
           _registerFCMToken(provider),
           _loadKotaList(context),
           _loadLikedAndSaved(context, provider),
@@ -150,6 +148,14 @@ class _UserLoginState extends State<UserLogin>
 
         debugPrint("✅ [UserLogin] All services initialized");
         debugPrint("═══════════════════════════════════════");
+
+        // Gate persetujuan dokumen legal — harus SEBELUM Navigator.pop,
+        // karena setelah pop context halaman ini sudah tidak valid untuk
+        // menampilkan dialog. Data customer di sini selalu fresh dari
+        // getAll saat login, jadi tidak perlu refresh ulang.
+        if (mounted) {
+          await AgreementCheckService.ensure(context, refreshOnMismatch: false);
+        }
 
         if (!mounted) return;
         Navigator.pop(context, true);
@@ -270,21 +276,18 @@ class _UserLoginState extends State<UserLogin>
     }
   }
 
+  /// Cukup warm up daftar order (Status_Progress_Pesanan +
+  /// Deskripsi_Progress_Pesanan sudah ikut di setiap order) -- TIDAK lagi
+  /// men-track semua order untuk fetch timeline history-nya satu-satu.
+  /// Timeline lengkap tetap lazy per halaman Detail Order.
   Future<void> _initializeHistoryOrderProvider(
     BuildContext context,
-    UserProvider provider,
-    HistoryOrderProvider historyOrderProv,
     PesananProvider pesananProv,
   ) async {
     try {
       await pesananProv.loadOrderOnly(context);
-      for (final order in pesananProv.allPesanan) {
-        if (order.noBukti.isNotEmpty) {
-          historyOrderProv.trackOrder(order.noBukti);
-        }
-      }
     } catch (e) {
-      debugPrint("[UserLogin] ⚠️ HistoryOrderProvider init error: $e");
+      debugPrint("[UserLogin] ⚠️ PesananProvider init error: $e");
     }
   }
 

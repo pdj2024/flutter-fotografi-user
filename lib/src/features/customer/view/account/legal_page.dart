@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:mpjnew/src/core/services/company_service.dart';
 import 'package:mpjnew/src/core/services/document_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -59,9 +60,14 @@ class _LegalPageState extends State<LegalPage> {
     });
 
     try {
-      final doc = widget.type == LegalType.privacy
-          ? await _service.getKebijakanPrivasiAplikasi()
-          : await _service.getSyaratKetentuanAplikasi();
+      // Kode dokumen berasal dari company profile (satu sumber kebenaran
+      // dengan gate persetujuan), bukan hardcode.
+      final company = await CompanyService().get();
+      final ref = widget.type == LegalType.privacy
+          ? company.privacyPolicy
+          : company.termsConditions;
+
+      final doc = await _service.getByKode(ref.kode);
 
       if (mounted)
         setState(() {

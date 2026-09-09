@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/account/legal_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/complain_list_page.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -76,6 +77,20 @@ class SettingPage extends StatelessWidget {
           _SectionLabel(label: 'Lainnya'),
           _SettingCard(
             children: [
+              _SettingTile(
+                icon: Icons.report_problem_outlined,
+                iconColor: const Color(0xFFC0392B),
+                iconBg: const Color(0xFFFDEDEC),
+                title: 'Complain',
+                subtitle: 'Lihat complain aktif dan yang sudah selesai',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ComplainListPage(),
+                  ),
+                ),
+              ),
+              _Divider(),
               _SettingTile(
                 icon: Icons.flag_outlined,
                 iconColor: const Color(0xFF27AE60),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/hive_service.dart/pesanan_local_service.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
@@ -46,9 +47,21 @@ class PesananProvider with ChangeNotifier {
     "revisi",
   };
 
+  /// Status yang dianggap "aktif" untuk tab Pesanan (bukan halaman Riwayat).
+  /// Backend tidak punya filter "semua kecuali selesai/dibatalkan" dalam
+  /// satu request, jadi ini di-fetch paralel satu per status.
+  static const List<String> _activeStatuses = [
+    'menunggu bayar',
+    'persiapan',
+    'proses',
+    'review',
+    'revisi',
+  ];
+
   bool _isLoadingOrder = true;
   String? _errorOrder;
-  bool _selesaiOrdersLoaded = false;
+  bool _isLoadingFinished = false;
+  String? _errorFinished;
   bool _isFetchingSingleOrder = false;
   bool _isDisposed = false; // ✅ Bug H fix: track disposed state
 
@@ -78,6 +91,8 @@ class PesananProvider with ChangeNotifier {
   bool get isLoadingOrder => _isLoadingOrder;
   bool get isFetchingSingleOrder => _isFetchingSingleOrder;
   String? get errorOrder => _errorOrder;
+  bool get isLoadingFinished => _isLoadingFinished;
+  String? get errorFinished => _errorFinished;
 
   List<HistoryOrderModel> getHistoriesForOrder(String noBukti) =>
       _orderHistories[noBukti] ?? [];
@@ -186,49 +201,35 @@ class PesananProvider with ChangeNotifier {
 
       debugPrint('[PesananProvider] 📥 loadOrderOnly | force: $forceRefresh');
 
-      final allOrders = await pesananService.getAll(
-        idCustomer: userId,
-      );
+      // Backend tidak punya filter "semua kecuali selesai/dibatalkan" dalam
+      // satu request -- fetch paralel satu per status aktif. Selesai/batal
+      // sekarang jadi tanggung jawab loadFinishedOrders() (dipanggil dari
+      // halaman Riwayat), bukan di sini.
+      final results = await Future.wait(_activeStatuses.map((s) =>
+          pesananService.getAll(
+            idCustomer: userId,
+            status: 'aktif',
+            statusProgresPesanan: s,
+            orderBy: 'Created_At',
+            orderDir: 'desc',
+          )));
+      final allOrders = results.expand((list) => list).toList();
 
       _allPesanan = allOrders;
       _filterPesanan();
 
-      // Fetch dan simpan histories untuk unpaid + progress + batal
-      final toFetchHistories = [
-        ..._pesananUnpaid,
-        ..._pesananProgress,
-        ..._pesananBatal,
-      ];
-      final allHistories = <String, List<HistoryOrderModel>>{};
-      for (final order in toFetchHistories) {
-        try {
-          final h = await historyService.getAll(
-            noOrder: order.noBukti,
-            status: 'aktif',
-            orderBy: 'Tgl_Progress',
-            orderDir: 'DESC',
-          );
-          if (h.isNotEmpty) allHistories[order.noBukti] = h;
-        } catch (e) {
-          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
-        }
-      }
-
+      // Status_Progress_Pesanan + Deskripsi_Progress_Pesanan sudah ikut di
+      // setiap order dari getAll() -- tidak perlu lagi fetch timeline
+      // history per order di sini. Timeline lengkap tetap lazy per halaman
+      // Detail Order (HistoryOrderProvider).
       if (allOrders.isNotEmpty) {
-        await localService.saveOrders(allOrders, historiesMap: allHistories);
-      }
-
-      if (allHistories.isNotEmpty) {
-        _orderHistories
-          ..clear()
-          ..addAll(allHistories);
+        await localService.saveOrders(allOrders);
       }
 
       debugPrint('[PesananProvider] ✅ loadOrderOnly done: '
           '${_allPesanan.length} total | '
           '${_pesananUnpaid.length} unpaid | '
-          '${_pesananProgress.length} progress | '
-          '${_pesananSelesai.length} selesai');
+          '${_pesananProgress.length} progress');
     } catch (e, st) {
       debugPrint('[PesananProvider] ❌ loadOrderOnly: $e\n$st');
       _errorOrder = "Error memuat pesanan";
@@ -259,83 +260,94 @@ class PesananProvider with ChangeNotifier {
 
       debugPrint('[PesananProvider] 📥 SMART LOAD | force: $forceRefresh');
 
-      // ✅ Bug G fix: satu kali fetch semua, lalu filter di client
-      //    Sebelumnya ada 3x getAll() berturut-turut untuk filter berbeda.
-      final allOrders = await pesananService.getAll(
-        idCustomer: userId,
-      );
-
-      List<PesananModel> unpaidOrders = [];
-      List<PesananModel> progressOrders = [];
-      List<PesananModel> selesaiOrders = [];
-      Map<String, List<HistoryOrderModel>> allHistories = {};
-
-      // Filter di client — satu API call
-      unpaidOrders = allOrders
-          .where((o) => o.statusProgresPesanan == 'menunggu bayar')
-          .toList();
-      progressOrders = allOrders
-          .where((o) => progresStatus.contains(o.statusProgresPesanan))
-          .toList();
-      selesaiOrders =
-          allOrders.where((o) => o.statusProgresPesanan == 'selesai').toList();
-
-      // ── Selesai orders: pakai cache jika sudah pernah load ───
-      if (!forceRefresh && _selesaiOrdersLoaded) {
-        final cached = await localService.getOrdersByStatus('selesai');
-        if (cached.isNotEmpty) {
-          selesaiOrders = cached;
-          debugPrint(
-              '[PesananProvider] 📦 Selesai from cache: ${selesaiOrders.length}');
-          for (final o in selesaiOrders) {
-            final h = await localService.getHistories(o.noBukti);
-            if (h.isNotEmpty) allHistories[o.noBukti] = h;
-          }
-        }
-      } else {
-        _selesaiOrdersLoaded = true;
-      }
-
-      // ── Fetch histories untuk unpaid + progress (selalu fresh) ──
-      final toFetchHistories = [...unpaidOrders, ...progressOrders];
-      for (final order in toFetchHistories) {
-        try {
-          final histories = await historyService.getAll(
-            noOrder: order.noBukti,
+      // Fetch paralel per status aktif -- lihat catatan di loadOrderOnly().
+      final results = await Future.wait(_activeStatuses.map((s) =>
+          pesananService.getAll(
+            idCustomer: userId,
             status: 'aktif',
-            orderBy: 'Tgl_Progress',
-            orderDir: 'DESC',
-          );
-          if (histories.isNotEmpty) {
-            allHistories[order.noBukti] = histories;
-          }
-        } catch (e) {
-          debugPrint('[PesananProvider] ⚠️ Histories for ${order.noBukti}: $e');
-        }
-      }
+            statusProgresPesanan: s,
+            orderBy: 'Created_At',
+            orderDir: 'desc',
+          )));
+      final allOrders = results.expand((list) => list).toList();
 
-      // Save ke cache
       if (allOrders.isNotEmpty) {
-        await localService.saveOrders(allOrders, historiesMap: allHistories);
+        await localService.saveOrders(allOrders);
       }
 
-      _allPesanan = [...unpaidOrders, ...progressOrders, ...selesaiOrders];
-      _orderHistories
-        ..clear()
-        ..addAll(allHistories);
-
+      _allPesanan = allOrders;
       _filterPesanan();
 
       debugPrint('[PesananProvider] ✅ Load complete: '
           '${_allPesanan.length} total | '
           '${_pesananUnpaid.length} unpaid | '
-          '${_pesananProgress.length} progress | '
-          '${_pesananSelesai.length} selesai');
+          '${_pesananProgress.length} progress');
     } catch (e, st) {
       debugPrint('[PesananProvider] ❌ loadOrderWithCache: $e\n$st');
       _errorOrder = "Error memuat Pesanan";
     } finally {
       _isLoadingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOAD FINISHED ORDERS — dipanggil dari FinishedOrderPage saat dibuka
+  // ═══════════════════════════════════════════════════════════
+
+  /// Order selesai/dibatalkan tidak selalu `status: 'aktif'` (order selesai
+  /// pun bisa tetap `Status: "aktif"` di backend), jadi filternya cukup dari
+  /// status_progress_pesanan saja, tanpa param `status`.
+  Future<void> loadFinishedOrders(
+    BuildContext context, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    _isLoadingFinished = true;
+    _errorFinished = null;
+    notifyListeners();
+
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userId = userProvider.customer!.noId;
+      final fmt = DateFormat('yyyy-MM-dd');
+      final tgl1 = fmt.format(start);
+      final tgl2 = fmt.format(end);
+
+      final results = await Future.wait([
+        pesananService.getAll(
+          idCustomer: userId,
+          statusProgresPesanan: 'selesai',
+          tglCreated1: tgl1,
+          tglCreated2: tgl2,
+          orderBy: 'Created_At',
+          orderDir: 'desc',
+        ),
+        pesananService.getAll(
+          idCustomer: userId,
+          statusProgresPesanan: 'dibatalkan',
+          tglCreated1: tgl1,
+          tglCreated2: tgl2,
+          orderBy: 'Created_At',
+          orderDir: 'desc',
+        ),
+      ]);
+
+      _pesananSelesai = results[0];
+      _pesananBatal = results[1];
+
+      final combined = [..._pesananSelesai, ..._pesananBatal];
+      if (combined.isNotEmpty) {
+        await localService.saveOrders(combined);
+      }
+
+      debugPrint('[PesananProvider] ✅ loadFinishedOrders: '
+          '${_pesananSelesai.length} selesai | ${_pesananBatal.length} batal');
+    } catch (e, st) {
+      debugPrint('[PesananProvider] ❌ loadFinishedOrders: $e\n$st');
+      _errorFinished = 'Error memuat riwayat pesanan';
+    } finally {
+      _isLoadingFinished = false;
       notifyListeners();
     }
   }
@@ -557,18 +569,29 @@ class PesananProvider with ChangeNotifier {
   //    Order seperti ini TIDAK masuk bucket unpaid — mereka
   //    "pending persiapan" dan ditangani oleh _handleSettledPayments
   //    di MainOrderPage.
-  static bool _isInactiveStatus(String? status) =>
-      status == "batal" || status == "expired";
+  // ✅ Bug fix: sebelumnya cuma cek field `status` ('batal'/'expired').
+  // Tapi pembatalan yang jalan lewat _batalkanPesanan()/FCM progress
+  // (lihat HistoryOrderService.createDibatalkan) menulis 'dibatalkan' ke
+  // `statusProgresPesanan`, BUKAN ke `status` — order-level `status` di
+  // state lokal tetap 'aktif' sampai ada refetch penuh dari server.
+  // Akibatnya order itu tidak masuk progres (statusProgres bukan salah
+  // satu dari persiapan/proses/review/revisi), tidak masuk selesai, DAN
+  // tidak masuk batal (status masih 'aktif') — order hilang total dari
+  // UI. Cek `statusProgresPesanan == 'dibatalkan'` di sini menutup gap-nya.
+  static bool _isInactiveStatus(PesananModel p) =>
+      p.status == "batal" ||
+      p.status == "expired" ||
+      p.statusProgresPesanan == "dibatalkan";
 
   void _filterPesanan() {
     _pesananUnpaid = _allPesanan.where((p) {
-      if (_isInactiveStatus(p.status)) return false;
+      if (_isInactiveStatus(p)) return false;
       return p.statusProgresPesanan == "menunggu bayar" &&
           !isPaymentSettled(p.statusBayar);
     }).toList();
 
     _pesananProgress = _allPesanan.where((p) {
-      if (_isInactiveStatus(p.status)) return false;
+      if (_isInactiveStatus(p)) return false;
       if (["persiapan", "proses", "review", "revisi"]
           .contains(p.statusProgresPesanan)) { return true; }
       // Pesanan statusBayar sudah settled tapi server belum geser statusProgres →
@@ -578,14 +601,10 @@ class PesananProvider with ChangeNotifier {
       return false;
     }).toList();
 
-    _pesananSelesai = _allPesanan
-        .where((p) =>
-            !_isInactiveStatus(p.status) &&
-            p.statusProgresPesanan == "selesai")
-        .toList();
-
-    _pesananBatal =
-        _allPesanan.where((p) => _isInactiveStatus(p.status)).toList();
+    // _pesananSelesai/_pesananBatal TIDAK lagi diturunkan dari _allPesanan --
+    // _allPesanan sekarang cuma berisi order dengan status-progress aktif
+    // (lihat loadOrderOnly/loadOrderWithCache). Keduanya diisi terpisah oleh
+    // loadFinishedOrders() saat FinishedOrderPage dibuka.
   }
 
   // ═══════════════════════════════════════════════════════════

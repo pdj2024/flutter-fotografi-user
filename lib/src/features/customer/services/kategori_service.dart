@@ -19,6 +19,7 @@ class KategoriService {
     String? status,
     String? orderBy,
     String? orderDir,
+    String? canSearch,
   }) async {
     try {
       final response = await apiClient.get(
@@ -30,6 +31,7 @@ class KategoriService {
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,
+          if (canSearch != null) 'can_search': canSearch,
         },
       );
       debugPrint('==============================');

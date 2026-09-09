@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/agreement_check_service.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/core/services/version_check_service.dart';
@@ -216,6 +217,15 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
             debugPrint('⚠️ Background sync error: $e');
           }
         });
+      }
+
+      // 6️⃣ Gate persetujuan dokumen legal — hanya untuk user yang login.
+      //    Ditempatkan sebelum _startPage di-set: splash masih ter-render
+      //    jadi context-nya valid untuk dialog, dan belum ada perpindahan
+      //    route yang bisa membatalkannya.
+      if (sessionRestored && userProvider.customer != null && mounted) {
+        await AgreementCheckService.ensure(context);
+        if (!mounted) return;
       }
 
       _updateMessage('Hampir selesai...');

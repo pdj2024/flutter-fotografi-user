@@ -33,9 +33,11 @@ import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/complain_thread_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
@@ -44,6 +46,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart'
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/ui_state_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
@@ -79,7 +82,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         await _showBackgroundChatNotification(message);
       }
     } else if (type == NotificationType.progress ||
-        type == NotificationType.review) {
+        type == NotificationType.review ||
+        type == NotificationType.complainHeader ||
+        type == NotificationType.complainDetail) {
       await _showBackgroundNonChatNotification(message, type);
     }
   } catch (e, st) {
@@ -183,6 +188,7 @@ void main() async {
             ),
           ),
           ChangeNotifierProvider(create: (_) => ChatProvider()),
+          ChangeNotifierProvider(create: (_) => ComplainProvider()),
           ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
             create: (context) =>
                 RoomChatProvider(chatProv: context.read<ChatProvider>()),
@@ -193,6 +199,7 @@ void main() async {
             create: (_) => HistoryOrderProvider()..initialize(),
           ),
           ChangeNotifierProvider(create: (_) => OrderTabProvider()),
+          ChangeNotifierProvider(create: (_) => UiStateProvider()),
         ],
         child: const MyApp(),
       ),
@@ -268,6 +275,7 @@ class MyApp extends StatelessWidget {
       final historyOrderProvider = context.read<HistoryOrderProvider>();
       final pesananProvider = context.read<PesananProvider>();
       final penawaranProvider = context.read<PenawaranProvider>();
+      final complainProvider = context.read<ComplainProvider>();
       final navigationProvider = context.read<NavigationProvider>();
 
       // ── Inject semua provider ke FCMService ─────────────────────────────
@@ -276,6 +284,7 @@ class MyApp extends StatelessWidget {
       FCMService.instance.setHistoryOrderProvider(historyOrderProvider);
       FCMService.instance.setPesananProvider(pesananProvider);
       FCMService.instance.setPenawaranProvider(penawaranProvider);
+      FCMService.instance.setComplainProvider(complainProvider);
 
       // ── getSenderName ────────────────────────────────────────────────────
       FCMService.instance.getSenderName = (roomId, senderId) {
@@ -373,6 +382,27 @@ class MyApp extends StatelessWidget {
           }
         } catch (e, st) {
           debugPrint('[Main] ❌ onOrderNotificationTapped error: $e\n$st');
+        }
+      };
+
+      // ── Tap notifikasi complain → navigasi ke ComplainThreadPage ─────────
+      FCMService.instance.onComplainNotificationTapped = (noComplain, noOrder) {
+        debugPrint(
+            '[Main] 👆 Complain notification tapped: noComplain=$noComplain noOrder=$noOrder');
+        try {
+          final ctx = navigatorKey.currentContext;
+          if (ctx == null) return;
+
+          // Tidak perlu panggil onComplainDetailPushReceived/HeaderPushReceived
+          // di sini — ComplainThreadPage sendiri akan loadActive() pas dibuka.
+          navigationProvider.navigateToPage(
+            ctx,
+            ComplainThreadPage(noComplain: noComplain, noOrder: noOrder),
+            targetTabIndex: 2,
+            hrsLogin: true,
+          );
+        } catch (e, st) {
+          debugPrint('[Main] ❌ onComplainNotificationTapped error: $e\n$st');
         }
       };
 
@@ -534,6 +564,15 @@ Future<void> _showBackgroundNonChatNotification(
         channelId = NotificationChannelManager.reviewChannelId;
         title = message.notification?.title ?? 'Ulasan Baru';
         body = message.notification?.body ?? 'Kamu mendapat ulasan baru';
+        break;
+      case NotificationType.complainHeader:
+      case NotificationType.complainDetail:
+        // Backend kirim title/body siap pakai di data payload (bukan di
+        // message.notification), sama seperti di ComplainNotificationHandler.
+        channelId = NotificationChannelManager.complainChannelId;
+        title = message.data['title']?.toString() ?? 'Complain';
+        body = message.data['body']?.toString() ??
+            'Ada pembaruan pada complain Anda';
         break;
       default:
         return;

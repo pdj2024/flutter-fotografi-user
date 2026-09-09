@@ -23,6 +23,8 @@ class PesananService {
     String? idPayment,
     String? orderBy,
     String? orderDir,
+    String? tglCreated1,
+    String? tglCreated2,
   }) async {
     try {
       final response = await _client.get(
@@ -33,11 +35,15 @@ class PesananService {
           if (idVendor != null) 'id_vendor': idVendor,
           if (status != null) 'status': status,
           if (statusBayar != null) 'status_bayar': statusBayar,
+          // Dulu salah ditulis ke key 'status_bayar' juga (bentrok dengan
+          // param di atas), jadi filter ini efektif tidak pernah jalan.
           if (statusProgresPesanan != null)
-            'status_bayar': statusProgresPesanan,
+            'status_progress_pesanan': statusProgresPesanan,
           if (idPayment != null) 'id_payment_gateway': idPayment,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,
+          if (tglCreated1 != null) 'tgl_created_1': tglCreated1,
+          if (tglCreated2 != null) 'tgl_created_2': tglCreated2,
         },
       );
 

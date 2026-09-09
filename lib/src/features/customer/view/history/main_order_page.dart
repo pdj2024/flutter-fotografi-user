@@ -310,6 +310,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
           ),
         ),
         actions: [
+          // Icon-only, tanpa label — pesanan batal/expired ada di sini.
           GestureDetector(
             onTap: () => context.read<NavigationProvider>().navigateToPage(
                   context,
@@ -319,10 +320,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
                   hrsLogin: true,
                 ),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.06),
@@ -331,24 +333,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  const Text(
-                    'Selesai',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF0F0F0F),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 16, color: Colors.grey.shade500),
-                ],
-              ),
+              child: Icon(Icons.history_rounded,
+                  size: 18, color: Colors.grey.shade600),
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
         ],
       ),
       body: SafeArea(
@@ -566,8 +555,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFinishedLink() {
-    final count = context.read<PesananProvider>().pesananSelesai.length;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
       child: GestureDetector(
@@ -610,9 +597,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
                           color: Color(0xFF0F0F0F)),
                     ),
                     Text(
-                      count > 0
-                          ? '$count pesanan telah selesai'
-                          : 'Belum ada pesanan selesai',
+                      // Hitungan tidak lagi ditampilkan di sini -- datanya
+                      // baru di-fetch saat halaman ini dibuka (lihat
+                      // FinishedOrderPage.loadFinishedOrders), bukan lagi
+                      // ikut termuat di awal bersama pesanan aktif.
+                      'Lihat pesanan yang sudah selesai atau dibatalkan',
                       style:
                           TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
