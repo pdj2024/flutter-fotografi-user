@@ -60,6 +60,12 @@ class PesananProvider with ChangeNotifier {
 
   bool _isLoadingOrder = true;
   String? _errorOrder;
+
+  // Guard: `loadOrder()` dipanggil dari main_menu.dart (background, saat
+  // boot) DAN dari MainOrderPage._checkAndInit() (saat tab Pesanan pertama
+  // dibuka) — dua momen yang sering nyaris bersamaan. Tanpa ini, keduanya
+  // menembak fan-out 5 GET paralel yang sama dua kali berturut-turut.
+  Future<void>? _loadOrderInFlight;
   bool _isLoadingFinished = false;
   String? _errorFinished;
   bool _isFetchingSingleOrder = false;
@@ -77,6 +83,24 @@ class PesananProvider with ChangeNotifier {
     if (statusBayar == null) return false;
     return ['settlement', 'berhasil', 'success', 'capture']
         .contains(statusBayar.toLowerCase().trim());
+  }
+
+  /// Order masih bisa dibatalkan customer — sebelum pengerjaan/pemotretan
+  /// dimulai. Sumber tunggal aturan ini; dipakai di OrderHistoryCard (list)
+  /// dan ComplainMenuAction (detail) supaya keduanya konsisten.
+  static bool canCancel(PesananModel o) {
+    final prog = (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
+    if (prog == 'menunggu bayar') return true;
+    if (prog == 'persiapan') return isPaymentSettled(o.statusBayar);
+    return false;
+  }
+
+  /// Order sudah dibayar (uang sudah masuk) sehingga pembatalan harus lewat
+  /// jalur refund (`batalDenganRefund`), bukan batal biasa.
+  static bool needsRefund(PesananModel o) {
+    final prog = (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
+    return isPaymentSettled(o.statusBayar) &&
+        (prog == 'persiapan' || prog == 'menunggu bayar');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -145,7 +169,7 @@ class PesananProvider with ChangeNotifier {
 
       if (orders.isEmpty) return null;
 
-      final updatedOrder = orders.first;
+      final updatedOrder = await _autoCompleteIfOverdue(orders.first);
 
       List<HistoryOrderModel> histories = [];
       try {
@@ -190,6 +214,20 @@ class PesananProvider with ChangeNotifier {
   Future<void> loadOrderOnly(
     BuildContext context, {
     bool forceRefresh = false,
+  }) {
+    final inFlight = _loadOrderInFlight;
+    if (inFlight != null) {
+      debugPrint('[PesananProvider] ⏸️ loadOrderOnly already in flight — join');
+      return inFlight;
+    }
+    final future = _loadOrderOnlyImpl(context, forceRefresh: forceRefresh);
+    _loadOrderInFlight = future;
+    return future.whenComplete(() => _loadOrderInFlight = null);
+  }
+
+  Future<void> _loadOrderOnlyImpl(
+    BuildContext context, {
+    bool forceRefresh = false,
   }) async {
     _isLoadingOrder = true;
     _errorOrder = null;
@@ -205,15 +243,16 @@ class PesananProvider with ChangeNotifier {
       // satu request -- fetch paralel satu per status aktif. Selesai/batal
       // sekarang jadi tanggung jawab loadFinishedOrders() (dipanggil dari
       // halaman Riwayat), bukan di sini.
-      final results = await Future.wait(_activeStatuses.map((s) =>
-          pesananService.getAll(
-            idCustomer: userId,
-            status: 'aktif',
-            statusProgresPesanan: s,
-            orderBy: 'Created_At',
-            orderDir: 'desc',
-          )));
-      final allOrders = results.expand((list) => list).toList();
+      final results =
+          await Future.wait(_activeStatuses.map((s) => pesananService.getAll(
+                idCustomer: userId,
+                status: 'aktif',
+                statusProgresPesanan: s,
+                orderBy: 'Created_At',
+                orderDir: 'desc',
+              )));
+      final allOrders = await _autoCompleteListIfOverdue(
+          results.expand((list) => list).toList());
 
       _allPesanan = allOrders;
       _filterPesanan();
@@ -261,15 +300,16 @@ class PesananProvider with ChangeNotifier {
       debugPrint('[PesananProvider] 📥 SMART LOAD | force: $forceRefresh');
 
       // Fetch paralel per status aktif -- lihat catatan di loadOrderOnly().
-      final results = await Future.wait(_activeStatuses.map((s) =>
-          pesananService.getAll(
-            idCustomer: userId,
-            status: 'aktif',
-            statusProgresPesanan: s,
-            orderBy: 'Created_At',
-            orderDir: 'desc',
-          )));
-      final allOrders = results.expand((list) => list).toList();
+      final results =
+          await Future.wait(_activeStatuses.map((s) => pesananService.getAll(
+                idCustomer: userId,
+                status: 'aktif',
+                statusProgresPesanan: s,
+                orderBy: 'Created_At',
+                orderDir: 'desc',
+              )));
+      final allOrders = await _autoCompleteListIfOverdue(
+          results.expand((list) => list).toList());
 
       if (allOrders.isNotEmpty) {
         await localService.saveOrders(allOrders);
@@ -520,7 +560,7 @@ class PesananProvider with ChangeNotifier {
 
       if (orders.isEmpty) return;
 
-      final updatedPesanan = orders.first;
+      final updatedPesanan = await _autoCompleteIfOverdue(orders.first);
 
       List<HistoryOrderModel> histories = [];
       try {
@@ -583,6 +623,62 @@ class PesananProvider with ChangeNotifier {
       p.status == "expired" ||
       p.statusProgresPesanan == "dibatalkan";
 
+  // ═══════════════════════════════════════════════════════════
+  // AUTO-SELESAI SAAT LEWAT BATAS PENGERJAAN
+  //
+  // Dijalankan atas setiap pesanan yang baru di-fetch dari API (lihat
+  // pemanggilnya di fetchSingleOrder/loadOrderOnly/loadOrderWithCache/
+  // refreshOrder). Kalau statusnya masih proses/review/revisi tapi
+  // Tgl_Pengerjaan_Max sudah lewat, pesanan otomatis ditandai selesai
+  // lewat mekanisme yang sama dipakai SelesaikanDialog (POST progress
+  // 'selesai'), tanpa menunggu aksi manual customer.
+  //
+  // Catatan cakupan: layar yang fetch pesanan lewat jalur lain (mis.
+  // tombol "Lihat Pesanan" di Complain thread, atau detail_order_page.dart
+  // V1 lama) tidak lewat provider ini sehingga tidak ikut ter-cover di
+  // sini -- pesanan itu akan terkoreksi sendiri begitu ada layar lain
+  // yang memanggil loadOrder/refreshOrder.
+  // ═══════════════════════════════════════════════════════════
+
+  final Set<String> _autoCompletingNoBukti = {};
+
+  static const Set<String> _autoCompleteEligibleStatuses = {
+    'proses',
+    'review',
+    'revisi',
+  };
+
+  Future<PesananModel> _autoCompleteIfOverdue(PesananModel p) async {
+    if (_isInactiveStatus(p)) return p;
+    final st = p.statusProgresPesanan?.trim().toLowerCase();
+    if (st == null || !_autoCompleteEligibleStatuses.contains(st)) return p;
+    final deadline = p.tglPengerjaanMax;
+    if (deadline == null || !DateTime.now().isAfter(deadline)) return p;
+    if (_autoCompletingNoBukti.contains(p.noBukti)) return p;
+
+    _autoCompletingNoBukti.add(p.noBukti);
+    try {
+      final selesaiHistory = HistoryOrderService.createSelesai(
+        noOrder: p.noBukti,
+        senderId: p.idCustomer,
+      );
+      await HistoryOrderService().create(selesaiHistory);
+      debugPrint(
+          '[PesananProvider] ⏰ Auto-completed overdue order: ${p.noBukti}');
+      return p.copyWith(statusProgresPesanan: 'selesai');
+    } catch (e, st) {
+      debugPrint(
+          '[PesananProvider] ⚠️ Auto-complete failed for ${p.noBukti}: $e\n$st');
+      return p;
+    } finally {
+      _autoCompletingNoBukti.remove(p.noBukti);
+    }
+  }
+
+  Future<List<PesananModel>> _autoCompleteListIfOverdue(
+          List<PesananModel> list) =>
+      Future.wait(list.map(_autoCompleteIfOverdue));
+
   void _filterPesanan() {
     _pesananUnpaid = _allPesanan.where((p) {
       if (_isInactiveStatus(p)) return false;
@@ -593,11 +689,15 @@ class PesananProvider with ChangeNotifier {
     _pesananProgress = _allPesanan.where((p) {
       if (_isInactiveStatus(p)) return false;
       if (["persiapan", "proses", "review", "revisi"]
-          .contains(p.statusProgresPesanan)) { return true; }
+          .contains(p.statusProgresPesanan)) {
+        return true;
+      }
       // Pesanan statusBayar sudah settled tapi server belum geser statusProgres →
       // tampilkan di progress (bukan unpaid) agar summary count akurat
       if (p.statusProgresPesanan == "menunggu bayar" &&
-          isPaymentSettled(p.statusBayar)) { return true; }
+          isPaymentSettled(p.statusBayar)) {
+        return true;
+      }
       return false;
     }).toList();
 

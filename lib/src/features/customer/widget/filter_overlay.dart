@@ -267,6 +267,7 @@ class _FilterOverlayState extends State<FilterOverlay>
     }
   }
 
+
   Future<void> fetchPhotographersFromApi(String? noId, String? query) async {
     setState(() => isPhotographerLoading = true);
     try {
@@ -371,101 +372,103 @@ class _FilterOverlayState extends State<FilterOverlay>
         widget.onClose();
         return false;
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: SlideTransition(
-            position: _slideAnim,
-            child: Scaffold(
-              backgroundColor: const Color(0xFFF7F7F5),
-              body: Column(
-                children: [
-                  _buildHeader(),
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(10, 20, 10, 0),
-                      children: [
-                        _buildSection(
-                          label: 'Kategori',
-                          icon: Icons.grid_view_rounded,
-                          child: _buildDropdown(
-                            controller: categoryController,
-                            focusNode: categoryFocusNode,
-                            hint: 'Pilih kategori',
-                            items: filteredCategories,
-                            hasError: categoryHasError,
-                            isLoading: isCategoryLoading,
-                            onSelected: (value) {
-                              selectedCategoryId = value['id'];
-                            },
-                            onClear: () =>
-                                setState(() => selectedCategoryId = null),
+      child: SafeArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: FadeTransition(
+            opacity: _fadeAnim,
+            child: SlideTransition(
+              position: _slideAnim,
+              child: Scaffold(
+                backgroundColor: const Color(0xFFF7F7F5),
+                body: Column(
+                  children: [
+                    _buildHeader(),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(10, 20, 10, 0),
+                        children: [
+                          _buildSection(
+                            label: 'Kategori',
+                            icon: Icons.grid_view_rounded,
+                            child: _buildDropdown(
+                              controller: categoryController,
+                              focusNode: categoryFocusNode,
+                              hint: 'Pilih kategori',
+                              items: filteredCategories,
+                              hasError: categoryHasError,
+                              isLoading: isCategoryLoading,
+                              onSelected: (value) {
+                                selectedCategoryId = value['id'];
+                              },
+                              onClear: () =>
+                                  setState(() => selectedCategoryId = null),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildSection(
-                          label: 'Lokasi',
-                          icon: Icons.location_on_outlined,
-                          child: _buildDropdown(
-                            controller: locationController,
-                            focusNode: locationFocusNode,
-                            hint: 'Cari kota atau daerah',
-                            items: filteredLocations,
-                            hasError: locationHasError,
-                            isLoading: isLocationLoading,
-                            onSelected: (value) {
-                              selectedLocationId = value['id'];
-                            },
-                            onClear: () =>
-                                setState(() => selectedLocationId = null),
+                          const SizedBox(height: 20),
+                          _buildSection(
+                            label: 'Lokasi',
+                            icon: Icons.location_on_outlined,
+                            child: _buildDropdown(
+                              controller: locationController,
+                              focusNode: locationFocusNode,
+                              hint: 'Cari kota atau daerah',
+                              items: filteredLocations,
+                              hasError: locationHasError,
+                              isLoading: isLocationLoading,
+                              onSelected: (value) {
+                                selectedLocationId = value['id'];
+                              },
+                              onClear: () =>
+                                  setState(() => selectedLocationId = null),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildSection(
-                          label: 'Rentang Harga',
-                          icon: Icons.payments_outlined,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildPriceInput(
-                                  controller: minPriceController,
-                                  focusNode: minPriceFocusNode,
-                                  hint: 'Minimum',
+                          const SizedBox(height: 20),
+                          _buildSection(
+                            label: 'Rentang Harga',
+                            icon: Icons.payments_outlined,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildPriceInput(
+                                    controller: minPriceController,
+                                    focusNode: minPriceFocusNode,
+                                    hint: 'Minimum',
+                                  ),
                                 ),
-                              ),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 10),
-                                child: Container(
-                                  width: 18,
-                                  height: 1.5,
-                                  color: Colors.grey.shade400,
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 10),
+                                  child: Container(
+                                    width: 18,
+                                    height: 1.5,
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
-                              ),
-                              Expanded(
-                                child: _buildPriceInput(
-                                  controller: maxPriceController,
-                                  focusNode: maxPriceFocusNode,
-                                  hint: 'Maksimum',
+                                Expanded(
+                                  child: _buildPriceInput(
+                                    controller: maxPriceController,
+                                    focusNode: maxPriceFocusNode,
+                                    hint: 'Maksimum',
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildSection(
-                          label: 'Fotografer',
-                          icon: Icons.person_search_outlined,
-                          child: _buildPhotographerSearch(),
-                        ),
-                        const SizedBox(height: 100), // space before buttons
-                      ],
+                          const SizedBox(height: 20),
+                          _buildSection(
+                            label: 'Fotografer',
+                            icon: Icons.person_search_outlined,
+                            child: _buildPhotographerSearch(),
+                          ),
+                          const SizedBox(height: 100), // space before buttons
+                        ],
+                      ),
                     ),
-                  ),
-                  _buildBottomActions(),
-                ],
+                    _buildBottomActions(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -480,7 +483,6 @@ class _FilterOverlayState extends State<FilterOverlay>
     return Container(
       color: Colors.white,
       child: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             Padding(
@@ -1012,7 +1014,6 @@ class _FilterOverlayState extends State<FilterOverlay>
         ),
       ),
       child: SafeArea(
-        top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           child: Row(

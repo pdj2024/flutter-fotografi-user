@@ -28,9 +28,17 @@ import 'package:mpjnew/src/features/customer/services/local_storage_service.dart
 class PortofolioLocalService {
   static const String _likedBoxName = 'customer_liked_porto_box';
   static const String _savedBoxName = 'customer_saved_porto_box';
+  // Feed Home. Terpisah dari liked/saved karena isinya publik (guest pun
+  // punya) dan dibuang-tulis ulang tiap fetch, bukan hasil aksi user.
+  static const String _feedBoxName = 'customer_feed_porto_box';
+
+  /// Batas item feed yang disimpan — cukup untuk mengisi layar pertama
+  /// saat cold start; sisanya menyusul dari network.
+  static const int feedCacheLimit = 20;
 
   Box<PortofolioModel>? _likedBox;
   Box<PortofolioModel>? _savedBox;
+  Box<PortofolioModel>? _feedBox;
 
   // ═══════════════════════════════════════════════════
   // INIT
@@ -46,8 +54,13 @@ class PortofolioLocalService {
           ? Hive.box<PortofolioModel>(_savedBoxName)
           : await Hive.openBox<PortofolioModel>(_savedBoxName);
 
+      _feedBox = Hive.isBoxOpen(_feedBoxName)
+          ? Hive.box<PortofolioModel>(_feedBoxName)
+          : await Hive.openBox<PortofolioModel>(_feedBoxName);
+
       debugPrint('✅ [CustomerPortoLocal] Initialized');
-      debugPrint('   Liked: ${_likedBox!.length} | Saved: ${_savedBox!.length}');
+      debugPrint('   Liked: ${_likedBox!.length} | Saved: ${_savedBox!.length}'
+          ' | Feed: ${_feedBox!.length}');
     } catch (e) {
       debugPrint('❌ [CustomerPortoLocal] Init error: $e');
       rethrow;
@@ -56,7 +69,8 @@ class PortofolioLocalService {
 
   Future<void> _ensureReady() async {
     final needsHiveInit = _likedBox == null || !_likedBox!.isOpen ||
-        _savedBox == null || !_savedBox!.isOpen;
+        _savedBox == null || !_savedBox!.isOpen ||
+        _feedBox == null || !_feedBox!.isOpen;
 
     await Future.wait([
       if (needsHiveInit) initialize(),
@@ -214,6 +228,38 @@ class PortofolioLocalService {
     }
   }
 
+  // ═══════════════════════════════════════════════════
+  // FEED HOME — cache agar cold start tidak menunggu network
+  // ═══════════════════════════════════════════════════
+
+  /// Simpan sebagian feed Home ke disk.
+  Future<void> saveFeed(List<PortofolioModel> portfolios) async {
+    await _ensureReady();
+    try {
+      final slice = portfolios.take(feedCacheLimit).toList();
+      await _feedBox!.clear();
+      await _feedBox!.putAll({for (final p in slice) p.noId: p});
+      debugPrint('[CustomerPortoLocal] 💾 Feed cached: ${slice.length}');
+    } catch (e) {
+      debugPrint('❌ [CustomerPortoLocal] saveFeed: $e');
+    }
+  }
+
+  /// Feed Home dari disk. Diurutkan ulang dengan kunci yang sama seperti
+  /// permintaan API (Tgl_Created desc) karena Hive tidak menjamin urutan.
+  Future<List<PortofolioModel>> getFeed() async {
+    await _ensureReady();
+    try {
+      final list = _feedBox!.values.toList()
+        ..sort((a, b) => b.tglCreated.compareTo(a.tglCreated));
+      debugPrint('[CustomerPortoLocal] 📦 Feed from disk: ${list.length}');
+      return list;
+    } catch (e) {
+      debugPrint('❌ [CustomerPortoLocal] getFeed: $e');
+      return [];
+    }
+  }
+
   Future<PortofolioModel?> getPortfolioById(String noId) async {
     await _ensureReady();
     return _likedBox!.get(noId) ?? _savedBox!.get(noId);
@@ -365,6 +411,7 @@ class PortofolioLocalService {
 
     await _likedBox!.clear();
     await _savedBox!.clear();
+    await _feedBox!.clear();
 
     debugPrint('[CustomerPortoLocal] ✅ clearAll done');
   }

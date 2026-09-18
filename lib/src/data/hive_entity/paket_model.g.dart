@@ -23,7 +23,7 @@ class PaketModelAdapter extends TypeAdapter<PaketModel> {
       harga: fields[3] as int,
       rincian: fields[4] as String,
       status: fields[5] as String,
-      revisi: (fields[6] as int?) ?? 0,
+      revisi: fields[6] as int,
     );
   }
 

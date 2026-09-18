@@ -219,9 +219,10 @@ class ChatStorageService {
         ..roomId = roomId
         ..roomType = serverMessage.roomType
         ..idLawan = idLawan
-        ..lastMessage = serverMessage.message.isNotEmpty
-            ? serverMessage.message
-            : _formatPreview(serverMessage.jenisPesan ?? 'text')
+        ..lastMessage = chatPreviewText(
+          jenis: serverMessage.resolvedJenisPesan,
+          message: serverMessage.message,
+        )
         ..lastMessageAt = serverMessage.sentAt
         ..unread = 0
         ..countStatusReceived = 0
@@ -317,9 +318,10 @@ class ChatStorageService {
         ..roomId = chatModel.roomId
         ..roomType = 'direct'
         ..idLawan = chatModel.senderId
-        ..lastMessage = chatModel.message.isNotEmpty
-            ? chatModel.message
-            : _formatPreview(chatModel.jenisPesan ?? 'text')
+        ..lastMessage = chatPreviewText(
+          jenis: chatModel.resolvedJenisPesan,
+          message: chatModel.message,
+        )
         ..lastMessageAt = chatModel.sentAt
         ..unread = 0
         ..countStatusReceived = 0
@@ -593,11 +595,15 @@ class ChatStorageService {
 
       final messageId = detail['message_id']?.toString() ?? '';
       final messageText = detail['message']?.toString() ?? '';
-      final jenisPesan = detail['jenis_pesan']?.toString() ?? 'text';
       final sentAt = DateTime.tryParse(detail['sent_at']?.toString() ?? '') ??
           DateTime.now();
-      final preview =
-          messageText.isNotEmpty ? messageText : _formatPreview(jenisPesan);
+      // Resolusi tipe lewat ChatModel: field jenis_pesan mentah sering "text"
+      // padahal tipe aslinya ada di no_penawaran / no_invoice / id_paket.
+      final preview = chatPreviewText(
+        jenis: ChatModel.fromJson(_normalizeDetailKeys(detail))
+            .resolvedJenisPesan,
+        message: messageText,
+      );
 
       final existing = await isar.getRoomById(roomId);
 
@@ -666,21 +672,6 @@ class ChatStorageService {
       }
     } catch (e) {
       debugPrint('[ChatStorage] ⚠️ _incrementRoomUnreadCount: $e');
-    }
-  }
-
-  static String _formatPreview(String jenisPesan) {
-    switch (jenisPesan) {
-      case 'image':
-        return '🖼️ Gambar';
-      case 'paket':
-        return '📦 Paket';
-      case 'penawaran':
-        return '💼 Penawaran';
-      case 'pesanan':
-        return '🧾 Pesanan';
-      default:
-        return 'Pesan baru';
     }
   }
 
@@ -1201,8 +1192,10 @@ class ChatStorageService {
       );
       if (messages.isEmpty) return '';
       final last = messages.first;
-      if (last.message.isNotEmpty) return last.message;
-      return _formatPreview(last.resolvedJenisPesan);
+      return chatPreviewText(
+        jenis: JenisPesan.fromString(last.resolvedJenisPesan),
+        message: last.message,
+      );
     } catch (_) {
       return '';
     }
@@ -1213,25 +1206,10 @@ class ChatStorageService {
       final room = await _isar.getRoomById(message.roomId);
       if (room == null) return;
 
-      String preview = message.message;
-      if (preview.isEmpty) {
-        switch (message.resolvedJenisPesan) {
-          case JenisPesan.paket:
-            preview = '📦 Paket ditawarkan';
-            break;
-          case JenisPesan.penawaran:
-            preview = '💰 Penawaran baru';
-            break;
-          case JenisPesan.pesanan:
-            preview = '🧾 Detail pesanan';
-            break;
-          case JenisPesan.image:
-            preview = '🖼️ Gambar';
-            break;
-          default:
-            preview = 'Pesan baru';
-        }
-      }
+      final preview = chatPreviewText(
+        jenis: message.resolvedJenisPesan,
+        message: message.message,
+      );
 
       await _isar.updateRoomLastMessage(
         roomId: message.roomId,

@@ -7,7 +7,6 @@ import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
-import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 
 class UserProvider with ChangeNotifier {
@@ -297,20 +296,10 @@ class UserProvider with ChangeNotifier {
         }
       }
 
-      // ── Refresh device token saat session restore ──────────────────────
-      // FCM token bisa berubah setelah app restart atau reinstall
-      // addDeviceToken sudah handle duplikat (status 400 "sudah ada" = success)
-      final userId = _customer?.noId;
-      if (userId != null && userId.isNotEmpty) {
-        try {
-          final deviceTokenService = DeviceTokenService();
-          await deviceTokenService.addDeviceToken(userId, null);
-          debugPrint("✅ [UserProvider] Device token refreshed for: $userId");
-        } catch (e) {
-          // Non-fatal — notifikasi mungkin tidak jalan tapi app tetap bisa dipakai
-          debugPrint("⚠️ [UserProvider] Device token refresh failed: $e");
-        }
-      }
+      // Device token TIDAK didaftarkan di sini. Splash memanggil
+      // FCMService.registerToken() yang mengirim token FCM asli ke endpoint
+      // yang sama — dulu keduanya jalan tiap boot, jadi dua POST identik
+      // yang menahan restore session tanpa hasil tambahan.
 
       debugPrint("✅ Session restored: ${_customer!.namaDisplay}");
       return true;

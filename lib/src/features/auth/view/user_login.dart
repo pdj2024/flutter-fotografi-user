@@ -140,9 +140,11 @@ class _UserLoginState extends State<UserLogin>
                   context,
                   preloadImages: false, // gambar sudah di-cache saat guest
                 );
-            debugPrint("[UserLogin] ✅ Portofolio refreshed with like/save status");
+            debugPrint(
+                "[UserLogin] ✅ Portofolio refreshed with like/save status");
           } catch (e) {
-            debugPrint("[UserLogin] ⚠️ Portofolio refresh error (non-fatal): $e");
+            debugPrint(
+                "[UserLogin] ⚠️ Portofolio refresh error (non-fatal): $e");
           }
         }
 
@@ -326,269 +328,272 @@ class _UserLoginState extends State<UserLogin>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) Navigator.pop(context, false);
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            // ═══════════════════════════════════════════
-            // LAYER 1: Full-screen background image
-            // ═══════════════════════════════════════════
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _imageScaleAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _imageScaleAnimation.value,
-                    child: child,
-                  );
-                },
-                child: Image.asset(
-                  'assets/login_image_2.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-
-            // ═══════════════════════════════════════════
-            // LAYER 2: Gradient overlay
-            // ═══════════════════════════════════════════
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.3, 0.55, 1.0],
-                    colors: [
-                      Colors.black.withOpacity(0.3),
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.4),
-                      Colors.black.withOpacity(0.92),
-                    ],
+      child: SafeArea(
+        top: false,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              // ═══════════════════════════════════════════
+              // LAYER 1: Full-screen background image
+              // ═══════════════════════════════════════════
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _imageScaleAnimation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _imageScaleAnimation.value,
+                      child: child,
+                    );
+                  },
+                  child: Image.asset(
+                    'assets/login_image_2.png',
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),
-            ),
 
-            // ═══════════════════════════════════════════
-            // LAYER 3: Back button
-            // ═══════════════════════════════════════════
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 8,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context, false),
-              ),
-            ),
-
-            // ═══════════════════════════════════════════
-            // LAYER 4: Content at bottom
-            // ═══════════════════════════════════════════
-            Positioned.fill(
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    const Spacer(),
-
-                    // ── Welcome text ─────────────────────
-                    FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Temukan Fotografer\nTerbaik Anda',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.15,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Jelajahi portofolio, bandingkan paket, dan '
-                                'pesan fotografer profesional untuk momen spesial Anda.',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.75),
-                                  fontSize: 14.5,
-                                  height: 1.55,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+              // ═══════════════════════════════════════════
+              // LAYER 2: Gradient overlay
+              // ═══════════════════════════════════════════
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.0, 0.3, 0.55, 1.0],
+                      colors: [
+                        Colors.black.withOpacity(0.3),
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.4),
+                        Colors.black.withOpacity(0.92),
+                      ],
                     ),
+                  ),
+                ),
+              ),
 
-                    const SizedBox(height: 32),
+              // ═══════════════════════════════════════════
+              // LAYER 3: Back button
+              // ═══════════════════════════════════════════
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                left: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context, false),
+                ),
+              ),
 
-                    // ── Google Login button ───────────────
-                    FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 58,
-                            child: ElevatedButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () async {
-                                      await handleLoginGoogle(
-                                        context,
-                                        targetPage,
-                                        tabIndex,
-                                        noIdPortofolio,
-                                        noIdVendor,
-                                      );
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                elevation: 0,
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black87,
-                                disabledBackgroundColor:
-                                    Colors.white.withOpacity(0.6),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+              // ═══════════════════════════════════════════
+              // LAYER 4: Content at bottom
+              // ═══════════════════════════════════════════
+              Positioned.fill(
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      const Spacer(),
+
+                      // ── Welcome text ─────────────────────
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 28),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Temukan Fotografer\nTerbaik Anda',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.15,
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                          Constants.primaryColor,
-                                        ),
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Image.asset(
-                                          'assets/google_icon.png',
-                                          height: 24,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Masuk dengan Google',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Jelajahi portofolio, bandingkan paket, dan '
+                                  'pesan fotografer profesional untuk momen spesial Anda.',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.75),
+                                    fontSize: 14.5,
+                                    height: 1.55,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 32),
 
-                    // ── Legal links ───────────────────────
-                    FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 40),
-                          child: Wrap(
-                            alignment: WrapAlignment.center,
-                            children: [
-                              Text(
-                                'Dengan masuk, Anda menyetujui ',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 12,
-                                  height: 1.5,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const LegalPage(type: LegalType.terms),
+                      // ── Google Login button ───────────────
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 28),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 58,
+                              child: ElevatedButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () async {
+                                        await handleLoginGoogle(
+                                          context,
+                                          targetPage,
+                                          tabIndex,
+                                          noIdPortofolio,
+                                          noIdVendor,
+                                        );
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  elevation: 0,
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black87,
+                                  disabledBackgroundColor:
+                                      Colors.white.withOpacity(0.6),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: Text(
-                                  'Syarat & Ketentuan',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.85),
-                                    fontSize: 12,
-                                    height: 1.5,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor:
-                                        Colors.white.withOpacity(0.5),
-                                  ),
-                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Constants.primaryColor,
+                                          ),
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Image.asset(
+                                            'assets/google_icon.png',
+                                            height: 24,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          const Text(
+                                            'Masuk dengan Google',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                               ),
-                              Text(
-                                ' dan ',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 12,
-                                  height: 1.5,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const LegalPage(
-                                        type: LegalType.privacy),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Kebijakan Privasi',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.85),
-                                    fontSize: 12,
-                                    height: 1.5,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor:
-                                        Colors.white.withOpacity(0.5),
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                ' kami',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 12,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 28),
-                  ],
+                      const SizedBox(height: 20),
+
+                      // ── Legal links ───────────────────────
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 40),
+                            child: Wrap(
+                              alignment: WrapAlignment.center,
+                              children: [
+                                Text(
+                                  'Dengan masuk, Anda menyetujui ',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 12,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LegalPage(
+                                          type: LegalType.terms),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Syarat & Ketentuan',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.85),
+                                      fontSize: 12,
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor:
+                                          Colors.white.withOpacity(0.5),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  ' dan ',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 12,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LegalPage(
+                                          type: LegalType.privacy),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Kebijakan Privasi',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.85),
+                                      fontSize: 12,
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor:
+                                          Colors.white.withOpacity(0.5),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  ' kami',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 12,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

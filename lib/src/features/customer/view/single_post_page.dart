@@ -118,92 +118,94 @@ class _SinglePostPageState extends State<SinglePostPage> {
         final isSaveInProgress =
             portofolioProvider.isSaveInProgress(selectedPortfolio.noId);
 
-        return Scaffold(
-          backgroundColor: const Color(0xFFF9F9F9),
-          appBar: AppBar(
+        return SafeArea(
+          child: Scaffold(
             backgroundColor: const Color(0xFFF9F9F9),
-            elevation: 1,
-            title: const Text(
-              'Portofolio',
-              style:
-                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFFF9F9F9),
+              elevation: 1,
+              title: const Text(
+                'Portofolio',
+                style:
+                    TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-          body: SmartRefresher(
-            controller: _refreshController,
-            onRefresh: _onRefresh,
-            physics: const AlwaysScrollableScrollPhysics(),
-            header: buildRefreshHeader(),
-            child: ListView(
-              controller: _scrollController,
+            body: SmartRefresher(
+              controller: _refreshController,
+              onRefresh: _onRefresh,
               physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                // ── Gambar + header + caption ─────────────────
-                // ✅ Selalu tampil langsung — tidak ada loading gate
-                Container(
-                  color: Colors.white,
-                  child: Column(
-                    children: [
-                      PostHeader(portofolio: selectedPortfolio),
-                      ImagePost(
-                        mediaUrl: selectedPortfolio.mediaUrls,
-                        enablePreload: true,
-                        isLiked: isLiked,
-                        isSaved: isSaved,
-                        isLikeInProgress: isLikeInProgress,
-                        isSaveInProgress: isSaveInProgress,
-                        likeCount: selectedPortfolio.likes,
-                        onLike: isLikeInProgress
-                            ? null
-                            : () async {
-                                await portofolioProvider.toggleLike(
-                                  context: context,
-                                  porto: selectedPortfolio,
-                                  navigateToPost: false,
-                                );
-                                if (context.mounted) {
-                                  final userId =
-                                      context.read<UserProvider>().userId;
-                                  await portofolioProvider
-                                      .silentRefreshSelected(userId: userId);
-                                }
-                              },
-                        onSave: isSaveInProgress
-                            ? null
-                            : () async {
-                                await portofolioProvider.toggleSave(
-                                  context: context,
-                                  porto: selectedPortfolio,
-                                  navigateToPost: false,
-                                );
-                                if (context.mounted) {
-                                  final userId =
-                                      context.read<UserProvider>().userId;
-                                  await portofolioProvider
-                                      .silentRefreshSelected(userId: userId);
-                                }
-                              },
-                      ),
-                      if (selectedPortfolio.caption != null &&
-                          selectedPortfolio.caption!.isNotEmpty) ...[
-                        _ExpandableCaption(caption: selectedPortfolio.caption!),
-                        Container(height: 10, color: Colors.grey.shade200),
+              header: buildRefreshHeader(),
+              child: ListView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  // ── Gambar + header + caption ─────────────────
+                  // ✅ Selalu tampil langsung — tidak ada loading gate
+                  Container(
+                    color: Colors.white,
+                    child: Column(
+                      children: [
+                        PostHeader(portofolio: selectedPortfolio),
+                        ImagePost(
+                          mediaUrl: selectedPortfolio.mediaUrls,
+                          enablePreload: true,
+                          isLiked: isLiked,
+                          isSaved: isSaved,
+                          isLikeInProgress: isLikeInProgress,
+                          isSaveInProgress: isSaveInProgress,
+                          likeCount: selectedPortfolio.likes,
+                          onLike: isLikeInProgress
+                              ? null
+                              : () async {
+                                  await portofolioProvider.toggleLike(
+                                    context: context,
+                                    porto: selectedPortfolio,
+                                    navigateToPost: false,
+                                  );
+                                  if (context.mounted) {
+                                    final userId =
+                                        context.read<UserProvider>().userId;
+                                    await portofolioProvider
+                                        .silentRefreshSelected(userId: userId);
+                                  }
+                                },
+                          onSave: isSaveInProgress
+                              ? null
+                              : () async {
+                                  await portofolioProvider.toggleSave(
+                                    context: context,
+                                    porto: selectedPortfolio,
+                                    navigateToPost: false,
+                                  );
+                                  if (context.mounted) {
+                                    final userId =
+                                        context.read<UserProvider>().userId;
+                                    await portofolioProvider
+                                        .silentRefreshSelected(userId: userId);
+                                  }
+                                },
+                        ),
+                        if (selectedPortfolio.caption != null &&
+                            selectedPortfolio.caption!.isNotEmpty) ...[
+                          _ExpandableCaption(caption: selectedPortfolio.caption!),
+                          Container(height: 10, color: Colors.grey.shade200),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // ── Paket section ─────────────────────────────
-                // ✅ Loading spinner HANYA di sini, bukan seluruh halaman
-                if (_isPaketLoading || paketProvider.isLoading)
-                  const PaketLoadingShimmer(count: 2)
-                else
-                  _buildPaketSection(paketProvider, selectedPortfolio),
-
-                const SizedBox(height: 100),
-              ],
+          
+                  const SizedBox(height: 10),
+          
+                  // ── Paket section ─────────────────────────────
+                  // ✅ Loading spinner HANYA di sini, bukan seluruh halaman
+                  if (_isPaketLoading || paketProvider.isLoading)
+                    const PaketLoadingShimmer(count: 2)
+                  else
+                    _buildPaketSection(paketProvider, selectedPortfolio),
+          
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
           ),
         );
@@ -307,28 +309,30 @@ class _SinglePostPageState extends State<SinglePostPage> {
   }
 
   Widget _buildEmptyScaffold() {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        title: const Text('Portofolio',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 80, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text('Portofolio tidak ditemukan',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Kembali'),
-            ),
-          ],
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          title: const Text('Portofolio',
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 80, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text('Portofolio tidak ditemukan',
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Kembali'),
+              ),
+            ],
+          ),
         ),
       ),
     );

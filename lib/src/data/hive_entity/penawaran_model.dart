@@ -58,8 +58,16 @@ class PenawaranModel {
   @HiveField(17)
   final DateTime? updatedAt;
 
-  @HiveField(18)
+  // defaultValue wajib untuk field non-nullable yang ditambahkan belakangan
+  // — record cache lama tidak punya index ini.
+  @HiveField(18, defaultValue: 0)
   final int revisi;
+
+  @HiveField(19, defaultValue: 0)
+  final int estimasiPengerjaan;
+
+  @HiveField(20)
+  final DateTime? expiredAt;
 
   PenawaranModel({
     required this.noId,
@@ -81,6 +89,8 @@ class PenawaranModel {
     required this.createdAt,
     this.updatedAt,
     this.revisi = 0,
+    this.estimasiPengerjaan = 0,
+    this.expiredAt,
   });
 
   // FROM JSON
@@ -107,6 +117,10 @@ class PenawaranModel {
           ? DateTime.parse(json["Updated_At"])
           : null,
       revisi: json["Revisi"] ?? 0,
+      estimasiPengerjaan: json["Estimasi_Pengerjaan"] ?? 0,
+      expiredAt: json["Expired_At"] != null
+          ? DateTime.parse(json["Expired_At"])
+          : null,
     );
   }
 
@@ -132,21 +146,8 @@ class PenawaranModel {
       "Created_At": createdAt.toIso8601String(),
       "Updated_At": updatedAt?.toIso8601String(),
       "Revisi": revisi,
-    };
-  }
-
-  Map<String, dynamic> toJsonCreate() {
-    return {
-      "id_vendor": idVendor,
-      "id_customer": idCustomer,
-      "id_paket": idPaket,
-      "nama_paket": namaPaket,
-      "kota": kota,
-      "harga": harga,
-      "lokasi": lokasi,
-      "deskripsi": lokasi,
-      "tgl_realisasi": tglRealisasi.toIso8601String(),
-      "status": status,
+      "Estimasi_Pengerjaan": estimasiPengerjaan,
+      "Expired_At": expiredAt?.toIso8601String(),
     };
   }
 
@@ -171,6 +172,8 @@ class PenawaranModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? revisi,
+    int? estimasiPengerjaan,
+    DateTime? expiredAt,
   }) {
     return PenawaranModel(
       noId: noId ?? this.noId,
@@ -192,6 +195,8 @@ class PenawaranModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       revisi: revisi ?? this.revisi,
+      estimasiPengerjaan: estimasiPengerjaan ?? this.estimasiPengerjaan,
+      expiredAt: expiredAt ?? this.expiredAt,
     );
   }
 }

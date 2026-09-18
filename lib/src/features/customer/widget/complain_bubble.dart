@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/data/models/complain_model.dart';
 import 'package:mpjnew/src/features/customer/widget/complain_avatar.dart';
+import 'package:mpjnew/src/features/customer/widget/linkified_text.dart';
 
 /// Kartu pesan untuk fitur Complain — gaya "post" full-width (bukan chat
 /// bubble kiri/kanan), karena Complain punya 3 kemungkinan pengirim
@@ -49,7 +50,7 @@ class ComplainBubble extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w600,
             color: (label == 'Admin')
-                ? Colors.blue.shade50
+                ? Colors.blue.shade700
                 : Constants.primaryColor,
           ),
         ),
@@ -160,8 +161,8 @@ class ComplainBubble extends StatelessWidget {
           children: [
             _buildMediaRow(context),
             if (message.message.isNotEmpty)
-              Text(
-                message.message,
+              LinkifiedText(
+                text: message.message,
                 style: const TextStyle(
                     fontSize: 14.5, color: Colors.black87, height: 1.4),
               ),
@@ -234,15 +235,17 @@ class _FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+          ),
         ),
       ),
     );

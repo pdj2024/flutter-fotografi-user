@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/default_value_service.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -12,6 +13,7 @@ import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/qris_payment_cart.dart';
@@ -47,15 +49,15 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   bool _isExpiredHandled = false;
   bool _isNavigating = false;
   bool _isRefreshing = false;
-  DateTime? _paymentStartTime;
+  int _batasJam = 3;
 
-  static const int _timeoutMinutes = 5;
   static const int _pollingIntervalSeconds = 10;
 
   @override
   void initState() {
     super.initState();
     _currentData = widget.paymentData;
+    _loadBatasWaktu();
     _initTimer();
     _startPolling();
     // FCM listener dan cek awal dipasang setelah frame pertama agar context tersedia
@@ -123,28 +125,14 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   // COUNTDOWN TIMER
   // =========================================
   Future<void> _initTimer() async {
-    final prefs = await SharedPreferences.getInstance();
-    final startKey = 'payment_start_${widget.paymentData.noBukti}';
-    final statusKey = 'payment_status_${widget.paymentData.noBukti}';
-    final storedTime = prefs.getString(startKey);
-    final storedStatus = prefs.getString(statusKey);
-
-    if (storedTime != null && storedStatus != 'expired') {
-      _paymentStartTime = DateTime.parse(storedTime);
-    } else {
-      _paymentStartTime = DateTime.now();
-      await prefs.setString(startKey, _paymentStartTime!.toIso8601String());
-      await prefs.remove(statusKey);
-    }
-
     _recalcRemaining();
     _startCountdown();
   }
 
   void _recalcRemaining() {
-    if (_paymentStartTime == null) return;
-    final elapsed = DateTime.now().difference(_paymentStartTime!);
-    final timeout = Duration(minutes: _timeoutMinutes);
+    final start = _currentData.createdAt ?? DateTime.now();
+    final elapsed = DateTime.now().difference(start);
+    final timeout = Duration(hours: _batasJam);
     _remainingTime = elapsed >= timeout ? Duration.zero : timeout - elapsed;
   }
 
@@ -163,6 +151,20 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         setState(() {});
       }
     });
+  }
+
+  Future<void> _loadBatasWaktu() async {
+    try {
+      final config = await DefaultValueService().getAppConfig();
+      if (!mounted) return;
+
+      setState(
+        () => _batasJam = config.batasPembatalanBayar,
+      );
+      _recalcRemaining();
+    } catch (e) {
+      debugPrint('[WaitingPayment] Gagal load batas waktu, pakai default: $e');
+    }
   }
 
   // =========================================
@@ -303,12 +305,32 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
     setState(() => _isNavigating = true);
 
     _countdownTimer?.cancel();
-    _pollingTimer?.cancel(); 
+    _pollingTimer?.cancel();
     _fcmSubscription?.cancel();
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        'payment_status_${widget.paymentData.noBukti}', 'expired');
+    try {
+      await _pesananService.batal(widget.paymentData.noBukti);
+      final history = HistoryOrderService.createDibatalkan(
+        noOrder: widget.paymentData.noBukti,
+        senderId: _currentData.idCustomer,
+        customDeskripsi:
+            'Pesanan dibatalkan otomatis karena melebihi batas waktu pembayaran.',
+      );
+      await _historyOrderService.create(history);
+      // Sinkronkan PesananProvider supaya MainOrderPage (yang mendengarkan
+      // lewat context.watch) langsung mengeluarkan pesanan ini dari daftar
+      // aktif begitu user kembali ke sana -- tanpa ini order tampak masih
+      // "menunggu bayar" sampai ada refresh manual atau FCM lain.
+      if (mounted) {
+        await context
+            .read<PesananProvider>()
+            .refreshOrder(widget.paymentData.noBukti);
+      }
+    } catch (e) {
+      debugPrint('[WaitingPayment] Gagal auto-cancel: $e');
+      // Tetap lanjut tampilkan dialog timeout meski API gagal — jangan sampai
+      // user macet di halaman ini menunggu pembayaran yang sudah lewat batas.
+    }
 
     if (!mounted) return;
     CustomDialog.showTimeoutDialog(
@@ -318,6 +340,54 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
         context.read<NavigationProvider>().changeTab(2, context);
       },
     );
+  }
+
+  // =========================================
+  // HANDLE Cancel Order
+  // =========================================
+
+  void _confirmManualCancel() {
+    ConfirmDialog.showBatalkanPesananDialog(
+      context: context,
+      onConfirm: _cancelOrder,
+    );
+  }
+
+  Future<void> _cancelOrder() async {
+    if (!mounted || _isNavigating) return;
+    setState(() => _isNavigating = true);
+
+    _countdownTimer?.cancel();
+    _pollingTimer?.cancel();
+    _fcmSubscription?.cancel();
+
+    try {
+      await _pesananService.batal(widget.paymentData.noBukti);
+      final history = HistoryOrderService.createDibatalkan(
+        noOrder: widget.paymentData.noBukti,
+        senderId: _currentData.idCustomer,
+        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
+      );
+      await _historyOrderService.create(history);
+
+      if (!mounted) return;
+      // Sinkronkan PesananProvider supaya MainOrderPage langsung mengeluarkan
+      // pesanan ini dari daftar aktif (lihat catatan yang sama di
+      // _handleExpired) begitu navigasi kembali ke sana.
+      await context
+          .read<PesananProvider>()
+          .refreshOrder(widget.paymentData.noBukti);
+
+      if (!mounted) return;
+      context.read<NavigationProvider>().popAllToRoot();
+      context.read<NavigationProvider>().changeTab(2, context);
+    } catch (e) {
+      debugPrint('[WaitingPayment] Gagal membatalkan pesanan: $e');
+      if (mounted) {
+        setState(() => _isNavigating = false);
+        _showSnack('Gagal membatalkan pesanan', Colors.red.shade600);
+      }
+    }
   }
 
   // =========================================
@@ -340,124 +410,144 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async => !_isNavigating,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF9F9F9),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: _isNavigating
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.black),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-          title: const Text(
-            'Menunggu Pembayaran',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+      child: SafeArea(
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF9F9F9),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: _isNavigating
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.black),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+            title: const Text(
+              'Menunggu Pembayaran',
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+            ),
           ),
-        ),
-        body: Column(
-          children: [
-            // ── Countdown Banner ──────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade400, Colors.orange.shade600],
+          body: Column(
+            children: [
+              // ── Countdown Banner ──────────────────────────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade400, Colors.orange.shade600],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child:
+                          const Icon(Icons.timer, color: Colors.white, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Selesaikan pembayaran dalam',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          Helper.formatDuration(_remainingTime),
+                          style: const TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child:
-                        const Icon(Icons.timer, color: Colors.white, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        
+              // ── FCM Status Indicator ──────────────────────────────────────
+              // Ditampilkan saat sedang navigate (payment sukses terdeteksi)
+              if (_isNavigating)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                  color: Colors.green.shade50,
+                  child: Row(
                     children: [
-                      const Text(
-                        'Selesaikan pembayaran dalam',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500),
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation(Colors.green.shade600),
+                        ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(width: 12),
                       Text(
-                        Helper.formatDuration(_remainingTime),
-                        style: const TextStyle(
-                            fontSize: 20,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1),
+                        'Pembayaran berhasil! Memproses pesanan...',
+                        style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-
-            // ── FCM Status Indicator ──────────────────────────────────────
-            // Ditampilkan saat sedang navigate (payment sukses terdeteksi)
-            if (_isNavigating)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                color: Colors.green.shade50,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation(Colors.green.shade600),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Pembayaran berhasil! Memproses pesanan...',
-                      style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                ),
+        
+              // ── Content ───────────────────────────────────────────────────
+              Expanded(
+                child: SmartRefresher(
+                  controller: _refreshController,
+                  enablePullDown: !_isNavigating,
+                  onRefresh: _manualRefresh,
+                  physics: const BouncingScrollPhysics(),
+                  header: _buildRefreshHeader(),
+                  child: ListView(
+                    padding: const EdgeInsets.all(10),
+                    children: [
+                      _buildPaymentCodeSection(),
+                      const SizedBox(height: 16),
+                      _buildOrderDetail(),
+                      const SizedBox(height: 16),
+                      _buildPaymentSummary(),
+                      const SizedBox(height: 24),
+                      _buildWaitingIndicator(),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: OutlinedButton.icon(
+                            onPressed:
+                                _isNavigating ? null : _confirmManualCancel,
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            label: const Text(
+                              'Batalkan Pesanan',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red.shade300,
+                              side: BorderSide(color: Colors.red.shade300),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 14, horizontal: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            )),
+                      )
+                    ],
+                  ),
                 ),
               ),
-
-            // ── Content ───────────────────────────────────────────────────
-            Expanded(
-              child: SmartRefresher(
-                controller: _refreshController,
-                enablePullDown: !_isNavigating,
-                onRefresh: _manualRefresh,
-                physics: const BouncingScrollPhysics(),
-                header: _buildRefreshHeader(),
-                child: ListView(
-                  padding: const EdgeInsets.all(10),
-                  children: [
-                    _buildPaymentCodeSection(),
-                    const SizedBox(height: 16),
-                    _buildOrderDetail(),
-                    const SizedBox(height: 16),
-                    _buildPaymentSummary(),
-                    const SizedBox(height: 24),
-                    _buildWaitingIndicator(),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

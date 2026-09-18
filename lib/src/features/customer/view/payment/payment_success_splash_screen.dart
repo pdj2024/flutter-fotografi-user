@@ -104,10 +104,10 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
@@ -158,9 +158,9 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
                     );
                   },
                 ),
-    
+              
                 const SizedBox(height: 40),
-    
+              
                 // Success Text
                 FadeTransition(
                   opacity: _fadeAnimation,
@@ -187,9 +187,9 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
                     ],
                   ),
                 ),
-    
+              
                 const SizedBox(height: 40),
-    
+              
                 // Order Info Card
                 FadeTransition(
                   opacity: _fadeAnimation,
@@ -254,9 +254,9 @@ class _PaymentSuccessSplashScreenState extends State<PaymentSuccessSplashScreen>
                     ),
                   ),
                 ),
-    
+              
                 const SizedBox(height: 32),
-    
+              
                 // Loading Indicator
                 FadeTransition(
                   opacity: _fadeAnimation,

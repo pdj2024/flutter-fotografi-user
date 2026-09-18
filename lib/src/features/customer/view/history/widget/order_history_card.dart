@@ -7,7 +7,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/services/refund_rule_service.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
+import 'package:mpjnew/src/data/models/refund_rule_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/card_button.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
@@ -62,6 +64,12 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
       PesananProvider.isPaymentSettled(widget.order.statusBayar);
 
   bool get _isUnpaid => _statusStr == 'menunggu bayar' && !_isSettledPending;
+
+  /// Pesanan sudah dibayar tapi pengerjaan belum dimulai — masih boleh
+  /// dibatalkan customer, dengan konsekuensi dana direfund.
+  bool get _canCancelPaid =>
+      PesananProvider.isPaymentSettled(widget.order.statusBayar) &&
+      (_statusStr == 'persiapan' || _isSettledPending);
   bool get _isReview => _statusStr == 'review';
 
   /// Pembayaran sudah expired — deteksi Snap dan Core.
@@ -190,7 +198,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cfg = getStatus(_statusStr);
+    final cfg = getStatus(_statusStr,
+        isRefundProcessing: widget.order.isRefundProcessing,
+        isRefundDone: widget.order.isRefundDone);
 
     return Container(
       decoration: BoxDecoration(
@@ -412,16 +422,31 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     );
   }
 
-  void _showConfirmBatal(BuildContext context) {
-    ConfirmDialog.showBatalkanPesananDialog(
-      context: context,
-      onConfirm: () => widget.onBatal?.call(),
-    );
+  Future<void> _showConfirmBatal(BuildContext context) async {
+    RefundRuleModel? refundTier;
+
+    if (_canCancelPaid) {
+      try {
+        final rules = await RefundRuleService().getAll();
+        final sisaJam = widget.order.tglRealisasi
+            .difference(DateTime.now())
+            .inHours
+            .toDouble();
+        refundTier = RefundRuleService().resolveTier(rules, sisaJam);
+      } catch (e) {
+        debugPrint('[OrderHistoryCard] ⚠️ Gagal ambil aturan refund: $e');
+      }
+    }
+
+    if(!context.mounted) return;
+
+    ConfirmDialog.showBatalkanPesananDialog(context: context, isRefund: _canCancelPaid, refundTier: refundTier, onConfirm: () => widget.onBatal?.call(),);
   }
+
 
   // ─── Vendor row ────────────────────────────────────────────────
   Widget _buildVendorRow() {
-    final canShowMenu = _isUnpaid && widget.onBatal != null;
+    final canShowMenu = (_isUnpaid || _canCancelPaid) && widget.onBatal != null;
     return Row(
       children: [
         _VendorAvatar(url: widget.order.idMediaVendor ?? ''),
@@ -478,7 +503,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   // ─── Progress Status Banner — persiapan / proses / review / revisi ──
   Widget _buildProgressBanner() {
-    final cfg = getStatus(_statusStr);
+    final cfg = getStatus(_statusStr,
+        isRefundProcessing: widget.order.isRefundProcessing,
+        isRefundDone: widget.order.isRefundDone);
     final deskripsi = widget.order.deskripsiProgresPesanan ?? '';
 
     return Container(

@@ -251,108 +251,110 @@ class _CustomerAccountPageState extends State<CustomerAccountPage>
     final customer = userProvider.customer;
     final isProfileComplete = _isProfileComplete(customer);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 0,
-        centerTitle: true,
-        title: userProvider.isLoading
-            ? const ShimmerPlaceholder(radius: 10)
-            : GestureDetector(
-                onTap: () => _showSwitchAccountSheet(context),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _resolveUsername(customer),
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 0,
+          centerTitle: true,
+          title: userProvider.isLoading
+              ? const ShimmerPlaceholder(radius: 10)
+              : GestureDetector(
+                  onTap: () => _showSwitchAccountSheet(context),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _resolveUsername(customer),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: Colors.black,
-                      size: 22,
-                    ),
-                  ],
-                ),
-              ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 5),
-            child: IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Colors.black),
-              onPressed: () {
-                context.read<NavigationProvider>().navigateToPage(
-                      context,
-                      SettingPage(),
-                      targetTabIndex: 3,
-                      hrsLogin: true,
-                    );
-              },
-            ),
-          ),
-        ],
-      ),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: SmartRefresher(
-          controller: _refreshController,
-          onRefresh: _onRefresh,
-          physics: const AlwaysScrollableScrollPhysics(),
-          header: buildRefreshHeader(),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: userProvider.isLoading
-                      ? const ShimmerPlaceholder(radius: 20, height: 180)
-                      : _buildProfileSection(
-                          userProvider, customer, isProfileComplete),
-                ),
-              ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _StickyTabBarDelegate(
-                  TabBar(
-                    controller: _tabController,
-                    overlayColor:
-                        const WidgetStatePropertyAll(Colors.transparent),
-                    indicatorColor: Constants.primaryColor,
-                    labelColor: Constants.primaryColor,
-                    unselectedLabelColor: Colors.grey,
-                    tabs: const [
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Tab(text: "Disukai"),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Tab(text: "Disimpan"),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.black,
+                        size: 22,
                       ),
                     ],
                   ),
                 ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Colors.black),
+                onPressed: () {
+                  context.read<NavigationProvider>().navigateToPage(
+                        context,
+                        SettingPage(),
+                        targetTabIndex: 3,
+                        hrsLogin: true,
+                      );
+                },
               ),
-              SliverFillRemaining(
-                child: IndexedStack(
-                  index: _currentTab,
-                  children: const [
-                    _TabContent(data: 'like'),
-                    _TabContent(data: 'save'),
-                  ],
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: SafeArea(
+          child: SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
+            physics: const AlwaysScrollableScrollPhysics(),
+            header: buildRefreshHeader(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: userProvider.isLoading
+                        ? const ShimmerPlaceholder(radius: 20, height: 180)
+                        : _buildProfileSection(
+                            userProvider, customer, isProfileComplete),
+                  ),
                 ),
-              ),
-            ],
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickyTabBarDelegate(
+                    TabBar(
+                      controller: _tabController,
+                      overlayColor:
+                          const WidgetStatePropertyAll(Colors.transparent),
+                      indicatorColor: Constants.primaryColor,
+                      labelColor: Constants.primaryColor,
+                      unselectedLabelColor: Colors.grey,
+                      tabs: const [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Tab(text: "Disukai"),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Tab(text: "Disimpan"),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverFillRemaining(
+                  child: IndexedStack(
+                    index: _currentTab,
+                    children: const [
+                      _TabContent(data: 'like'),
+                      _TabContent(data: 'save'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

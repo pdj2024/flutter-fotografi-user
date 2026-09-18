@@ -36,13 +36,15 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Silent login restore — no-op untuk guest, tidak memblokir load data.
-      await _loadCustomerId();
       if (!mounted) return;
 
       // Portofolio bersifat publik — guest pun boleh melihat feed.
       // Cukup skip fetch jika data sudah di-pre-fetch saat splash.
       // Pull-to-refresh (_onRefresh) tetap memanggil loadData() penuh.
+      //
+      // Cek ini HARUS duluan: loadData() sudah memanggil _loadCustomerId()
+      // sendiri, dan splash sudah restore session — memanggilnya lagi di sini
+      // cuma mengulang restoreSession + loadUserData untuk hasil yang sama.
       final kategori = context.read<KategoriProvider>();
       final porto = context.read<PortofolioProvider>();
       if (kategori.kategoriList.isNotEmpty && porto.portofolioList.isNotEmpty) {
@@ -176,10 +178,10 @@ class _CustomerHomePageState extends State<CustomerHomePage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: Column(
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: Column(
           children: [
             // ── Search bar sticky ─────────────────────────────────────
             _ModernSearchBar(
@@ -197,7 +199,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                     );
               },
             ),
-
+              
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _onRefresh,
@@ -215,12 +217,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                         child: KategoriSection(),
                       ),
                     ),
-
+              
                     const SliverToBoxAdapter(child: SizedBox(height: 5)),
-
+              
                     // ── Portofolio — lazy build, hanya yang visible ───
                     const PortofolioSection(),
-
+              
                     // ── Preload indicator ─────────────────────────────
                     SliverToBoxAdapter(
                       child: Consumer<PortofolioProvider>(
@@ -228,11 +230,11 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                           final stats = provider.getPreloadStats();
                           final isPreloading = stats['isPreloading'] as bool;
                           final queueLength = stats['queueLength'] as int;
-
+              
                           if (!isPreloading || queueLength == 0) {
                             return const SizedBox.shrink();
                           }
-
+              
                           return Container(
                             padding: const EdgeInsets.all(10),
                             child: Row(
@@ -262,7 +264,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
                         },
                       ),
                     ),
-
+              
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
                   ],
                 ),

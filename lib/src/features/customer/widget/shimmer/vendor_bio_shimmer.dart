@@ -8,46 +8,48 @@ class VendorBioShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        // ✅ Use standard back button instead of shimmer
-        leading: const BackButton(color: Colors.grey),
-        // ✅ Use Container with fixed constraints for title shimmer
-        title: Container(
-          height: 20,
-          width: 120,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(4),
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          // ✅ Use standard back button instead of shimmer
+          leading: const BackButton(color: Colors.grey),
+          // ✅ Use Container with fixed constraints for title shimmer
+          title: Container(
+            height: 20,
+            width: 120,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
         ),
-      ),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Vendor Bio Shimmer
-              _buildVendorBioShimmer(),
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Vendor Bio Shimmer
+                _buildVendorBioShimmer(),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Portfolio Title Shimmer
-              const ShimmerPlaceholder(
-                width: 100,
-                height: 18,
-                radius: 4,
-              ),
+                // Portfolio Title Shimmer
+                const ShimmerPlaceholder(
+                  width: 100,
+                  height: 18,
+                  radius: 4,
+                ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // Portfolio Grid Shimmer
-              _buildPortfolioGridShimmer(),
-            ],
+                // Portfolio Grid Shimmer
+                _buildPortfolioGridShimmer(),
+              ],
+            ),
           ),
         ),
       ),

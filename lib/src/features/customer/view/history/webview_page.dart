@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
@@ -9,6 +12,8 @@ import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.d
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/custom_back_button.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -244,10 +249,21 @@ class _WebviewPageState extends State<WebviewPage>
         'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
         '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       )
+      // Jembatan untuk unduhan "blob:" (lihat _handleBlobDownload) — WebView
+      // tidak bisa navigasi langsung ke blob: URL sebagai file (selalu
+      // net::ERR_FILE_NOT_FOUND), jadi kontennya di-fetch ulang lewat JS di
+      // dalam halaman lalu dikirim ke sini sebagai data URL base64.
+      ..addJavaScriptChannel(
+        'FlutterDownload',
+        onMessageReceived: (message) => _handleDownloadMessage(message.message),
+      )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
           _loadingHideTimer?.cancel();
           if (mounted) setState(() => _isLoading = true);
+          if (_isPaymentMode) {
+            _injectDownloadHelper(); // ✅ pasang override sedini mungkin
+          }
         },
         onPageFinished: (url) {
           _loadingHideTimer?.cancel();
@@ -256,6 +272,7 @@ class _WebviewPageState extends State<WebviewPage>
           });
           if (_isPaymentMode) {
             _checkSnapCallbackUrl(url);
+            _injectDownloadHelper(); // ✅ jaga-jaga kalau iframe/SPA reload konten
           }
         },
         onHttpError: (err) {
@@ -306,6 +323,14 @@ class _WebviewPageState extends State<WebviewPage>
           if (req.url == 'about:blank' || req.url.startsWith('javascript:')) {
             return NavigationDecision.prevent;
           }
+          // Tombol "Download QRIS" Midtrans Snap men-set location ke blob:
+          // URL (hasil generate QR di sisi JS). WebView tidak sanggup
+          // menavigasi ke blob: sebagai file — batalkan navigasinya dan
+          // ambil isinya lewat JS selagi context halaman masih hidup.
+          if (req.url.startsWith('blob:')) {
+            _extractBlobViaJs(req.url);
+            return NavigationDecision.prevent;
+          }
           return NavigationDecision.navigate;
         },
       ));
@@ -331,6 +356,176 @@ class _WebviewPageState extends State<WebviewPage>
       debugPrint('[WebviewPage] ❌ Snap failed/cancel URL detected');
     }
   }
+
+  /// Fetch ulang isi blob: URL dari dalam context halaman (masih hidup
+  /// karena navigasinya sudah dibatalkan), lalu kirim sebagai data URL
+  /// base64 lewat JavaScriptChannel `FlutterDownload`.
+  Future<void> _handleBlobDownload(String blobUrl) async {
+    final escapedUrl = blobUrl.replaceAll("'", "\\'");
+    final script = '''
+      (function() {
+        fetch('$escapedUrl')
+          .then(function(res) { return res.blob(); })
+          .then(function(blob) {
+            var reader = new FileReader();
+            reader.onloadend = function() {
+              FlutterDownload.postMessage(reader.result);
+            };
+            reader.onerror = function() {
+              FlutterDownload.postMessage('ERROR:gagal membaca blob');
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function(e) {
+            FlutterDownload.postMessage('ERROR:' + e.message);
+          });
+      })();
+    ''';
+    try {
+      await _controller.runJavaScript(script);
+    } catch (e) {
+      debugPrint('[WebviewPage] ⚠️ Gagal jalankan skrip unduhan blob: $e');
+    }
+  }
+
+  // ── Blob download helper ─────────────────────────────────────────
+//
+// Alur "Download QRIS" Midtrans Snap: buat Blob → createObjectURL →
+// klik anchor → SEGERA revokeObjectURL (sinkron, di call stack yang
+// sama). Round-trip Dart↔JS kita (dicegat navigasi → panggil balik
+// runJavaScript) bersifat async, jadi selalu kalah cepat — begitu
+// script kita jalan, URL sudah revoked → fetch() gagal
+// ("Failed to fetch").
+//
+// Fix: override URL.createObjectURL supaya begitu Blob dibuat, kita
+// simpan REFERENSI OBJEK BLOB-nya sendiri (bukan cuma string URL) di
+// cache. Objek Blob tetap hidup di memory selama masih direferensikan,
+// walaupun URL-nya sudah di-revoke — jadi kita ambil dari cache
+// duluan, fetch() hanya jadi fallback kalau entah kenapa cache kosong.
+  Future<void> _injectDownloadHelper() async {
+    const script = '''
+    (function() {
+      if (window.__ftDownloadHelperInstalled) return;
+      window.__ftDownloadHelperInstalled = true;
+
+      window.__ftBlobCache = {};
+      var origCreateObjectURL = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = function(blob) {
+        var url = origCreateObjectURL(blob);
+        window.__ftBlobCache[url] = blob;
+        return url;
+      };
+
+      window.__ftExtractBlob = function(url) {
+        var cached = window.__ftBlobCache[url];
+        var blobPromise = cached
+          ? Promise.resolve(cached)
+          : fetch(url).then(function(r) { return r.blob(); });
+
+        blobPromise.then(function(blob) {
+          var reader = new FileReader();
+          reader.onloadend = function() {
+            FlutterDownload.postMessage(reader.result);
+          };
+          reader.onerror = function() {
+            FlutterDownload.postMessage('ERROR:gagal membaca blob');
+          };
+          reader.readAsDataURL(blob);
+        }).catch(function(err) {
+          FlutterDownload.postMessage('ERROR:' + err.message);
+        });
+      };
+
+      // Cegat klik tombol download SEBELUM handler asli Snap sempat
+      // jalan (capture phase) — mencegah navigasi default sekaligus
+      // memastikan kita ambil blob lewat cache, bukan fetch ke URL
+      // yang berpotensi sudah revoked.
+      document.addEventListener('click', function(e) {
+        var el = e.target;
+        while (el && el.tagName !== 'A') { el = el.parentElement; }
+        if (!el) return;
+        var href = el.getAttribute('href') || '';
+        if (!href.startsWith('blob:') || !el.hasAttribute('download')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
+        window.__ftExtractBlob(href);
+      }, true);
+    })();
+  ''';
+
+    try {
+      await _controller.runJavaScript(script);
+    } catch (e) {
+      debugPrint('[WebviewPage] ⚠️ Gagal pasang download helper: $e');
+    }
+  }
+
+  /// Fallback untuk kasus blob: lolos dari click-interceptor (mis. dipicu
+  /// via `window.location = blob:...` alih-alih anchor `download`).
+  /// Tetap lewat window.__ftExtractBlob supaya cache Blob (jika ada)
+  /// tetap diprioritaskan sebelum fetch().
+  Future<void> _extractBlobViaJs(String blobUrl) async {
+    final escapedUrl = blobUrl.replaceAll("'", "\\'");
+    try {
+      await _controller.runJavaScript(
+        "window.__ftExtractBlob && window.__ftExtractBlob('$escapedUrl');",
+      );
+    } catch (e) {
+      debugPrint('[WebviewPage] ⚠️ Gagal jalankan extractBlob: $e');
+    }
+  }
+
+  Future<void> _handleDownloadMessage(String message) async {
+  if (message.startsWith('ERROR:')) {
+    debugPrint('[WebviewPage] ⚠️ Blob download error: $message');
+    if (mounted) {
+      CustomSnackbar.showErrorSnackbar(context, 'Gagal mengunduh QR Code');
+    }
+    return;
+  }
+
+  try {
+    final base64Str = message.contains(',') ? message.split(',').last : message;
+    final bytes = base64Decode(base64Str);
+
+    // ✅ Pakai permission API bawaan `gal`, bukan permission_handler.
+    // Gal tahu persis permission apa yang dibutuhkan per versi Android/iOS
+    // untuk MENULIS ke galeri, tanpa perlu deklarasi manual tambahan di
+    // AndroidManifest.xml (Android 10+ scoped storage tidak butuh runtime
+    // permission untuk menyimpan file baru lewat MediaStore).
+    final hasAccess = await Gal.hasAccess();
+    if (!hasAccess) {
+      final granted = await Gal.requestAccess();
+      if (!granted) {
+        if (mounted) {
+          CustomSnackbar.showErrorSnackbar(
+              context, 'Izin penyimpanan diperlukan untuk mengunduh QR Code');
+        }
+        return;
+      }
+    }
+
+    await Gal.putImageBytes(
+      bytes,
+      album: 'QRIS Payment',
+      name: 'QRIS_Payment_${DateTime.now().millisecondsSinceEpoch}',
+    );
+
+    if (mounted) {
+      CustomSnackbar.showSuccessSnackbar(context, 'QR Code berhasil disimpan');
+    }
+  } catch (e) {
+    debugPrint('[WebviewPage] ⚠️ Gagal simpan QR dari blob: $e');
+    if (mounted) {
+      CustomSnackbar.showErrorSnackbar(
+          context, 'Gagal mengunduh QR Code: ${e.toString()}');
+    }
+  }
+}
 
   Future<void> _loadUrl(String url) async {
     try {

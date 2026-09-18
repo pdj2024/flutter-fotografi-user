@@ -11,7 +11,9 @@ import 'package:mpjnew/src/core/utils/device_info_helper.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
+import 'package:mpjnew/src/features/customer/view/history/webview_page.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum AgreementType { terms, privacy }
 
@@ -26,9 +28,8 @@ class PendingAgreement {
     required this.version,
   });
 
-  String get title => type == AgreementType.terms
-      ? 'Syarat & Ketentuan'
-      : 'Kebijakan Privasi';
+  String get title =>
+      type == AgreementType.terms ? 'Syarat & Ketentuan' : 'Kebijakan Privasi';
 }
 
 /// Gate persetujuan dokumen legal.
@@ -202,11 +203,13 @@ class AgreementCheckService {
             acceptedAt: now,
           )));
     } catch (e) {
-      debugPrint('[Agreement] Gagal membuat riwayat persetujuan (non-fatal): $e');
+      debugPrint(
+          '[Agreement] Gagal membuat riwayat persetujuan (non-fatal): $e');
     }
 
     userProv.updateCustomerLocally(updated);
-    debugPrint('[Agreement] ✅ Persetujuan tersimpan (${accepted.length} dokumen)');
+    debugPrint(
+        '[Agreement] ✅ Persetujuan tersimpan (${accepted.length} dokumen)');
   }
 }
 
@@ -358,6 +361,37 @@ class _AgreementPageState extends State<AgreementPage> {
     }
   }
 
+  void _handleLinkTap(String? url) {
+    if (url == null || url.trim().isEmpty) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final scheme = uri.scheme.toLowerCase();
+
+    if (scheme == 'http' || scheme == 'https') {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WebviewPage(url: url),
+        ),
+      );
+      return;
+    }
+
+    _openExternalScheme(uri);
+  }
+
+  Future<void> _openExternalScheme(Uri uri) async {
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('[Agreement] ⚠️ Gagal membuka link "$uri": $e');
+    }
+  }
+
   void _closeApp() {
     if (Platform.isAndroid) {
       SystemNavigator.pop();
@@ -373,37 +407,39 @@ class _AgreementPageState extends State<AgreementPage> {
     return PopScope(
       // Persetujuan wajib — tidak bisa ditutup dengan tombol back.
       canPop: false,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F5F7),
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          backgroundColor: Colors.white,
-          elevation: 1,
-          title: const Text(
-            'Persetujuan Diperlukan',
-            style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.bold,
-              fontSize: 17,
-            ),
-          ),
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: CustomScrollView(
-                key: _viewportKey,
-                controller: _scrollController,
-                slivers: [
-                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  for (int i = 0; i < widget.pending.length; i++)
-                    ..._buildSectionSlivers(i),
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                ],
+      child: SafeArea(
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF5F5F7),
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            backgroundColor: Colors.white,
+            elevation: 1,
+            title: const Text(
+              'Persetujuan Diperlukan',
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
               ),
             ),
-            _buildBottomBar(),
-          ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  key: _viewportKey,
+                  controller: _scrollController,
+                  slivers: [
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                    for (int i = 0; i < widget.pending.length; i++)
+                      ..._buildSectionSlivers(i),
+                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  ],
+                ),
+              ),
+              _buildBottomBar(),
+            ],
+          ),
         ),
       ),
     );
@@ -545,6 +581,7 @@ class _AgreementPageState extends State<AgreementPage> {
       padding: const EdgeInsets.only(top: 8),
       child: Html(
         data: doc.deskripsi,
+        onLinkTap: (url, attributes, element) => _handleLinkTap(url),
         style: {
           'body': Style(
             margin: Margins.zero,
@@ -583,7 +620,7 @@ class _AgreementPageState extends State<AgreementPage> {
           'strong': Style(fontWeight: FontWeight.w700, color: Colors.black87),
           'a': Style(
             color: Constants.primaryColor,
-            textDecoration: TextDecoration.none,
+            textDecoration: TextDecoration.underline,
             fontWeight: FontWeight.w500,
           ),
         },
@@ -600,7 +637,6 @@ class _AgreementPageState extends State<AgreementPage> {
         border: Border(top: BorderSide(color: Colors.grey.shade200)),
       ),
       child: SafeArea(
-        top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Column(

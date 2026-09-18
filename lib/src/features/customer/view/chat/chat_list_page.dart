@@ -70,12 +70,16 @@ class _ChatListPageState extends State<ChatListPage>
     }
   }
 
+  /// Sync ringan saat halaman dibuka / app resume.
+  /// Sengaja TIDAK forceRefresh: itu memicu replaceAllRooms yang menimpa
+  /// preview lokal dengan Last_Message kosong dari server. Replace penuh
+  /// hanya untuk pull-to-refresh eksplisit (_onRefresh).
   Future<void> _syncRoomsFromApi() async {
     if (!mounted) return;
     try {
       await context
           .read<ChatProvider>()
-          .loadRooms(forceRefresh: true, silent: true);
+          .loadRooms(forceRefresh: false, silent: true);
     } catch (e) {
       debugPrint('[ChatList] ⚠️ Sync error: $e');
     }
@@ -127,57 +131,59 @@ class _ChatListPageState extends State<ChatListPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 1,
-        title: const Text(
-          'Semua Pesan',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 1,
+          title: const Text(
+            'Semua Pesan',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-      ),
-      body: StreamBuilder<List<RoomChatEntity>>(
-        // ✅ _roomsStream di-cache — tidak dibuat ulang saat setState
-        stream: _roomsStream,
-        builder: (context, snapshot) {
-          // Loading pertama (stream belum pernah emit)
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return _buildLoadingShimmer();
-          }
-
-          final allRooms = snapshot.data ?? [];
-          final filtered = _filterAndSortRooms(allRooms);
-
-          return SmartRefresher(
-            controller: _refreshController,
-            onRefresh: _onRefresh,
-            physics: const AlwaysScrollableScrollPhysics(),
-            header: buildRefreshHeader(),
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(child: _buildSearchBar()),
-                if (filtered.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _buildEmptyState(
-                      isSearchResult: _searchQuery.isNotEmpty,
+        body: StreamBuilder<List<RoomChatEntity>>(
+          // ✅ _roomsStream di-cache — tidak dibuat ulang saat setState
+          stream: _roomsStream,
+          builder: (context, snapshot) {
+            // Loading pertama (stream belum pernah emit)
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return _buildLoadingShimmer();
+            }
+      
+            final allRooms = snapshot.data ?? [];
+            final filtered = _filterAndSortRooms(allRooms);
+      
+            return SmartRefresher(
+              controller: _refreshController,
+              onRefresh: _onRefresh,
+              physics: const AlwaysScrollableScrollPhysics(),
+              header: buildRefreshHeader(),
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildSearchBar()),
+                  if (filtered.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _buildEmptyState(
+                        isSearchResult: _searchQuery.isNotEmpty,
+                      ),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (_, index) => _buildRoomItem(filtered[index]),
+                        childCount: filtered.length,
+                      ),
                     ),
-                  )
-                else
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (_, index) => _buildRoomItem(filtered[index]),
-                      childCount: filtered.length,
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

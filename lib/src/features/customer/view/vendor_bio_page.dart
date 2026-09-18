@@ -95,72 +95,76 @@ class _VendorBioPageState extends State<VendorBioPage> {
   @override
   Widget build(BuildContext context) {
     if (isLoadingVendor) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF9F9F9),
-        body: VendorBioShimmer(),
+      return SafeArea(
+        child: const Scaffold(
+          backgroundColor: Color(0xFFF9F9F9),
+          body: VendorBioShimmer(),
+        ),
       );
     }
 
     final bool vendorFound = vendor.username != _notFoundUsername;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(context),
-
-          // Stats + Bio + Actions
-          SliverToBoxAdapter(
-            child: _buildInfoSection(context, vendorFound),
-          ),
-
-          // Portofolio header
-          if (!isLoadingPorto && portofolioList.isNotEmpty)
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: CustomScrollView(
+          slivers: [
+            _buildSliverAppBar(context),
+      
+            // Stats + Bio + Actions
             SliverToBoxAdapter(
-              child: _buildPortofolioHeader(context),
+              child: _buildInfoSection(context, vendorFound),
             ),
-
-          // Shimmer grid
-          if (isLoadingPorto)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-              sliver: SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (_, __) => const ShimmerPlaceholder(radius: 12),
-                  childCount: 6,
-                ),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
+      
+            // Portofolio header
+            if (!isLoadingPorto && portofolioList.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _buildPortofolioHeader(context),
               ),
-            )
-
-          // Porto grid
-          else if (portofolioList.isNotEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-              sliver: SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => _VendorPortoGridItem(porto: portofolioList[i]),
-                  childCount: portofolioList.length,
+      
+            // Shimmer grid
+            if (isLoadingPorto)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                sliver: SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, __) => const ShimmerPlaceholder(radius: 12),
+                    childCount: 6,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
                 ),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+              )
+      
+            // Porto grid
+            else if (portofolioList.isNotEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                sliver: SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _VendorPortoGridItem(porto: portofolioList[i]),
+                    childCount: portofolioList.length,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
                 ),
+              )
+      
+            // Empty
+            else
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildEmptyPorto(),
               ),
-            )
-
-          // Empty
-          else
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildEmptyPorto(),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

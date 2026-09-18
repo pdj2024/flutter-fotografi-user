@@ -336,41 +336,43 @@ class _FinishedOrderPageState extends State<FinishedOrderPage> {
     final isLoading = provider.isLoadingFinished && orders.isEmpty;
     final hasError = provider.errorFinished != null && orders.isEmpty;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F2),
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF4F4F2),
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Pesanan Selesai',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF4F4F2),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          title: const Text(
+            'Pesanan Selesai',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          _buildRangeFields(),
-          _buildSearchButton(),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : hasError
-                    ? _buildError(provider.errorFinished!)
-                    : orders.isEmpty
-                        ? _buildEmpty()
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 48),
-                            itemCount: orders.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (ctx, i) =>
-                                _FinishedCard(order: orders[i]),
-                          ),
-          ),
-        ],
+        body: Column(
+          children: [
+            _buildRangeFields(),
+            _buildSearchButton(),
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : hasError
+                      ? _buildError(provider.errorFinished!)
+                      : orders.isEmpty
+                          ? _buildEmpty()
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(10, 0, 10, 48),
+                              itemCount: orders.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (ctx, i) =>
+                                  _FinishedCard(order: orders[i]),
+                            ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -584,7 +586,21 @@ class _FinishedCardState extends State<_FinishedCard> {
     final IconData icon;
     final String label;
 
-    if (isExpired) {
+    // Refund menimpa label terminal — customer perlu tahu status dananya,
+    // bukan sekadar bahwa pesanannya batal.
+    if (widget.order.isRefundDone) {
+      bgColor = const Color(0xFFE8F5E9);
+      iconColor = const Color(0xFF2E7D32);
+      textColor = const Color(0xFF2E7D32);
+      icon = Icons.check_circle_outline_rounded;
+      label = 'Refund Selesai';
+    } else if (widget.order.isRefundProcessing) {
+      bgColor = const Color(0xFFFFF3E0);
+      iconColor = const Color(0xFFD97706);
+      textColor = const Color(0xFFD97706);
+      icon = Icons.currency_exchange_rounded;
+      label = 'Dana Sedang Direfund';
+    } else if (isExpired) {
       bgColor = const Color(0xFFFFF3E0);
       iconColor = const Color(0xFFE65100);
       textColor = const Color(0xFFE65100);
@@ -603,10 +619,6 @@ class _FinishedCardState extends State<_FinishedCard> {
       icon = Icons.check_circle_rounded;
       label = 'Selesai';
     }
-
-    final noBuktiShort = widget.order.noBukti.length > 8
-        ? widget.order.noBukti.substring(widget.order.noBukti.length - 8)
-        : widget.order.noBukti;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -628,7 +640,7 @@ class _FinishedCardState extends State<_FinishedCard> {
           ),
           const Spacer(),
           Text(
-            "#${widget.order.noTrackingPesanan ?? noBuktiShort}",
+            "#${widget.order.noTrackingPesanan ?? ""}",
             style: TextStyle(
               fontSize: 11,
               color: textColor,

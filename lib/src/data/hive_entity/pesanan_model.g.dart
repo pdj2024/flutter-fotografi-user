@@ -52,14 +52,18 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       grandTotal: fields[32] as int,
       createdAt: fields[33] as DateTime?,
       updatedAt: fields[34] as DateTime?,
-      revisi: (fields[35] as int?) ?? 0,
+      revisi: fields[35] == null ? 0 : fields[35] as int,
+      estimasiPengerjaan: fields[36] == null ? 0 : fields[36] as int,
+      tglPengerjaanMax: fields[37] as DateTime?,
+      tglRefund: fields[38] as DateTime?,
+      tglRefunded: fields[39] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PesananModel obj) {
     writer
-      ..writeByte(36)
+      ..writeByte(40)
       ..writeByte(0)
       ..write(obj.noBukti)
       ..writeByte(1)
@@ -131,7 +135,15 @@ class PesananModelAdapter extends TypeAdapter<PesananModel> {
       ..writeByte(34)
       ..write(obj.updatedAt)
       ..writeByte(35)
-      ..write(obj.revisi);
+      ..write(obj.revisi)
+      ..writeByte(36)
+      ..write(obj.estimasiPengerjaan)
+      ..writeByte(37)
+      ..write(obj.tglPengerjaanMax)
+      ..writeByte(38)
+      ..write(obj.tglRefund)
+      ..writeByte(39)
+      ..write(obj.tglRefunded);
   }
 
   @override

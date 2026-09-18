@@ -19,9 +19,26 @@ class Helper {
   }
 
   static String formatDuration(Duration d) {
+    final hours = d.inHours;
     final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    // Timer batas pembatalan bayar (Batas_Pembatalan_Bayar) bisa berjam-jam --
+    // tanpa komponen jam, hitung mundur >1 jam tampak macet di sekitar
+    // "59:59" tiap kali masuk jam baru alih-alih benar-benar menghitung
+    // total sisa waktunya.
+    if (hours > 0) {
+      return "$hours:$minutes:$seconds";
+    }
     return "$minutes:$seconds";
+  }
+
+  /// Format total jam (Estimasi_Pengerjaan) jadi "X hari Y jam".
+  static String formatEstimasiPengerjaan(int totalJam) {
+    final hari = totalJam ~/ 24;
+    final jam = totalJam % 24;
+    if (hari > 0 && jam > 0) return '$hari hari $jam jam';
+    if (hari > 0) return '$hari hari';
+    return '$jam jam';
   }
 
   static String formatCaption(String text) {

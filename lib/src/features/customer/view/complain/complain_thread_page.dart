@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/utils/attachment_compressor.dart';
@@ -19,6 +22,9 @@ import 'package:mpjnew/src/features/customer/widget/attachment_preview_strip.dar
 import 'package:mpjnew/src/features/customer/widget/complain_attachment_picker.dart';
 import 'package:mpjnew/src/features/customer/widget/complain_avatar.dart';
 import 'package:mpjnew/src/features/customer/widget/complain_bubble.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/linkified_text.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 
 /// Thread diskusi Complain (StackOverflow-style: judul + daftar pesan flat +
@@ -50,17 +56,36 @@ class ComplainThreadPage extends StatefulWidget {
   State<ComplainThreadPage> createState() => _ComplainThreadPageState();
 }
 
-class _ComplainThreadPageState extends State<ComplainThreadPage> {
+class _ComplainThreadPageState extends State<ComplainThreadPage>
+    with WidgetsBindingObserver {
   late final RefreshController _refreshController;
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<PreparedAttachment> _pendingAttachments = [];
+  late final Widget _refreshHeader = buildRefreshHeader();
+
   bool _openingOrder = false;
   bool _isPreparingAttachments = false;
   String? _vendorPhotoUrl;
   bool _vendorPhotoTried = false;
   bool _headerExpanded = false;
   bool _didInitialScroll = false;
+  // Muncul begitu user scroll menjauh dari atas -- tombol pintas untuk
+  // balik melihat lagi permasalahan utama di header card (index 0),
+  // analog dengan FAB scroll-to-bottom di room_chat_page.dart tapi arah
+  // sebaliknya (ke atas, bukan ke pesan terbaru).
+  bool _showScrollToHeader = false;
+  // Muncul begitu user scroll menjauh dari bawah -- FAB scroll-to-bottom,
+  // gaya sama persis dengan yang di room_chat_page.dart.
+  bool _showScrollToBottom = false;
+
+  // -1 = belum pernah ada data (initial load ditangani terpisah oleh
+  // _scheduleInitialScrollToBottom). Dipakai untuk mendeteksi pesan baru
+  // yang masuk lewat provider (drain saat resume, push FCM foreground,
+  // atau pull-to-refresh) supaya list auto-scroll ke bawah -- sebelum ini,
+  // pesan baru itu memang sudah ada di data tapi tidak kelihatan sampai
+  // ada rebuild lain yang kebetulan ikut scroll (mis. kirim pesan sendiri).
+  int _lastDetailsCount = -1;
 
   // Diambil lewat context.read di didChangeDependencies (aman) dan dipakai
   // lagi di dispose() -- memanggil context.read langsung di dispose() bisa
@@ -71,14 +96,37 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshController = RefreshController(initialRefresh: false);
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    final showHeader = pos.pixels > 300;
+    final showBottom = pos.maxScrollExtent - pos.pixels > 300;
+    if (showHeader != _showScrollToHeader ||
+        showBottom != _showScrollToBottom) {
+      setState(() {
+        _showScrollToHeader = showHeader;
+        _showScrollToBottom = showBottom;
+      });
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _complainProvider ??= context.read<ComplainProvider>();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<ComplainProvider>().drainPendingComplainRefetch();
+    }
   }
 
   Future<void> _init() async {
@@ -92,11 +140,21 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
       );
     }
     if (!mounted) return;
+
+    final active = provider.active;
+    if (active != null) {
+      await ComplainProvider.setActiveComplainPref(active.noComplain);
+      // Fire-and-forget: kalau ada pesan yang masuk selagi user di luar app,
+      // ini yang memastikan thread langsung ter-refresh begitu dibuka --
+      // tanpa perlu pull-to-refresh manual.
+      unawaited(provider.drainPendingComplainRefetch());
+    }
+
     // Dijadwalkan sebelum resolve foto vendor (yang bisa kena round-trip
     // API) supaya thread langsung terlihat di posisi bawah tanpa menunggu.
     _scheduleInitialScrollToBottom();
 
-    final noOrder = provider.active?.noOrder ?? widget.noOrder;
+    final noOrder = active?.noOrder ?? widget.noOrder;
     if (noOrder != null && noOrder.isNotEmpty) {
       await _resolveVendorPhoto(noOrder);
     }
@@ -125,6 +183,18 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
     }
   }
 
+  /// Kebalikan dari _scrollToBottom() -- balik ke header card (index 0)
+  /// supaya user bisa lihat lagi permasalahan utama tanpa perlu scroll
+  /// manual dari bawah.
+  void _scrollToHeader() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0.0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   /// Foto vendor tidak ada di payload complain, jadi diambil dari order-nya.
   /// Cache provider dipakai dulu; fetch sekali kalau kosong (kasus masuk
   /// lewat Setting -> Complain tanpa pernah memuat daftar pesanan).
@@ -150,6 +220,11 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollController.removeListener(_onScroll);
+    // Bukan notifyListeners() jadi aman dipanggil sinkron di sini (beda
+    // dengan clearActive() di bawah).
+    ComplainProvider.setActiveComplainPref(null);
     // clearActive() memanggil notifyListeners() -- kalau dijalankan sekarang
     // (masih di frame yang sama saat halaman ini dibongkar/pop), Flutter
     // bisa melempar "setState() called when widget tree was locked" karena
@@ -167,8 +242,12 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
   }
 
   Future<void> _onRefresh() async {
-    await context.read<ComplainProvider>().refreshActive();
-    _refreshController.refreshCompleted();
+    try {
+      await context.read<ComplainProvider>().refreshActive();
+      _refreshController.refreshCompleted();
+    } catch (_) {
+      _refreshController.refreshFailed();
+    }
   }
 
   Future<void> _pickAttachments() async {
@@ -268,6 +347,19 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
     }
   }
 
+  // Sama dengan nomor WA di ComplainMenuAction/HelpFab/SettingPage — kalau
+  // masih ada yang mau ditanyakan selagi lihat thread (termasuk yang sudah
+  // selesai), user bisa langsung hubungi admin, tanpa pesan default (beda
+  // dari HelpFab yang mengirim template pesan).
+  static const _adminWaNumber = '62895353837000';
+
+  Future<void> _contactAdmin() async {
+    final uri = Uri.parse('https://wa.me/$_adminWaNumber');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   void _openImage(BuildContext context, String url) {
     Navigator.of(context).push(MaterialPageRoute(
       fullscreenDialog: true,
@@ -275,100 +367,237 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
     ));
   }
 
+  void _confirmSelesaikan(BuildContext context) {
+    ConfirmDialog.showSelesaikanComplainDialog(
+      context: context,
+      onConfirm: () => _doSelesaikan(context),
+    );
+  }
+
+  Future<void> _doSelesaikan(BuildContext context) async {
+    final provider = context.read<ComplainProvider>();
+    final ok =
+        await provider.closeComplain(hasilAkhir: 'Diselesaikan oleh customer');
+    if (!context.mounted) return;
+    if (ok) {
+      CustomSnackbar.showSuccessSnackbar(
+          context, 'Complain berhasil diselesaikan.');
+    } else {
+      CustomSnackbar.showErrorSnackbar(
+          context, provider.activeError ?? 'Gagal menyelesaikan complain');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
-        title: const Text('Complain',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
-        actions: [
-          Consumer<ComplainProvider>(
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        floatingActionButton: _showScrollToBottom
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: FloatingActionButton.small(
+                  backgroundColor: Constants.primaryColor,
+                  foregroundColor: Colors.white,
+                  tooltip: 'Lihat balasan terbaru',
+                  onPressed: () => _scrollToBottom(animate: true),
+                  child: const Icon(Icons.keyboard_arrow_down),
+                ),
+              )
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        appBar: AppBar(
+          title: Consumer<ComplainProvider>(
             builder: (context, provider, _) {
-              if (!widget.showOrderAction) return const SizedBox.shrink();
-              final noOrder = provider.active?.noOrder;
-              if (noOrder == null) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'Lihat Pesanan',
-                icon: _openingOrder
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.receipt_long_outlined),
-                onPressed:
-                    _openingOrder ? null : () => _openOrderDetail(noOrder),
+              final tracking = provider.active?.noTrackingKomplain;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Complain',
+                      style: TextStyle(
+                          color: Colors.black, fontWeight: FontWeight.bold)),
+                  if (tracking != null && tracking.isNotEmpty)
+                    Text(
+                      'No. $tracking',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.normal,
+                          color: Colors.black54),
+                    ),
+                ],
               );
             },
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Consumer<ComplainProvider>(
-          builder: (context, provider, _) {
-            final active = provider.active;
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 1,
+          actions: [
+            Consumer<ComplainProvider>(
+              builder: (context, provider, _) {
+                if (!widget.showOrderAction) return const SizedBox.shrink();
+                final noOrder = provider.active?.noOrder;
+                if (noOrder == null) return const SizedBox.shrink();
+                return IconButton(
+                  tooltip: 'Lihat Pesanan',
+                  icon: _openingOrder
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.receipt_long_outlined),
+                  onPressed:
+                      _openingOrder ? null : () => _openOrderDetail(noOrder),
+                );
+              },
+            ),
+            Consumer<ComplainProvider>(
+              builder: (context, provider, _) {
+                final active = provider.active;
 
-            if (active == null && provider.isLoadingActive) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (active == null) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    provider.activeError ?? 'Complain tidak ditemukan',
-                    textAlign: TextAlign.center,
+                return PopupMenuButton<String>(
+                  color: Colors.white,
+                  surfaceTintColor: Colors.transparent,
+                  shadowColor: Colors.black26,
+                  popUpAnimationStyle: AnimationStyle(
+                    duration: const Duration(milliseconds: 150),
                   ),
-                ),
-              );
-            }
+                  icon: const Icon(Icons.more_vert, color: Colors.black87),
+                  onSelected: (value) {
+                    if (value == 'selesaikan') _confirmSelesaikan(context);
+                    if (value == 'hubungiAdmin') _contactAdmin();
+                  },
+                  itemBuilder: (context) => [
+                    (active == null || active.isClosed)
+                        ? const PopupMenuItem(
+                            value: 'hubungiAdmin',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FaIcon(
+                                  FontAwesomeIcons.whatsapp,
+                                  color: Color(0xFF25D366),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Hubungi Admin',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const PopupMenuItem(
+                            value: 'selesaikan',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_outline,
+                                    size: 18, color: Constants.primaryColor),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Selesaikan Complain',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+        body: Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            Consumer<ComplainProvider>(
+              builder: (context, provider, _) {
+                final active = provider.active;
 
-            // Pesan pertama sudah ditampilkan di header card, jadi tidak
-            // perlu diulang di list. Urutan kronologis (sudah terurut dari
-            // ComplainModel.fromJson) -- balasan terbaru di paling bawah,
-            // seperti chat pada umumnya. Halaman dibuka langsung scroll ke
-            // situ, lihat _scheduleInitialScrollToBottom().
-            final replies = active.details.length > 1
-                ? active.details.sublist(1)
-                : <ComplainMessageModel>[];
+                if (active == null && provider.isLoadingActive) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (active == null) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        provider.activeError ?? 'Complain tidak ditemukan',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
 
-            final myId = context.watch<UserProvider>().customer?.noId;
+                // Pesan pertama sudah ditampilkan di header card, jadi tidak
+                // perlu diulang di list. Urutan kronologis (sudah terurut dari
+                // ComplainModel.fromJson) -- balasan terbaru di paling bawah,
+                // seperti chat pada umumnya. Halaman dibuka langsung scroll ke
+                // situ, lihat _scheduleInitialScrollToBottom().
+                final replies = active.details.length > 1
+                    ? active.details.sublist(1)
+                    : <ComplainMessageModel>[];
 
-            return Stack(
-              children: [
-                Column(
+                // Pesan baru masuk lewat provider (drain refetch/push FCM/pull-
+                // to-refresh) selagi halaman ini terbuka -- ikut turunkan biar
+                // langsung terlihat, bukan cuma nambah item yang kescroll di
+                // luar layar.
+                if (_lastDetailsCount != -1 &&
+                    active.details.length > _lastDetailsCount) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _scrollToBottom(animate: true));
+                }
+                _lastDetailsCount = active.details.length;
+
+                final myId = context.watch<UserProvider>().customer?.noId;
+
+                // Satu scrollable untuk seluruh halaman (header + balasan) —
+                // dulu header (saat expanded) dan list balasan adalah dua
+                // viewport scroll vertikal independen sekaligus. SmartRefresher
+                // membungkus SELURUH ListView (header di index 0), jadi
+                // pull-to-refresh berlaku dari mana saja termasuk area header di
+                // paling atas, bukan cuma dari dalam list balasan seperti
+                // sebelumnya.
+                return Column(
                   children: [
-                    _buildCollapsedHeaderCard(active),
                     Expanded(
                       child: SmartRefresher(
                         controller: _refreshController,
                         onRefresh: _onRefresh,
-                        header: buildRefreshHeader(),
-                        child: replies.isEmpty
-                            ? ListView(
-                                children: const [
-                                  SizedBox(height: 80),
-                                  Center(child: Text('Belum ada balasan')),
-                                ],
-                              )
-                            : ListView.builder(
-                                controller: _scrollController,
-                                padding:
-                                    const EdgeInsets.only(top: 8, bottom: 8),
-                                itemCount: replies.length,
-                                itemBuilder: (context, i) {
-                                  final m = replies[i];
-                                  return ComplainBubble(
-                                    message: m,
-                                    vendorPhotoUrl: _vendorPhotoUrl,
-                                    currentUserId: myId,
-                                  );
-                                },
-                              ),
+                        header: _refreshHeader,
+                        // ListView biasa, BUKAN CustomScrollView+slivers -- sudah
+                        // terbukti stabil dengan SmartRefresher di halaman room
+                        // chat (lihat room_chat_page.dart). CustomScrollView
+                        // (dengan SliverFillRemaining atau tidak) tetap membuat
+                        // halaman ini tidak bisa discroll lagi setelah refresh
+                        // pertama; ListView.builder tidak punya masalah itu.
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          // +1 untuk header di index 0. Kalau replies kosong,
+                          // index 1 diisi placeholder "Belum ada balasan".
+                          itemCount: (replies.isEmpty ? 1 : replies.length) + 1,
+                          itemBuilder: (context, i) {
+                            if (i == 0) return _buildHeaderCard(active);
+                            if (replies.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.only(top: 40, bottom: 200),
+                                child: Center(child: Text('Belum ada balasan')),
+                              );
+                            }
+                            final m = replies[i - 1];
+                            return ComplainBubble(
+                              message: m,
+                              vendorPhotoUrl: _vendorPhotoUrl,
+                              currentUserId: myId,
+                            );
+                          },
+                        ),
                       ),
                     ),
                     if (active.isClosed)
@@ -383,39 +612,61 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
                       _buildInputArea(provider),
                     ],
                   ],
-                ),
-                // Header lengkap tampil sebagai overlay yang menimpa thread
-                // (bukan mendorong layout) supaya posisi list tidak berubah.
-                if (_headerExpanded) ...[
-                  Positioned.fill(
+                );
+              },
+            ),
+            !_showScrollToHeader
+                ? const SizedBox.shrink()
+                : Positioned(
+                    top: 12,
                     child: GestureDetector(
-                      onTap: () => setState(() => _headerExpanded = false),
-                      child: Container(color: Colors.black.withOpacity(0.35)),
+                      onTap: () => _scrollToHeader(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Constants.primaryColor.withOpacity(0.25)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Lihat Permasalahan Utama",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.keyboard_arrow_up_rounded,
+                                size: 14, color: Colors.black.withOpacity(0.6)),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildExpandedHeaderOverlay(active),
-                  ),
-                ],
-              ],
-            );
-          },
+                  )
+          ],
         ),
       ),
     );
   }
 
   /// Baris avatar + nama pengirim + tanggal + chip status — dipakai sama
-  /// persis di versi ringkas maupun overlay lengkap. [onClose] hanya diisi
-  /// di versi overlay (tombol untuk menutupnya).
+  /// persis di versi ringkas maupun versi diperluas.
   Widget _buildHeaderTopRow(
     ComplainModel active,
-    ComplainMessageModel? firstChat, {
-    VoidCallback? onClose,
-  }) {
+    ComplainMessageModel? firstChat,
+  ) {
     final closed = active.isClosed;
     final color = closed ? Colors.green : Colors.orange;
 
@@ -489,16 +740,6 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
                 ],
               ),
             ),
-            if (onClose != null)
-              InkWell(
-                onTap: onClose,
-                borderRadius: BorderRadius.circular(16),
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 4),
-                  child:
-                      Icon(Icons.close_rounded, size: 20, color: Colors.grey),
-                ),
-              ),
           ],
         ),
       ],
@@ -521,157 +762,103 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
     return painter.didExceedMaxLines;
   }
 
-  /// Versi ringkas — selalu tampil di atas thread, maksimal 3 baris pesan.
-  Widget _buildCollapsedHeaderCard(ComplainModel active) {
+  /// Header complain — sekarang jadi item pertama (index 0) di ListView yang
+  /// sama dengan balasan, bukan sibling Column+Expanded terhadap list
+  /// balasan seperti dulu. Karena itu tidak perlu lagi dibatasi tinggi
+  /// maksimum atau diberi scrollable sendiri saat expanded -- box ini boleh
+  /// setinggi apapun, ListView di luar yang menampungnya dengan scroll.
+  /// (Dulu ada ConstrainedBox+SingleChildScrollView di sini khusus untuk
+  /// mencegah RenderFlex overflow saat header dan list berebut tinggi tetap
+  /// yang sama -- mode kegagalan itu tidak mungkin lagi terjadi di sini.)
+  Widget _buildHeaderCard(ComplainModel active) {
+    final closed = active.isClosed;
     final firstChat = active.details.firstOrNull;
     final hasMore = _headerHasMore(firstChat);
 
     return GestureDetector(
-      onTap: hasMore ? () => setState(() => _headerExpanded = true) : null,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderTopRow(active, firstChat),
-            const SizedBox(height: 12),
-            Text(
-              active.judul.isEmpty ? 'Complain' : active.judul,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 12),
-            if (firstChat != null)
-              Text(
-                firstChat.message,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14),
-              ),
-            if (hasMore) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Lihat selengkapnya',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Constants.primaryColor,
-                ),
-              ),
+      onTap: (!_headerExpanded && hasMore)
+          ? () => setState(() => _headerExpanded = true)
+          : null,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
             ],
-          ],
+          ),
+          child: _buildHeaderBody(active, firstChat, hasMore, closed),
         ),
       ),
     );
   }
 
-  /// Versi lengkap — tampil sebagai overlay yang menimpa thread (lihat
-  /// build()), bisa discroll sendiri kalau isinya panjang (teks + lampiran),
-  /// dan tidak memindahkan posisi scroll daftar balasan di baliknya.
-  Widget _buildExpandedHeaderOverlay(ComplainModel active) {
-    final closed = active.isClosed;
-    final firstChat = active.details.firstOrNull;
-    final maxHeight = MediaQuery.of(context).size.height * 0.7;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      child: Material(
-        elevation: 12,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeaderTopRow(
-                  active,
-                  firstChat,
-                  onClose: () => setState(() => _headerExpanded = false),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  active.judul.isEmpty ? 'Complain' : active.judul,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                if (firstChat != null) ...[
-                  Text(
-                    firstChat.message,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  if (firstChat.attachments.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    // Gambar pertama tampil besar sebagai bukti utama.
-                    GestureDetector(
-                      onTap: () =>
-                          _openImage(context, firstChat.attachments.first.url),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: CachedNetworkImage(
-                          imageUrl: firstChat.attachments.first.url,
-                          width: double.infinity,
-                          height: 200,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => _mediaBox(loading: true),
-                          errorWidget: (_, __, ___) => _mediaBox(broken: true),
-                        ),
-                      ),
-                    ),
-                    // Sisanya sebagai thumbnail — sama seperti ComplainBubble.
-                    if (firstChat.attachments.length > 1) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children:
-                            firstChat.attachments.skip(1).map((attachment) {
-                          return GestureDetector(
-                            onTap: () => _openImage(context, attachment.url),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: CachedNetworkImage(
-                                imageUrl: attachment.url,
-                                width: 84,
-                                height: 84,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) =>
-                                    _mediaBox(loading: true),
-                                errorWidget: (_, __, ___) =>
-                                    _mediaBox(broken: true),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ],
-                ],
-                if (closed && active.tglClosed != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Ditutup pada ${DateFormat('dd MMM yyyy, HH:mm').format(active.tglClosed!.toLocal())}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ],
+  Widget _buildHeaderBody(
+    ComplainModel active,
+    ComplainMessageModel? firstChat,
+    bool hasMore,
+    bool closed,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildHeaderTopRow(active, firstChat),
+        const SizedBox(height: 12),
+        Text(
+          active.judul.isEmpty ? 'Complain' : active.judul,
+          maxLines: _headerExpanded ? null : 1,
+          overflow:
+              _headerExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const SizedBox(height: 12),
+        if (firstChat != null)
+          LinkifiedText(
+            text: firstChat.message,
+            maxLines: _headerExpanded ? null : 3,
+            overflow:
+                _headerExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14),
+          ),
+        if (_headerExpanded &&
+            firstChat != null &&
+            firstChat.attachments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _AttachmentCarousel(
+            attachments: firstChat.attachments,
+            onTapImage: (url) => _openImage(context, url),
+          ),
+        ],
+        if (_headerExpanded && closed && active.tglClosed != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Ditutup pada ${DateFormat('dd MMM yyyy, HH:mm').format(active.tglClosed!.toLocal())}',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+        if (hasMore || _headerExpanded) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => setState(() => _headerExpanded = !_headerExpanded),
+            child: Text(
+              _headerExpanded ? 'Lihat lebih sedikit' : 'Lihat selengkapnya',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Constants.primaryColor,
+              ),
             ),
           ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 
@@ -697,23 +884,6 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _mediaBox({bool loading = false, bool broken = false}) {
-    return Container(
-      width: 84,
-      height: 84,
-      color: Colors.grey.shade200,
-      child: Center(
-        child: broken
-            ? Icon(Icons.broken_image_outlined, color: Colors.grey.shade400)
-            : const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
       ),
     );
   }
@@ -792,21 +962,116 @@ class _ComplainThreadPageState extends State<ComplainThreadPage> {
   }
 }
 
+/// Galeri lampiran header complain — slidable (bukan tumpukan baris),
+/// dengan dot indicator saat lampiran lebih dari satu.
+class _AttachmentCarousel extends StatefulWidget {
+  const _AttachmentCarousel({
+    required this.attachments,
+    required this.onTapImage,
+  });
+
+  final List<ComplainAttachmentModel> attachments;
+  final void Function(String url) onTapImage;
+
+  @override
+  State<_AttachmentCarousel> createState() => _AttachmentCarouselState();
+}
+
+class _AttachmentCarouselState extends State<_AttachmentCarousel> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final attachments = widget.attachments;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            height: 200,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: attachments.length,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              itemBuilder: (context, i) {
+                final attachment = attachments[i];
+                return GestureDetector(
+                  onTap: () => widget.onTapImage(attachment.url),
+                  child: CachedNetworkImage(
+                    imageUrl: attachment.url,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _placeholder(loading: true),
+                    errorWidget: (_, __, ___) => _placeholder(broken: true),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        if (attachments.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(attachments.length, (i) {
+              final active = i == _currentPage;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: active ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: active ? Constants.primaryColor : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _placeholder({bool loading = false, bool broken = false}) {
+    return Container(
+      color: Colors.grey.shade200,
+      child: Center(
+        child: broken
+            ? Icon(Icons.broken_image_outlined, color: Colors.grey.shade400)
+            : const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+      ),
+    );
+  }
+}
+
 class _FullscreenImageViewer extends StatelessWidget {
   final String url;
   const _FullscreenImageViewer({required this.url});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+          ),
         ),
       ),
     );

@@ -208,7 +208,7 @@ class PaymentNotificationHandler {
   ) async {
     try {
       final statusBayar = pesanan.statusBayar?.toLowerCase() ?? '';
-      final orderRef = pesanan.noTrackingPesanan ?? pesanan.noBukti;
+      final orderRef = pesanan.noTrackingPesanan ?? "";
 
       final _NotifContent content = _resolveContent(statusBayar, orderRef);
 
@@ -232,7 +232,7 @@ class PaymentNotificationHandler {
           contentTitle: content.title,
           summaryText: pesanan.metodeBayar != null
               ? 'Via ${pesanan.metodeBayar}'
-              : 'Pesanan #${pesanan.noBukti}',
+              : 'Pesanan #${pesanan.noTrackingPesanan}',
         ),
         actions: _getActions(statusBayar),
       );
@@ -252,7 +252,7 @@ class PaymentNotificationHandler {
       });
 
       final notifId = NotificationHelper.generateNotificationId(
-        'payment_${pesanan.noBukti}',
+        'payment_${pesanan.noTrackingPesanan}',
       );
 
       await notificationsPlugin.show(

@@ -39,62 +39,64 @@ class _ComplainListPageState extends State<ComplainListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
-        title: const Text('Complain',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: Consumer<ComplainProvider>(
-          builder: (context, provider, _) {
-            if (!_hasLoaded ||
-                (provider.isLoadingHeaders && provider.headers.isEmpty)) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (provider.headersError != null && provider.headers.isEmpty) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 80),
-                  Center(
-                    child: Text(
-                      provider.headersError!,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-              );
-            }
-            if (provider.headers.isEmpty) {
-              return ListView(
-                children: const [
-                  SizedBox(height: 100),
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 32),
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        appBar: AppBar(
+          title: const Text('Complain',
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 1,
+        ),
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: Consumer<ComplainProvider>(
+            builder: (context, provider, _) {
+              if (!_hasLoaded ||
+                  (provider.isLoadingHeaders && provider.headers.isEmpty)) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (provider.headersError != null && provider.headers.isEmpty) {
+                return ListView(
+                  children: [
+                    const SizedBox(height: 80),
+                    Center(
                       child: Text(
-                        'Belum ada complain',
+                        provider.headersError!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                );
+              }
+              if (provider.headers.isEmpty) {
+                return ListView(
+                  children: const [
+                    SizedBox(height: 100),
+                    Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          'Belum ada complain',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(12),
+                itemCount: provider.headers.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => _ComplainHeaderCard(
+                  header: provider.headers[i],
+                ),
               );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: provider.headers.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _ComplainHeaderCard(
-                header: provider.headers[i],
-              ),
-            );
-          },
+            },
+          ),
         ),
       ),
     );

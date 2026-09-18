@@ -308,6 +308,7 @@ class _UlasanDialogState extends State<UlasanDialog> {
                         controller: _ulasanController,
                         maxLines: 5,
                         maxLength: 500,
+                        autofocus: true,
                         style: const TextStyle(
                           fontSize: 14,
                         ),

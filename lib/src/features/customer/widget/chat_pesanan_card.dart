@@ -69,7 +69,7 @@ class ChatPesananCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Pesanan #${pesanan.noTrackingPesanan ?? pesanan.noBukti}",
+                        "Pesanan #${pesanan.noTrackingPesanan ?? ""}",
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -676,10 +676,18 @@ class ChatPesananCard extends StatelessWidget {
     final orderStatus = pesanan.status?.toLowerCase() ?? '';
     final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
     final bayar = pesanan.statusBayar?.toLowerCase() ?? '';
+    final isPaid = bayar == 'settlement' || bayar == 'capture';
+
+    // Pesanan berbayar tetap boleh dibatalkan selama pengerjaan belum mulai
+    // (dana nanti direfund). Selain itu, jalur berbayar tertutup.
+    if (isPaid &&
+        progressStatus != 'persiapan' &&
+        progressStatus != 'menunggu bayar') {
+      return false;
+    }
+
     return orderStatus != 'batal' &&
         orderStatus != 'expired' &&
-        bayar != 'settlement' &&
-        bayar != 'capture' &&
         progressStatus != 'selesai' &&
         progressStatus != 'dibatalkan';
   }

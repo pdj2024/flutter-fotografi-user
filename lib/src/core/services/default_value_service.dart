@@ -16,6 +16,7 @@ class DefaultValueService {
     try {
       final response = await _client.get(
         '/$controller/getAll',
+        queryParameters: {'no_id': idCompany},
       );
 
       if (response.statusCode == 200) {
@@ -49,7 +50,10 @@ class DefaultValueService {
 
   Future<AppConfigModel> getAppConfig() async {
     try {
-      final response = await _client.get('/$controller/getAll');
+      final response = await _client.get(
+        '/$controller/getAll',
+        queryParameters: {'no_id': idCompany},
+      );
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;

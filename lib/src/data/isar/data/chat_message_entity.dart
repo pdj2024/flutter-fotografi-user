@@ -82,6 +82,8 @@ class EmbeddedPenawaran {
   DateTime tglRealisasi = DateTime.now();
   DateTime createdAt = DateTime.now();
   DateTime? updatedAt;
+  int estimasiPengerjaan = 0;
+  DateTime? expiredAt;
 
   EmbeddedPenawaran();
 
@@ -103,7 +105,9 @@ class EmbeddedPenawaran {
     ..deskripsi = m.deskripsi
     ..tglRealisasi = m.tglRealisasi
     ..createdAt = m.createdAt
-    ..updatedAt = m.updatedAt;
+    ..updatedAt = m.updatedAt
+    ..estimasiPengerjaan = m.estimasiPengerjaan
+    ..expiredAt = m.expiredAt;
 
   factory EmbeddedPenawaran.fromJson(Map<String, dynamic> json) =>
       EmbeddedPenawaran()
@@ -130,6 +134,10 @@ class EmbeddedPenawaran {
             : DateTime.now()
         ..updatedAt = json['updatedAt'] != null
             ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
+            : null
+        ..estimasiPengerjaan = (json['estimasiPengerjaan'] as int?) ?? 0
+        ..expiredAt = json['expiredAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['expiredAt'] as int)
             : null;
 
   Map<String, dynamic> toJson() => {
@@ -151,6 +159,8 @@ class EmbeddedPenawaran {
         'tglRealisasi': tglRealisasi.millisecondsSinceEpoch,
         'createdAt': createdAt.millisecondsSinceEpoch,
         'updatedAt': updatedAt?.millisecondsSinceEpoch,
+        'estimasiPengerjaan': estimasiPengerjaan,
+        'expiredAt': expiredAt?.millisecondsSinceEpoch,
       };
 
   PenawaranModel toModel() => PenawaranModel(
@@ -172,6 +182,8 @@ class EmbeddedPenawaran {
         tglRealisasi: tglRealisasi,
         createdAt: createdAt,
         updatedAt: updatedAt,
+        estimasiPengerjaan: estimasiPengerjaan,
+        expiredAt: expiredAt,
       );
 
   bool get isNotEmpty => noId.isNotEmpty;
@@ -219,6 +231,8 @@ class EmbeddedPesanan {
   bool? inclPpn;
   int? totPpn;
   int grandTotal = 0;
+  int estimasiPengerjaan = 0;
+  DateTime? tglPengerjaanMax;
   DateTime? createdAt;
   DateTime? updatedAt;
 
@@ -258,6 +272,8 @@ class EmbeddedPesanan {
     ..inclPpn = m.inclPpn
     ..totPpn = m.totPpn
     ..grandTotal = m.grandTotal
+    ..estimasiPengerjaan = m.estimasiPengerjaan
+    ..tglPengerjaanMax = m.tglPengerjaanMax
     ..createdAt = m.createdAt
     ..updatedAt = m.updatedAt;
 
@@ -300,6 +316,10 @@ class EmbeddedPesanan {
         ..inclPpn = json['inclPpn'] as bool?
         ..totPpn = json['totPpn'] as int?
         ..grandTotal = (json['grandTotal'] as int?) ?? 0
+        ..estimasiPengerjaan = (json['estimasiPengerjaan'] as int?) ?? 0
+        ..tglPengerjaanMax = json['tglPengerjaanMax'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['tglPengerjaanMax'] as int)
+            : null
         ..createdAt = json['createdAt'] != null
             ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
             : null
@@ -341,6 +361,8 @@ class EmbeddedPesanan {
         'inclPpn': inclPpn,
         'totPpn': totPpn,
         'grandTotal': grandTotal,
+        'estimasiPengerjaan': estimasiPengerjaan,
+        'tglPengerjaanMax': tglPengerjaanMax?.millisecondsSinceEpoch,
         'createdAt': createdAt?.millisecondsSinceEpoch,
         'updatedAt': updatedAt?.millisecondsSinceEpoch,
       };
@@ -379,6 +401,8 @@ class EmbeddedPesanan {
         inclPpn: inclPpn,
         totPpn: totPpn,
         grandTotal: grandTotal,
+        estimasiPengerjaan: estimasiPengerjaan,
+        tglPengerjaanMax: tglPengerjaanMax,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

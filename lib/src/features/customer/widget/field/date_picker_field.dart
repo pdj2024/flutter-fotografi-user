@@ -11,6 +11,11 @@ class DatePickerField extends StatefulWidget {
   final String? errorMessage;
   final bool isPenawaran;
 
+  /// Override eksplisit untuk minDate picker. Kalau diisi, ini menang atas
+  /// default dari [isPenawaran] (dipakai mis. saat tanggal harus setelah
+  /// suatu deadline tertentu, bukan sekadar "hari ini").
+  final DateTime? minDate;
+
   final Function(DateTime) onDateSelected;
 
   const DatePickerField({
@@ -20,6 +25,7 @@ class DatePickerField extends StatefulWidget {
     required this.onDateSelected,
     this.isPenawaran = false,
     this.errorMessage,
+    this.minDate,
   });
 
   @override
@@ -187,7 +193,8 @@ class _DatePickerFieldState extends State<DatePickerField> {
                             selectionMode: DateRangePickerSelectionMode.single,
                             showNavigationArrow: true,
                             initialSelectedDate: initialDate ?? DateTime(2000),
-                            minDate: widget.isPenawaran ? DateTime.now() : null,
+                            minDate: widget.minDate ??
+                                (widget.isPenawaran ? DateTime.now() : null),
                             maxDate: widget.isPenawaran ? null : DateTime.now(),
                             onSelectionChanged: (args) {
                               tempPicked = args.value;

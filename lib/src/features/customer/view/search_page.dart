@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,6 +76,7 @@ class _SearchPageState extends State<SearchPage>
     _fadeController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _batchFailsafeTimer?.cancel();
     super.dispose();
   }
 
@@ -119,6 +122,8 @@ class _SearchPageState extends State<SearchPage>
         hargaPaketMin: parseNumber(filters['min_price']),
         hargaPaketMax: parseNumber(filters['max_price']),
         kota: filters['id_lokasi'],
+        orderBy: 'Tgl_Created',
+        orderDir: 'desc',
       );
 
       if (!mounted) return; // ← add — widget mungkin dispose saat await
@@ -129,12 +134,28 @@ class _SearchPageState extends State<SearchPage>
           _hasMoreData = pList.length >= _itemsPerPage;
           _currentPage++;
         });
+        // Lanjutkan antrean render untuk item baru yang baru ditambahkan —
+        // batch sebelumnya mungkin sudah selesai semua jadi tidak ada trigger
+        // otomatis lain yang akan membukanya.
+        _unlockNextImageBatch();
       } else {
-        setState(() => portofolioList = pList);
+        setState(() {
+          portofolioList = pList;
+          // PortofolioService.getAll() tidak pernah menerima/mengirim
+          // parameter page/offset ke backend (lihat _currentPage di atas —
+          // dihitung tapi tidak pernah dipakai di query), dan backend tidak
+          // membalas metadata pagination apa pun (total/has_more). Jadi
+          // "halaman berikutnya" sebenarnya adalah request YANG SAMA PERSIS
+          // dengan yang pertama -- kalau _hasMoreData dibiarkan true, scroll
+          // ke bawah akan memicu fetch ulang dataset yang identik dan
+          // di-addAll() begitu saja, menghasilkan data dobel. Endpoint ini
+          // tidak mendukung pagination sama sekali, jadi matikan trigger
+          // load-more permanen setelah load pertama.
+          _hasMoreData = false;
+        });
         _fadeController.forward();
+        _resetImageQueue();
       }
-
-      _precacheImages();
     } catch (e) {
       if (!mounted) return; // ← add
       setState(() => errorPorto = 'Gagal memuat portofolio');
@@ -147,15 +168,55 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
-  void _precacheImages() {
-    for (final porto in portofolioList.take(12)) {
-      if (porto.mediaUrls.isNotEmpty) {
-        final url = porto.mediaUrls[0].idMedia;
-        if (url != null && url.isNotEmpty) {
-          precacheImage(CachedNetworkImageProvider(url), context)
-              .catchError((_) {});
-        }
-      }
+  // ─────────────────────────────────────────────────────────────
+  // ANTREAN RENDER GAMBAR — 4 gambar per cycle, berurutan sesuai
+  // urutan hasil (orderBy=Tgl_Created&orderDir=desc dari API).
+  //
+  // Root cause lambatnya grid: GridView.builder di sini pakai
+  // shrinkWrap+NeverScrollableScrollPhysics, jadi SEMUA card dibangun
+  // sekaligus begitu data datang — bukan lazy per-scroll. Itu artinya
+  // semua card langsung menembak CachedNetworkImage-nya masing-masing
+  // secara bersamaan (bisa puluhan sekaligus), berebut bandwidth di
+  // koneksi seluler walau tiap gambar sendiri cuma ~90ms di kondisi
+  // normal. Antrean ini membatasi berapa banyak gambar yang BOLEH
+  // benar-benar mulai fetch dalam satu waktu — card yang belum
+  // "unlocked" cuma menampilkan shimmer, tidak memicu network request
+  // sama sekali sampai gilirannya tiba.
+  static const int _imageBatchSize = 4;
+  int _unlockedImageCount = 0;
+  int _pendingInBatch = 0;
+  Timer? _batchFailsafeTimer;
+
+  void _resetImageQueue() {
+    _batchFailsafeTimer?.cancel();
+    _unlockedImageCount = 0;
+    _pendingInBatch = 0;
+    _unlockNextImageBatch();
+  }
+
+  void _unlockNextImageBatch() {
+    if (_unlockedImageCount >= portofolioList.length) return;
+    final newCount =
+        (_unlockedImageCount + _imageBatchSize).clamp(0, portofolioList.length);
+    _pendingInBatch = newCount - _unlockedImageCount;
+    if (mounted) setState(() => _unlockedImageCount = newCount);
+
+    _batchFailsafeTimer?.cancel();
+    // Failsafe: kalau ada gambar di batch ini yang macet/sangat lambat,
+    // tetap lanjut ke batch berikutnya setelah beberapa detik supaya
+    // antrean tidak berhenti total gara-gara satu request yang gagal diam.
+    _batchFailsafeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) _unlockNextImageBatch();
+    });
+  }
+
+  /// Dipanggil oleh _PortoCard setiap gambarnya selesai — sukses atau
+  /// gagal — supaya kegagalan satu gambar tidak menyumbat antrean.
+  void _onCardImageSettled() {
+    _pendingInBatch--;
+    if (_pendingInBatch <= 0) {
+      _batchFailsafeTimer?.cancel();
+      _unlockNextImageBatch();
     }
   }
 
@@ -193,67 +254,69 @@ class _SearchPageState extends State<SearchPage>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F3),
-      body: Stack(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: RefreshIndicator(
-              onRefresh: _doRefresh,
-              color: Constants.primaryColor,
-              child: ListView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
-                children: [
-                  // Search bar
-                  _buildSearchBar(),
-
-                  // Header row
-                  _buildHeaderRow(),
-
-                  // Content body — satu widget, kondisi di dalam
-                  _buildContentBody(),
-
-                  // Load more indicator
-                  if (_isLoadingMore)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Constants.primaryColor,
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F3),
+        body: Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: RefreshIndicator(
+                onRefresh: _doRefresh,
+                color: Constants.primaryColor,
+                child: ListView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  children: [
+                    // Search bar
+                    _buildSearchBar(),
+      
+                    // Header row
+                    _buildHeaderRow(),
+      
+                    // Content body — satu widget, kondisi di dalam
+                    _buildContentBody(),
+      
+                    // Load more indicator
+                    if (_isLoadingMore)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Constants.primaryColor,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-
-                  const SizedBox(height: 48),
-                ],
+      
+                    const SizedBox(height: 48),
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Filter overlay
-          if (_showFilterOverlay)
-            Positioned.fill(
-              child: FilterOverlay(
-                selectedCategory: filters['id_kategori'] ?? '',
-                selectedLocation: filters['id_lokasi'] ?? '',
-                selectedPhotographer: filters['id_vendor'] ?? '',
-                usernamePhotographer: filters['username_vendor'] ?? '',
-                minPrice: (filters['min_price'] ?? '').toString(),
-                maxPrice: (filters['max_price'] ?? '').toString(),
-                onApply: (f) async => applyFilter(f),
-                onReset: (_) async => applyFilter({}),
-                onClose: () => setState(() => _showFilterOverlay = false),
+      
+            // Filter overlay
+            if (_showFilterOverlay)
+              Positioned.fill(
+                child: FilterOverlay(
+                  selectedCategory: filters['id_kategori'] ?? '',
+                  selectedLocation: filters['id_lokasi'] ?? '',
+                  selectedPhotographer: filters['id_vendor'] ?? '',
+                  usernamePhotographer: filters['username_vendor'] ?? '',
+                  minPrice: (filters['min_price'] ?? '').toString(),
+                  maxPrice: (filters['max_price'] ?? '').toString(),
+                  onApply: (f) async => applyFilter(f),
+                  onReset: (_) async => applyFilter({}),
+                  onClose: () => setState(() => _showFilterOverlay = false),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -462,6 +525,8 @@ class _SearchPageState extends State<SearchPage>
             final porto = portofolioList[i];
             return _PortoCard(
               porto: porto,
+              isUnlocked: i < _unlockedImageCount,
+              onImageSettled: _onCardImageSettled,
               onTap: () {
                 HapticFeedback.selectionClick();
                 ctx.read<PortofolioProvider>().setSelectedPortofolio(porto);
@@ -650,26 +715,54 @@ class _SearchPageState extends State<SearchPage>
 //   └─────────────────────┘
 // ═══════════════════════════════════════════════════════════════
 
-class _PortoCard extends StatelessWidget {
+class _PortoCard extends StatefulWidget {
   final PortofolioModel porto;
+  final bool isUnlocked;
+  final VoidCallback onImageSettled;
   final VoidCallback onTap;
   final VoidCallback onVendorTap;
 
   const _PortoCard({
     required this.porto,
+    required this.isUnlocked,
+    required this.onImageSettled,
     required this.onTap,
     required this.onVendorTap,
   });
+
+  @override
+  State<_PortoCard> createState() => _PortoCardState();
+}
+
+class _PortoCardState extends State<_PortoCard> {
+  bool _settled = false;
+
+  PortofolioModel get porto => widget.porto;
 
   String get _firstImageUrl =>
       porto.mediaUrls.isNotEmpty ? (porto.mediaUrls[0].idMedia ?? '') : '';
 
   bool get _hasMultiple => porto.mediaUrls.length > 1;
 
+  /// Panggil sekali saja per card — sukses maupun gagal — supaya satu
+  /// gambar tidak menyumbat antrean render halaman.
+  void _notifySettledOnce() {
+    if (_settled) return;
+    _settled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onImageSettled();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_firstImageUrl.isEmpty) {
+      // Tidak ada gambar sama sekali — bukan "sedang loading", jadi jangan
+      // tahan antrean menunggu sesuatu yang tidak akan pernah datang.
+      _notifySettledOnce();
+    }
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -692,17 +785,30 @@ class _PortoCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _firstImageUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: _firstImageUrl,
-                          fit: BoxFit.cover,
-                          maxWidthDiskCache: 600,
-                          memCacheWidth: 400,
-                          fadeInDuration: const Duration(milliseconds: 200),
-                          placeholder: (_, __) => const _ImgShimmer(),
-                          errorWidget: (_, __, ___) => _imgFallback(),
-                        )
-                      : _imgFallback(),
+                  if (_firstImageUrl.isEmpty)
+                    _imgFallback()
+                  else if (!widget.isUnlocked)
+                    // Belum giliran antrean — jangan bangun CachedNetworkImage
+                    // sama sekali, supaya benar-benar TIDAK ada network
+                    // request yang tertembak untuk card ini dulu.
+                    const _ImgShimmer()
+                  else
+                    CachedNetworkImage(
+                      imageUrl: _firstImageUrl,
+                      fit: BoxFit.cover,
+                      maxWidthDiskCache: 600,
+                      memCacheWidth: 400,
+                      fadeInDuration: const Duration(milliseconds: 200),
+                      placeholder: (_, __) => const _ImgShimmer(),
+                      imageBuilder: (ctx, imageProvider) {
+                        _notifySettledOnce();
+                        return Image(image: imageProvider, fit: BoxFit.cover);
+                      },
+                      errorWidget: (_, __, ___) {
+                        _notifySettledOnce();
+                        return _imgFallback();
+                      },
+                    ),
 
                   // Gradient bawah tipis untuk kedalaman
                   Positioned.fill(
@@ -758,7 +864,7 @@ class _PortoCard extends StatelessWidget {
             // ── Footer vendor ────────────────────────────────
             Expanded(
               child: GestureDetector(
-                onTap: onVendorTap,
+                onTap: widget.onVendorTap,
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding:

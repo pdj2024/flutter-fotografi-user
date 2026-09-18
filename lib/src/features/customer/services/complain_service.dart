@@ -52,8 +52,15 @@ class ComplainService {
   /// GET /complain/get-header — daftar ringkas Complain milik satu user
   /// (dipakai halaman list, mis. menu "Complain" di Setting). Tanpa
   /// `status`, balikin semua (aktif + selesai).
+  ///
+  /// `noComplain` opsional — filter ke satu complain spesifik. Dipakai
+  /// ComplainProvider.closeComplain() untuk membaca field lengkap
+  /// (Prioritas/Assigned_To/Hasil_Akhir/dll, yang tidak ada di ComplainModel
+  /// dari get-group) sebelum PUT update-header, karena endpoint itu
+  /// full-replace -- field yang tidak dikirim akan ditimpa kosong.
   Future<List<ComplainHeaderModel>> getHeader({
     required String senderId,
+    String? noComplain,
     String? status,
     String? orderBy,
     String? orderDir,
@@ -63,6 +70,8 @@ class ComplainService {
         '/$controller/get-header',
         queryParameters: {
           'sender_id': senderId,
+          if (noComplain != null && noComplain.isNotEmpty)
+            'no_complain': noComplain,
           if (status != null && status.isNotEmpty) 'status': status,
           if (orderBy != null && orderBy.isNotEmpty) 'orderby': orderBy,
           if (orderDir != null && orderDir.isNotEmpty) 'orderdir': orderDir,
@@ -122,6 +131,30 @@ class ComplainService {
       debugPrint('❌ ComplainService.sendMessage: $e');
       debugPrint(s.toString());
       throw Exception('Gagal mengirim $entity: $e');
+    }
+  }
+
+  /// PUT /complain/update-header?no_id={noComplain} — full-replace, jadi
+  /// [body] harus berisi SELURUH field header (bukan cuma yang berubah),
+  /// kalau tidak field yang tidak dikirim akan ditimpa kosong di backend.
+  Future<void> updateHeader({
+    required String noComplain,
+    required Map<String, dynamic> body,
+  }) async {
+    try {
+      final response = await _client.put(
+        '/$controller/update-header',
+        queryParameters: {'no_id': noComplain},
+        body: body,
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Gagal update $entity (${response.statusCode})');
+      }
+    } catch (e, s) {
+      debugPrint('❌ ComplainService.updateHeader: $e');
+      debugPrint(s.toString());
+      throw Exception('Gagal update $entity: $e');
     }
   }
 }

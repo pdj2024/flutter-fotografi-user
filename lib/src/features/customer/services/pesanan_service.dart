@@ -174,4 +174,19 @@ class PesananService {
       throw Exception('Gagal membatalkan pesanan (${response.statusCode})');
     }
   }
+
+  /// BATAL + tandai refund — untuk pesanan yang SUDAH dibayar.
+  ///
+  /// `update()` sengaja dipanggil DULU: `toJsonUpdate()` ikut mengirim
+  /// `status`, sehingga kalau `batal()` jalan lebih dulu, model di memori
+  /// masih `aktif` dan PUT berikutnya justru mengembalikan status itu —
+  /// membatalkan pembatalannya. Dengan urutan ini, status yang dikirim
+  /// masih nilai server yang benar, dan kalau `batal()` gagal, yang tersisa
+  /// hanya pesanan aktif ber-`tglRefund` — terlihat dan bisa diulang.
+  Future<DateTime> batalDenganRefund(PesananModel model) async {
+    final now = DateTime.now().toUtc();
+    await update(model.copyWith(tglRefund: now));
+    await batal(model.noBukti);
+    return now;
+  }
 }

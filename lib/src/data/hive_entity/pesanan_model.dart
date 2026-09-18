@@ -133,8 +133,28 @@ class PesananModel {
   @HiveField(34)
   final DateTime? updatedAt;
 
-  @HiveField(35)
+  // defaultValue wajib untuk field non-nullable yang ditambahkan belakangan:
+  // record cache lama tidak punya index ini, dan tanpa default generator
+  // menghasilkan `fields[n] as int` yang crash saat membaca null.
+  @HiveField(35, defaultValue: 0)
   final int revisi;
+
+  @HiveField(36, defaultValue: 0)
+  final int estimasiPengerjaan;
+
+  @HiveField(37)
+  final DateTime? tglPengerjaanMax;
+
+  // =======================
+  // REFUND
+  // =======================
+  /// Diisi saat customer membatalkan pesanan yang sudah dibayar.
+  @HiveField(38)
+  final DateTime? tglRefund;
+
+  /// Diisi admin saat dana benar-benar sudah dikembalikan.
+  @HiveField(39)
+  final DateTime? tglRefunded;
 
   PesananModel({
     required this.noBukti,
@@ -173,7 +193,17 @@ class PesananModel {
     this.createdAt,
     this.updatedAt,
     this.revisi = 0,
+    this.estimasiPengerjaan = 0,
+    this.tglPengerjaanMax,
+    this.tglRefund,
+    this.tglRefunded,
   });
+
+  /// Dana sedang dalam proses refund — sudah diajukan tapi belum dikembalikan.
+  bool get isRefundProcessing => tglRefund != null && tglRefunded == null;
+
+  /// Dana sudah dikembalikan ke customer.
+  bool get isRefundDone => tglRefunded != null;
 
   // =======================
   // FROM JSON (RESPONSE API)
@@ -238,6 +268,10 @@ class PesananModel {
       createdAt: parseDate(json['Created_At']),
       updatedAt: parseDate(json['Updated_At']),
       revisi: parseInt(json['Revisi']),
+      estimasiPengerjaan: parseInt(json["Estimasi_Pengerjaan"]),
+      tglPengerjaanMax: parseDate(json["Tgl_Pengerjaan_Max"]),
+      tglRefund: parseDate(json['Tgl_Refund']),
+      tglRefunded: parseDate(json['Tgl_Refunded']),
     );
   }
 
@@ -282,6 +316,10 @@ class PesananModel {
       'Created_At': createdAt?.toIso8601String(),
       'Updated_At': updatedAt?.toIso8601String(),
       'Revisi': revisi,
+      'Estimasi_Pengerjaan': estimasiPengerjaan,
+      'Tgl_Pengerjaan_Max': tglPengerjaanMax?.toIso8601String(),
+      'Tgl_Refund': tglRefund?.toIso8601String(),
+      'Tgl_Refunded': tglRefunded?.toIso8601String(),
     };
   }
 
@@ -304,6 +342,8 @@ class PesananModel {
       'payment_type': metodeBayar,
       'id_payment_gateway': idPaymentGateway,
       'revisi': revisi,
+      'Estimasi_Pengerjaan': estimasiPengerjaan,
+      'Tgl_Pengerjaan_Max': tglPengerjaanMax?.toUtc().toIso8601String(),
     };
   }
 
@@ -320,6 +360,14 @@ class PesananModel {
       'link_url': linkUrl,
       'tgl_realisasi': tglRealisasi.toUtc().toIso8601String(),
       'status': status,
+      // Ikut dikirim ulang agar tidak ditimpa kosong oleh updateHeader —
+      // endpoint ini menulis seluruh kolom yang ada di payload.
+      'revisi': revisi,
+      'Estimasi_Pengerjaan': estimasiPengerjaan,
+      'Tgl_Pengerjaan_Max': tglPengerjaanMax?.toUtc().toIso8601String(),
+      // Key refund lowercase — sesuai kontrak backend.
+      'tgl_refund': tglRefund?.toUtc().toIso8601String(),
+      'tgl_refunded': tglRefunded?.toUtc().toIso8601String(),
     };
   }
 
@@ -363,6 +411,10 @@ class PesananModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? revisi,
+    int? estimasiPengerjaan,
+    DateTime? tglPengerjaanMax,
+    DateTime? tglRefund,
+    DateTime? tglRefunded,
   }) {
     return PesananModel(
       noBukti: noBukti ?? this.noBukti,
@@ -402,6 +454,10 @@ class PesananModel {
       updatedAt: updatedAt ?? this.updatedAt,
       idMediaVendor: idMediaVendor ?? this.idMediaVendor,
       revisi: revisi ?? this.revisi,
+      estimasiPengerjaan: estimasiPengerjaan ?? this.estimasiPengerjaan,
+      tglPengerjaanMax: tglPengerjaanMax ?? this.tglPengerjaanMax,
+      tglRefund: tglRefund ?? this.tglRefund,
+      tglRefunded: tglRefunded ?? this.tglRefunded,
     );
   }
 }

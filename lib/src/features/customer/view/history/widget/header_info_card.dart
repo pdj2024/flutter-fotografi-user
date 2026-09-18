@@ -33,9 +33,10 @@ class HeaderInfoCard extends StatelessWidget {
 
     // Override khusus untuk status persiapan berdasarkan tanggal
     if (haveComplain) {
-      // untuk complain gunakan warna yang sama dengan expired
-      bgColor = _cfg('expired').bgColor;
-      borderColor = _cfg('expired').color;
+      // Complain butuh perhatian lebih dari status lain -- warna oranye-
+      // kemerahan yang lebih kontras/danger daripada palet status biasa.
+      bgColor = const Color(0xFFFFEDE5);
+      borderColor = const Color(0xFFEA580C);
       icon = Icons.report_problem_outlined;
       fullText = 'Complain untuk pesanan ini sedang dalam proses. Tim kami akan segera menindaklanjuti.';
     } else if (status == 'persiapan') {

@@ -89,49 +89,51 @@ class _LegalPageState extends State<LegalPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.black87, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: _bgColor,
-                borderRadius: BorderRadius.circular(9),
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.black87, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: _bgColor,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(_icon, color: _color, size: 18),
               ),
-              child: Icon(_icon, color: _color, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              _title,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-                fontSize: 17,
+              const SizedBox(width: 10),
+              Text(
+                _title,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _isLoading
-                ? _buildLoading()
-                : _error != null
-                    ? _buildError()
-                    : _buildContent(),
-            const SizedBox(height: 32),
-          ],
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              _isLoading
+                  ? _buildLoading()
+                  : _error != null
+                      ? _buildError()
+                      : _buildContent(),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

@@ -266,9 +266,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
+  /// Pesanan yang uangnya sudah masuk harus dibatalkan lewat jalur refund.
+  /// 'menunggu bayar' ikut dihitung: itu kasus pembayaran sudah settled di
+  /// Midtrans tapi server belum menggeser progress — uang tetap sudah masuk.
+  bool _isRefundCase(PesananModel o) {
+    final prog = (o.statusProgresPesanan ?? '').toLowerCase().trim();
+    return PesananProvider.isPaymentSettled(o.statusBayar) &&
+        (prog == 'persiapan' || prog == 'menunggu bayar');
+  }
+
   Future<void> _batalkanPesanan(PesananModel o) async {
     try {
-      await PesananService().batal(o.noBukti);
+      if (_isRefundCase(o)) {
+        await PesananService().batalDenganRefund(o);
+      } else {
+        await PesananService().batal(o.noBukti);
+      }
       final history = HistoryOrderService.createDibatalkan(
         noOrder: o.noBukti,
         senderId: o.idCustomer ?? '',
@@ -296,65 +309,67 @@ class _MainOrderPageState extends State<MainOrderPage> {
   Widget build(BuildContext context) {
     context.watch<PesananProvider>();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF9F9F9),
-        title: const Text(
-          'Pesanan',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF0F0F0F),
-            letterSpacing: -0.5,
-          ),
-        ),
-        actions: [
-          // Icon-only, tanpa label — pesanan batal/expired ada di sini.
-          GestureDetector(
-            onTap: () => context.read<NavigationProvider>().navigateToPage(
-                  context,
-                  FinishedOrderPage(),
-                  targetTabIndex: 2,
-                  targetPage: 'FinishedOrderPage',
-                  hrsLogin: true,
-                ),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.history_rounded,
-                  size: 18, color: Colors.grey.shade600),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          title: const Text(
+            'Pesanan',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F0F0F),
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: SafeArea(
-        child: SmartRefresher(
-          controller: _refreshController,
-          onRefresh: _onRefresh,
-          physics: const AlwaysScrollableScrollPhysics(),
-          header: buildRefreshHeader(),
-          child: CustomScrollView(
+          actions: [
+            // Icon-only, tanpa label — pesanan batal/expired ada di sini.
+            GestureDetector(
+              onTap: () => context.read<NavigationProvider>().navigateToPage(
+                    context,
+                    FinishedOrderPage(),
+                    targetTabIndex: 2,
+                    targetPage: 'FinishedOrderPage',
+                    hrsLogin: true,
+                  ),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.history_rounded,
+                    size: 18, color: Colors.grey.shade600),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+        ),
+        body: SafeArea(
+          child: SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
             physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(child: _buildSummaryRow()),
-              SliverToBoxAdapter(child: _buildFilterChips()),
-              SliverToBoxAdapter(child: _buildOrderList()),
-              SliverToBoxAdapter(child: _buildFinishedLink()),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
+            header: buildRefreshHeader(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _buildSummaryRow()),
+                SliverToBoxAdapter(child: _buildFilterChips()),
+                SliverToBoxAdapter(child: _buildOrderList()),
+                SliverToBoxAdapter(child: _buildFinishedLink()),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              ],
+            ),
           ),
         ),
       ),
@@ -500,6 +515,26 @@ class _MainOrderPageState extends State<MainOrderPage> {
   Widget _buildOrderList() {
     final orders = _filteredOrders;
 
+    // Shimmer HANYA saat benar-benar belum ada data. Dulu shimmer di sini
+    // dihapus total, jadi list kosong sempat menampilkan "belum ada
+    // pesanan" sekilas sebelum data asli datang dari network.
+    final isLoading =
+        context.watch<PesananProvider>().isLoadingOrder && orders.isEmpty;
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
+        child: Column(
+          children: List.generate(
+            3,
+            (_) => const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: SkeletonCard(),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (orders.isEmpty) {
       return EmptyOrder(onTap: () => setState(() => _selectedFilter = null));
     }
@@ -529,9 +564,17 @@ class _MainOrderPageState extends State<MainOrderPage> {
                             ),
                     onPay: () => _openPayment(o),
                     onBatal: () => _batalkanPesanan(o),
-                    onGantiMetode: (!_isPaymentExpired(o) && (o.paymentNumber1 != null || o.expiryTime != null))
-                        ? () => _gantiMetodePembayaran(o)
-                        : null,
+                    // Hanya untuk pesanan yang BELUM dibayar — tanpa cek ini,
+                    // pesanan berbayar yang masih menyimpan nomor VA akan ikut
+                    // menampilkan opsi ganti metode di action sheet.
+                    onGantiMetode:
+                        (!PesananProvider.isPaymentSettled(o.statusBayar) &&
+                                !_isPaymentExpired(o) &&
+                                (o.paymentNumber1 != null ||
+                                    o.expiryTime != null ||
+                                    o.statusBayar == 'pending'))
+                            ? () => _gantiMetodePembayaran(o)
+                            : null,
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(

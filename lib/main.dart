@@ -25,6 +25,7 @@ import 'package:mpjnew/src/data/isar/service/chat_isar_service.dart';
 import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
@@ -81,10 +82,25 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       if (success) {
         await _showBackgroundChatNotification(message);
       }
-    } else if (type == NotificationType.progress ||
-        type == NotificationType.review ||
-        type == NotificationType.complainHeader ||
+    } else if (type == NotificationType.complainHeader ||
         type == NotificationType.complainDetail) {
+      // Antre "thread ini butuh refetch" -- payload complain cuma bawa ID,
+      // bukan isi pesan, jadi tidak bisa direkonstruksi lokal seperti chat.
+      // Drain-nya (ComplainProvider.drainPendingComplainRefetch) selalu
+      // berujung network call saat thread dibuka/app resume.
+      final detail = NotificationHelper.parseDetail(message.data['detail']);
+      final noComplain =
+          (detail['No_Complain'] ?? detail['no_complain'])?.toString();
+      final noOrder = (detail['No_Order'] ?? detail['no_order'])?.toString();
+      if (noComplain != null && noComplain.isNotEmpty) {
+        await ComplainProvider.enqueuePendingComplainRefetch(noComplain);
+      }
+      if (noOrder != null && noOrder.isNotEmpty) {
+        await ComplainProvider.enqueuePendingComplainRefetch(noOrder);
+      }
+      await _showBackgroundNonChatNotification(message, type);
+    } else if (type == NotificationType.progress ||
+        type == NotificationType.review) {
       await _showBackgroundNonChatNotification(message, type);
     }
   } catch (e, st) {
@@ -146,9 +162,14 @@ void main() async {
     }
     debugPrint('✅ AuthService ready');
 
-    // ── 4. FCMService — butuh Auth sudah siap ─────────────────────
-    await FCMService.instance.initialize();
-    debugPrint('✅ FCM ready');
+    // ── 4. FCMService — SENGAJA tidak di-await ────────────────────
+    // initialize() memanggil requestPermission() (dialog izin OS) dan
+    // getToken() (round-trip network, dengan retry Future.delayed 2 detik).
+    // Kalau di-await di sini, semua itu terjadi sebelum ada satu pun frame
+    // Flutter — user melihat layar kosong lalu dialog izin tanpa konteks.
+    // Handler background sudah terdaftar di atas, jadi tidak ada pesan hilang,
+    // dan registerToken() tidak bergantung pada initialize().
+    unawaited(FCMService.instance.initialize());
 
     debugPrint('✅ APP INIT COMPLETE');
 
@@ -233,6 +254,21 @@ class MyApp extends StatelessWidget {
       title: 'Aplikasi Customer',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
+      // enableScrollWhenRefreshCompleted default-nya false di package
+      // pull_to_refresh -- begitu RefreshStatus.completed selesai (durasi
+      // endRefresh(), ~500ms), SmartRefresherState.setCanDrag(false)
+      // dipanggil dan viewport jadi NeverScrollableScrollPhysics sampai
+      // headerMode berhasil balik ke idle. Transisi balik ke idle itu
+      // bergantung posisi scroll presisi (_inVisual()/ballistic spring-back)
+      // yang jauh lebih rapuh di real device (timing/velocity sentuhan
+      // asli) dibanding emulator (event mouse sintetis) -- itu sebabnya bug
+      // "list tidak bisa discroll setelah animasi refresh selesai" cuma
+      // muncul di real device. true = viewport tetap draggable begitu
+      // completed, tidak pernah bergantung transisi idle itu sama sekali.
+      builder: (context, child) => RefreshConfiguration(
+        enableScrollWhenRefreshCompleted: true,
+        child: child!,
+      ),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -433,6 +469,11 @@ class MyApp extends StatelessWidget {
 
   void _handleSessionExpired(BuildContext context) async {
     debugPrint('🚪 [MyApp] Handling session expired...');
+    // Tangkap SEBELUM apapun dibersihkan: kalau customer sudah null di sini,
+    // sesi ini memang tidak pernah benar-benar login (mis. guest yang cache
+    // Hive-nya sempat "menghidupkan" customer basi lalu gagal auth) — jangan
+    // lempar ke halaman login, cukup bersih-bersih dan biarkan di Home.
+    final wasLoggedIn = context.read<UserProvider>().customer != null;
     try {
       FCMService.instance.clearAllMessageGroups();
 
@@ -444,7 +485,8 @@ class MyApp extends StatelessWidget {
       await ChatStorageService.instance.clearAll();
 
       final navigationProvider = context.read<NavigationProvider>();
-      await navigationProvider.handleLogout(context);
+      await navigationProvider.handleLogout(context,
+          showLoginPage: wasLoggedIn);
 
       await Future.delayed(const Duration(milliseconds: 300));
       if (!context.mounted) return;

@@ -11,6 +11,7 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page.dart';
@@ -82,6 +83,8 @@ class _RoomChatPageState extends State<RoomChatPage>
   bool _isInitializing = false;
   bool _hasInitialized = false;
 
+  bool _showScrollToBottom = false;
+
   Function(HistoryOrderModel)? _prevProgressCallback;
 
   @override
@@ -123,11 +126,31 @@ class _RoomChatPageState extends State<RoomChatPage>
   // ── Scroll ───────────────────────────────────────────────────────────────
 
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients || !_providersInitialized) return;
     final position = _scrollController.position;
-    if (position.pixels >= position.maxScrollExtent - 200) {
-      _roomChatProvider.loadMoreMessages();
+    // Chat pendek: list belum bisa di-scroll, jadi "atas" selalu tercapai.
+
+    final shouldShow = position.pixels > 300;
+    if (shouldShow != _showScrollToBottom) {
+      setState(() => _showScrollToBottom = shouldShow);
     }
+
+    if (position.maxScrollExtent <= 0) return;
+    if (position.pixels < position.maxScrollExtent - 200) return;
+
+    final roomId = _roomChatProvider.activeRoomId;
+    if (roomId == null) return;
+    if (!_chatProvider.hasMoreToDisplay(roomId)) return;
+    _roomChatProvider.loadMoreMessages();
+  }
+
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0.0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
   }
 
   // ── Dispose ──────────────────────────────────────────────────────────────
@@ -324,178 +347,204 @@ class _RoomChatPageState extends State<RoomChatPage>
     final imgUrl =
         roomChatProv.roomInfo?.idMediaLawan ?? widget.partnerAvatarUrl ?? '';
 
-    return Scaffold(
-      appBar: _buildAppBar(roomChatProv, imgUrl),
-      backgroundColor: const Color(0xFFF9F9F9),
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: const AssetImage('assets/chat_background.png'),
-            fit: BoxFit.cover,
-            opacity: 0.2,
-            colorFilter: ColorFilter.mode(
-              Constants.primaryColor.withOpacity(0.05),
-              BlendMode.lighten,
+    return SafeArea(
+      child: Scaffold(
+        appBar: _buildAppBar(roomChatProv, imgUrl),
+        backgroundColor: const Color(0xFFF9F9F9),
+        body: Container(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: const AssetImage('assets/chat_background.png'),
+              fit: BoxFit.cover,
+              opacity: 0.2,
+              colorFilter: ColorFilter.mode(
+                Constants.primaryColor.withOpacity(0.05),
+                BlendMode.lighten,
+              ),
             ),
           ),
-        ),
-        child: Column(
-          children: [
-            // Load more indicator
-            if (roomChatProv.isLoadingMoreDisplay)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                          Constants.primaryColorVendor,
+          child: Column(
+            children: [
+              // Load more indicator
+              if (roomChatProv.isLoadingMoreDisplay)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                            Constants.primaryColorVendor,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Memuat pesan lama...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // API sync indicator
-            if (chatProv.isLoading)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                color: Colors.blue.shade50,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                          Colors.blue.shade600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(
-                        'Memuat pesan terbaru...',
+                      const SizedBox(width: 12),
+                      Text(
+                        'Memuat pesan lama...',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.blue.shade700,
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+
+              // API sync indicator
+              if (chatProv.isLoading)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  color: Colors.blue.shade50,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                            Colors.blue.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          'Memuat pesan terbaru...',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Banner penawaran/pesanan aktif
+              if (_hasInitialized && _messagesStream != null)
+                StreamBuilder<List<ChatMessageEntity>>(
+                  stream: _messagesStream,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final pens = _findActivePenawarans(snapshot.data!);
+                    final psns = _findActivePesanans(snapshot.data!);
+                    if (pens.isEmpty && psns.isEmpty)
+                      return const SizedBox.shrink();
+                    return _buildActiveItemsBanner(pens, psns);
+                  },
+                ),
+
+              // ✅ StreamBuilder dengan _messagesStream yang di-cache
+              Expanded(
+                child: StreamBuilder<List<ChatMessageEntity>>(
+                  stream: _messagesStream,
+                  // Event stream Dart selalu async, jadi tanpa initialData frame
+                  // pertama selalu waiting → shimmer walau pesan sudah di memory.
+                  initialData: roomChatProv.cachedMessages,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red.shade300,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error: ${snapshot.error}',
+                              style: TextStyle(color: Colors.red.shade600),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _refreshChat,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Coba Lagi'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // ✅ FIX: _messagesStream null = belum ada room (pesan pertama)
+                    // Terjadi saat: buka dengan partnerId, belum pernah chat,
+                    // stream belum di-assign karena FCM echo belum datang.
+                    // Tampilkan empty state agar user tahu bisa ketik pesan.
+                    if (_messagesStream == null) {
+                      return _buildEmptyState();
+                    }
+
+                    // Stream belum emit (initial state) → skeleton.
+                    // KECUALI untuk percakapan yang genuinely baru
+                    // (isNewConversationNoHistory): messagesStream di provider
+                    // SELALU non-null begitu user login (fallback ke stream
+                    // pending-message), jadi null-check di atas tidak pernah
+                    // kena untuk kasus ini — tanpa pengecualian ini, room baru
+                    // selalu shimmer dulu walau jawabannya trivial "kosong".
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        !snapshot.hasData) {
+                      if (roomChatProv.isNewConversationNoHistory) {
+                        return _buildEmptyState();
+                      }
+                      return _buildLoadingMessages();
+                    }
+
+                    // Stream emit tapi kosong → empty state (room ada tapi belum ada pesan)
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return _buildEmptyState();
+                    }
+
+                    return _buildMessagesList(
+                      context,
+                      snapshot.data!,
+                      chatProv,
+                      roomChatProv,
+                      userProv,
+                    );
+                  },
                 ),
               ),
 
-            // Banner penawaran/pesanan aktif
-            if (_hasInitialized && _messagesStream != null)
-              StreamBuilder<List<ChatMessageEntity>>(
-                stream: _messagesStream,
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  final pens = _findActivePenawarans(snapshot.data!);
-                  final psns = _findActivePesanans(snapshot.data!);
-                  if (pens.isEmpty && psns.isEmpty)
-                    return const SizedBox.shrink();
-                  return _buildActiveItemsBanner(pens, psns);
-                },
-              ),
-
-            // ✅ StreamBuilder dengan _messagesStream yang di-cache
-            Expanded(
-              child: StreamBuilder<List<ChatMessageEntity>>(
-                stream: _messagesStream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red.shade300,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Error: ${snapshot.error}',
-                            style: TextStyle(color: Colors.red.shade600),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _refreshChat,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Coba Lagi'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  // ✅ FIX: _messagesStream null = belum ada room (pesan pertama)
-                  // Terjadi saat: buka dengan partnerId, belum pernah chat,
-                  // stream belum di-assign karena FCM echo belum datang.
-                  // Tampilkan empty state agar user tahu bisa ketik pesan.
-                  if (_messagesStream == null) {
-                    return _buildEmptyState();
-                  }
-
-                  // Stream belum emit (initial state) → skeleton
-                  if (snapshot.connectionState == ConnectionState.waiting &&
-                      !snapshot.hasData) {
-                    return _buildLoadingMessages();
-                  }
-
-                  // Stream emit tapi kosong → empty state (room ada tapi belum ada pesan)
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return _buildEmptyState();
-                  }
-
-                  return _buildMessagesList(
-                    context,
-                    snapshot.data!,
-                    chatProv,
-                    roomChatProv,
-                    userProv,
-                  );
-                },
-              ),
-            ),
-
-            _buildInputArea(roomChatProv, userProv),
-            const SizedBox(height: 10),
-          ],
+              _buildInputArea(roomChatProv, userProv),
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
+        floatingActionButton: _showScrollToBottom
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: FloatingActionButton.small(
+                  backgroundColor: Constants.primaryColor,
+                  foregroundColor: Colors.white,
+                  onPressed: _scrollToBottom,
+                  child: const Icon(Icons.keyboard_arrow_down),
+                ),
+              )
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
     );
   }
@@ -606,17 +655,17 @@ class _RoomChatPageState extends State<RoomChatPage>
                   customerId: userProv.customer?.noId ?? '',
                   onTap: () => _handlePesananTap(context, pesanan),
                   onBatal: () => _batalkanPesanan(pesanan),
-                  onGantiMetode:
-                      (pesanan.status != 'expired' &&
+                  onGantiMetode: (pesanan.status != 'expired' &&
                           pesanan.status != 'batal' &&
                           (pesanan.paymentNumber1 != null ||
-                              pesanan.expiryTime != null))
+                              pesanan.expiryTime != null ||
+                              pesanan.statusBayar == 'pending'))
                       ? () => _gantiMetodePembayaran(pesanan)
                       : null,
                 );
                 if (activeMessageIds.contains(entity!.messageId)) {
                   final key = _itemBubbleKeys.putIfAbsent(
-                    'psn_${entity.pesanan!.noBukti}',
+                    'psn_${entity.pesanan!.noTrackingPesanan}',
                     () => GlobalKey(),
                   );
                   return KeyedSubtree(key: key, child: card);
@@ -640,8 +689,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                     customerId: userProv.customer?.noId ?? '',
                     onTap: () => _handlePesananTap(context, pesanan),
                     onBatal: () => _batalkanPesanan(pesanan),
-                    onGantiMetode:
-                        (pesanan.status != 'expired' &&
+                    onGantiMetode: (pesanan.status != 'expired' &&
                             (pesanan.paymentNumber1 != null ||
                                 pesanan.expiryTime != null))
                         ? () => _gantiMetodePembayaran(pesanan)
@@ -699,9 +747,8 @@ class _RoomChatPageState extends State<RoomChatPage>
               if (entity?.hasPaket == true ||
                   message.idPaket?.isNotEmpty == true) {
                 return Column(
-                  crossAxisAlignment: isMe
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
                     // Shimmer jika paket belum ter-enrich
                     if (paket == null)
@@ -767,28 +814,39 @@ class _RoomChatPageState extends State<RoomChatPage>
     final bayar = pesanan.status?.toLowerCase() ?? '';
     if (bayar == 'batal' || bayar == 'expired') {
       context.read<NavigationProvider>().navigateToPage(
-        context,
-        targetTabIndex: 2,
-        DetailOrderPageV2(pesananModel: pesanan),
-      );
+            context,
+            targetTabIndex: 2,
+            DetailOrderPageV2(pesananModel: pesanan),
+          );
     } else if (pesanan.statusProgresPesanan == 'menunggu bayar') {
       context.read<NavigationProvider>().navigateToPage(
-        context,
-        targetTabIndex: 2,
-        WaitingPaymentPage(paymentData: pesanan),
-      );
+            context,
+            targetTabIndex: 2,
+            WaitingPaymentPage(paymentData: pesanan),
+          );
     } else {
       context.read<NavigationProvider>().navigateToPage(
-        context,
-        targetTabIndex: 2,
-        DetailOrderPageV2(pesananModel: pesanan),
-      );
+            context,
+            targetTabIndex: 2,
+            DetailOrderPageV2(pesananModel: pesanan),
+          );
     }
   }
 
   Future<void> _batalkanPesanan(dynamic pesanan) async {
     try {
-      await PesananService().batal(pesanan.noBukti);
+      // Pesanan yang uangnya sudah masuk dibatalkan lewat jalur refund.
+      final prog =
+          (pesanan.statusProgresPesanan as String? ?? '').toLowerCase().trim();
+      final isRefundCase =
+          PesananProvider.isPaymentSettled(pesanan.statusBayar as String?) &&
+              (prog == 'persiapan' || prog == 'menunggu bayar');
+
+      if (isRefundCase) {
+        await PesananService().batalDenganRefund(pesanan as PesananModel);
+      } else {
+        await PesananService().batal(pesanan.noBukti);
+      }
       final history = HistoryOrderService.createDibatalkan(
         noOrder: pesanan.noBukti,
         senderId: pesanan.idCustomer ?? '',
@@ -815,10 +873,10 @@ class _RoomChatPageState extends State<RoomChatPage>
   void _gantiMetodePembayaran(dynamic pesanan) {
     if (!mounted) return;
     context.read<NavigationProvider>().navigateToPage(
-      context,
-      targetTabIndex: 2,
-      WaitingPaymentPage(paymentData: pesanan),
-    );
+          context,
+          targetTabIndex: 2,
+          WaitingPaymentPage(paymentData: pesanan),
+        );
   }
 
   // =========================================
@@ -910,15 +968,14 @@ class _RoomChatPageState extends State<RoomChatPage>
       title: GestureDetector(
         onTap: () {
           context.read<NavigationProvider>().navigateToPage(
-            context,
-            VendorBioPage(
-              idVendor:
-                  roomChatProv.roomInfo?.idLawan ??
-                  widget.partnerId ??
-                  'unknown',
-            ),
-            targetTabIndex: 0,
-          );
+                context,
+                VendorBioPage(
+                  idVendor: roomChatProv.roomInfo?.idLawan ??
+                      widget.partnerId ??
+                      'unknown',
+                ),
+                targetTabIndex: 0,
+              );
         },
         child: Row(
           children: [
@@ -982,30 +1039,50 @@ class _RoomChatPageState extends State<RoomChatPage>
           bayar == 'expired' ||
           pesanan.statusProgresPesanan != 'menunggu bayar') {
         context.read<NavigationProvider>().navigateToPage(
-          context,
-          targetTabIndex: 2,
-          DetailOrderPageV2(pesananModel: pesanan),
-        );
+              context,
+              targetTabIndex: 2,
+              DetailOrderPageV2(pesananModel: pesanan),
+            );
       } else {
         context.read<NavigationProvider>().navigateToPage(
-          context,
-          targetTabIndex: 2,
-          WaitingPaymentPage(paymentData: pesanan),
-        );
+              context,
+              targetTabIndex: 2,
+              WaitingPaymentPage(paymentData: pesanan),
+            );
       }
     } else {
       if (!mounted) return;
+
+      final expiredAt = penawaran.expiredAt as DateTime?;
+      if (expiredAt != null && DateTime.now().isAfter(expiredAt)) {
+        CustomSnackbar.showErrorSnackbar(
+          context,
+          'Penawaran ini sudah kadaluarsa. Minta vendor membuat penawaran baru.',
+        );
+        return;
+      }
+
       context.read<NavigationProvider>().navigateToPage(
-        context,
-        targetTabIndex: 1,
-        DetailPembayaranPage(penawaranId: penawaran.noId, message: message),
-      );
+            context,
+            targetTabIndex: 1,
+            DetailPembayaranPage(penawaranId: penawaran.noId, message: message),
+          );
     }
   }
 
   // =========================================
   // ACTIVE ITEMS BANNER (penawaran + pesanan)
   // =========================================
+
+  /// Penawaran dianggap aktif kalau belum jadi pesanan, belum dibatalkan
+  /// (status nonaktif), dan belum kadaluarsa. Definisi expired sama
+  /// dengan yang dipakai chat_penawaran_card.dart (expiredAt sudah lewat
+  /// dari waktu sekarang).
+  bool _isPenawaranStillActive(EmbeddedPenawaran p) {
+    final isExpired =
+        p.expiredAt != null && DateTime.now().isAfter(p.expiredAt!);
+    return !p.sudahJadiPesanan && p.status != 'nonaktif' && !isExpired;
+  }
 
   List<ChatMessageEntity> _findActivePenawarans(
     List<ChatMessageEntity> entities,
@@ -1015,9 +1092,7 @@ class _RoomChatPageState extends State<RoomChatPage>
     final seen = <String>{};
     for (final e in sorted) {
       if (result.length >= 3) break;
-      if (e.hasPenawaran &&
-          !e.penawaran!.sudahJadiPesanan &&
-          e.penawaran!.status != 'nonaktif') {
+      if (e.hasPenawaran && _isPenawaranStillActive(e.penawaran!)) {
         final id = e.penawaran!.noId;
         if (id.isNotEmpty && seen.add(id)) result.add(e);
       }
@@ -1160,12 +1235,10 @@ class _RoomChatPageState extends State<RoomChatPage>
   void _showActiveItemsSheet(String type, List<ChatMessageEntity> items) {
     final isPenawaran = type == 'penawaran';
     final title = isPenawaran ? 'Penawaran Aktif' : 'Pesanan Aktif';
-    final color = isPenawaran
-        ? Constants.primaryColor
-        : const Color(0xFF2563EB);
-    final sheetIcon = isPenawaran
-        ? Icons.description_outlined
-        : Icons.receipt_long_outlined;
+    final color =
+        isPenawaran ? Constants.primaryColor : const Color(0xFF2563EB);
+    final sheetIcon =
+        isPenawaran ? Icons.description_outlined : Icons.receipt_long_outlined;
 
     showModalBottomSheet(
       context: context,
@@ -1220,7 +1293,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                 itemBuilder: (ctx, i) {
                   final e = items[i];
                   final keyId = e.hasPesanan
-                      ? 'psn_${e.pesanan!.noBukti}'
+                      ? 'psn_${e.pesanan!.noTrackingPesanan}'
                       : 'pen_${e.penawaran!.noId}';
                   return InkWell(
                     onTap: () {
@@ -1321,7 +1394,7 @@ class _RoomChatPageState extends State<RoomChatPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '#${p.noTrackingPesanan ?? p.noBukti}',
+                '#${p.noTrackingPesanan ?? ""}',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1496,68 +1569,72 @@ class _RoomChatPageState extends State<RoomChatPage>
   }
 
   Widget _buildNoRoomScaffold() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat'),
-        backgroundColor: const Color(0xFFF9F9F9),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Tidak ada chat',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Kembali'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Constants.primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Chat'),
+          backgroundColor: const Color(0xFFF9F9F9),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline,
+                size: 64,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tidak ada chat',
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Kembali'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Constants.primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildLoadingScaffold() {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 2,
-        title: const Row(
-          children: [
-            ShimmerPlaceholder(width: 36, height: 36, radius: 18),
-            SizedBox(width: 12),
-            ShimmerPlaceholder(width: 120, height: 20, radius: 4),
-          ],
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          elevation: 2,
+          title: const Row(
+            children: [
+              ShimmerPlaceholder(width: 36, height: 36, radius: 18),
+              SizedBox(width: 12),
+              ShimmerPlaceholder(width: 120, height: 20, radius: 4),
+            ],
+          ),
         ),
-      ),
-      backgroundColor: const Color(0xFFF2F2F2),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: 8,
-        itemBuilder: (_, index) => Align(
-          alignment: index % 2 == 0
-              ? Alignment.centerRight
-              : Alignment.centerLeft,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: const ShimmerPlaceholder(width: 250, height: 60, radius: 12),
+        backgroundColor: const Color(0xFFF2F2F2),
+        body: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: 8,
+          itemBuilder: (_, index) => Align(
+            alignment:
+                index % 2 == 0 ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child:
+                  const ShimmerPlaceholder(width: 250, height: 60, radius: 12),
+            ),
           ),
         ),
       ),

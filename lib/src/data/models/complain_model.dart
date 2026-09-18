@@ -28,6 +28,12 @@ class ComplainModel {
   final String noComplain;
   final String noOrder;
   final String? noTrackingPesanan;
+  // Nomor tracking complain itu sendiri (beda dari noTrackingPesanan yang
+  // punya order-nya). Nullable dan sengaja tidak di-default '' seperti di
+  // ComplainHeaderModel -- belum dikonfirmasi apakah get-group (endpoint
+  // yang mengisi model ini) benar-benar mengirim field ini, jadi UI cuma
+  // menampilkan kalau ada; kalau backend tidak kirim, cukup disembunyikan.
+  final String? noTrackingKomplain;
   final String idVendor;
   final String idCustomer;
   final String judul;
@@ -40,6 +46,7 @@ class ComplainModel {
     required this.noComplain,
     required this.noOrder,
     this.noTrackingPesanan,
+    this.noTrackingKomplain,
     required this.idVendor,
     required this.idCustomer,
     required this.judul,
@@ -62,6 +69,7 @@ class ComplainModel {
       noComplain: json['No_Complain'] ?? '',
       noOrder: json['No_Order'] ?? '',
       noTrackingPesanan: json['No_Tracking_Pesanan'],
+      noTrackingKomplain: json['No_Tracking_Komplain']?.toString(),
       idVendor: json['Id_Vendor'] ?? '',
       idCustomer: json['Id_Customer'] ?? '',
       judul: json['Judul'] ?? '',
@@ -74,6 +82,34 @@ class ComplainModel {
           : int.tryParse(json['Total_Messages']?.toString() ?? '') ??
               details.length,
       details: details,
+    );
+  }
+
+  ComplainModel copyWith({
+    String? noComplain,
+    String? noOrder,
+    String? noTrackingPesanan,
+    String? noTrackingKomplain,
+    String? idVendor,
+    String? idCustomer,
+    String? judul,
+    String? status,
+    DateTime? tglClosed,
+    int? totalMessages,
+    List<ComplainMessageModel>? details,
+  }) {
+    return ComplainModel(
+      noComplain: noComplain ?? this.noComplain,
+      noOrder: noOrder ?? this.noOrder,
+      noTrackingPesanan: noTrackingPesanan ?? this.noTrackingPesanan,
+      noTrackingKomplain: noTrackingKomplain ?? this.noTrackingKomplain,
+      idVendor: idVendor ?? this.idVendor,
+      idCustomer: idCustomer ?? this.idCustomer,
+      judul: judul ?? this.judul,
+      status: status ?? this.status,
+      tglClosed: tglClosed ?? this.tglClosed,
+      totalMessages: totalMessages ?? this.totalMessages,
+      details: details ?? this.details,
     );
   }
 }
