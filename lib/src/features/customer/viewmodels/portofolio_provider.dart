@@ -174,13 +174,19 @@ class PortofolioProvider with ChangeNotifier {
       // Guest mode: _portofolioLikelist & _portofolioSaveList tetap kosong
       await _syncLikedAndSavedFromLocal();
 
-      if (!forceRefresh && _isInitialized) {
+      if (!forceRefresh) {
+        // _initialize() dipanggil fire-and-forget dari konstruktor, jadi
+        // _isInitialized bisa masih false di sini. Dulu itu membuat cabang
+        // cache di-skip diam-diam dan Home selalu menunggu network.
+        if (!_isInitialized) await _initialize();
         try {
-          final cached = await localService.getCachedPortfolios();
+          final cached = await localService.getFeed();
           if (cached.isNotEmpty) {
             _cachedPortfolios = cached;
             _portofolioList = cached;
             _isFromCache = true;
+            // Data sudah ada → matikan shimmer; fetch lanjut di belakang.
+            _isLoadingPorto = false;
             safeNotify();
           }
         } catch (_) {}
@@ -197,8 +203,8 @@ class PortofolioProvider with ChangeNotifier {
       _portofolioList = result;
       _isFromCache = false;
 
-      if (result.length >= 10) {
-        _saveToCacheInBackground(result.take(10).toList());
+      if (result.isNotEmpty) {
+        unawaited(_saveToCacheInBackground(result));
       }
 
       if (preloadImages && result.isNotEmpty) {
@@ -207,10 +213,15 @@ class PortofolioProvider with ChangeNotifier {
         // Hanya preload item di bawah viewport agar siap sebelum user scroll.
         const viewportEstimate = 5;
         if (result.length > viewportEstimate) {
-          unawaited(_preloadService.preloadPortfolios(
-            result.skip(viewportEstimate).toList(),
-            priorityCount: 10,
-          ));
+          // Ditunda: kalau langsung jalan, bulk preload ini berebut bandwidth
+          // dengan kartu-kartu yang justru sedang dirender di layar.
+          unawaited(Future.delayed(const Duration(seconds: 2), () {
+            if (_disposed) return;
+            _preloadService.preloadPortfolios(
+              result.skip(viewportEstimate).toList(),
+              priorityCount: 10,
+            );
+          }));
         }
       }
     } catch (e) {
@@ -405,6 +416,14 @@ class PortofolioProvider with ChangeNotifier {
     BuildContext? context,
     bool syncFromApi = true,
   }) async {
+    // Guard: splash menjalankan sync ini di background microtask, dan tab
+    // Akun bisa saja dibuka user tepat saat itu masih berjalan. Tanpa guard
+    // ini, dua sync jalan bersamaan dan saling menimpa hasil `syncLiked` di
+    // Hive — bukan cuma boros network, tapi race data beneran.
+    if (_isLoadingLike) {
+      debugPrint('[PortofolioProvider] ⏸️ loadLikedPortofolio already in flight — skip');
+      return;
+    }
     _isLoadingLike = true;
     safeNotify();
 
@@ -440,6 +459,12 @@ class PortofolioProvider with ChangeNotifier {
     BuildContext? context,
     bool syncFromApi = true,
   }) async {
+    // Guard: sama seperti loadLikedPortofolio — cegah race saat splash's
+    // background sync dan tab Akun sama-sama memanggil ini bersamaan.
+    if (_isLoadingSave) {
+      debugPrint('[PortofolioProvider] ⏸️ loadSavedPortofolio already in flight — skip');
+      return;
+    }
     _isLoadingSave = true;
     safeNotify();
 
@@ -490,9 +515,12 @@ class PortofolioProvider with ChangeNotifier {
       List<PortofolioModel> portfolios) async {
     try {
       await Future.delayed(const Duration(milliseconds: 500));
+      await localService.saveFeed(portfolios);
       _cachedPortfolios = await localService.getCachedPortfolios();
       safeNotify();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[PortofolioProvider] ⚠️ _saveToCacheInBackground: $e');
+    }
   }
 
   Future<void> refreshSinglePortofolio(
@@ -580,17 +608,21 @@ class PortofolioProvider with ChangeNotifier {
   /// jika habis, home page tetap tampil dengan shimmer seperti biasa.
   Future<void> preloadFirstImages(
     BuildContext context, {
-    int portfolioCount = 5,
+    int portfolioCount = 8,
     Duration timeout = const Duration(seconds: 8),
   }) async {
     if (_portofolioList.isEmpty || !context.mounted) return;
 
+    // Ambil HANYA gambar pertama tiap portofolio. Versi sebelumnya memakai
+    // expand() + take(), jadi satu portofolio dengan 10 gambar menghabiskan
+    // seluruh jatah dan portofolio berikutnya tidak dapat apa-apa —
+    // padahal yang terlihat di viewport justru kartu pertama tiap portofolio.
     final urls = _portofolioList
         .take(portfolioCount)
-        .expand((p) => p.mediaUrls)
-        .map((m) => m.idMedia ?? m.url ?? '')
+        .map((p) => p.mediaUrls.isEmpty
+            ? ''
+            : (p.mediaUrls.first.idMedia ?? p.mediaUrls.first.url ?? ''))
         .where((u) => u.isNotEmpty && u.startsWith('http'))
-        .take(portfolioCount * 2)
         .toList();
 
     if (urls.isEmpty) return;

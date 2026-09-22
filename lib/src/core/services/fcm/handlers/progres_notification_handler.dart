@@ -4,7 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/core/services/fcm/utils/notification_channel_manager.dart';
 import 'package:mpjnew/src/core/services/fcm/utils/notification_helper.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
@@ -144,7 +143,7 @@ class ProgressNotificationHandler {
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: title,
-          summaryText: 'Pesanan #${progressData.noOrder}',
+          summaryText: 'Pesanan #${progressData.statusProgressPesanan}',
         ),
         showWhen: true,
         when: DateTime.now().millisecondsSinceEpoch,

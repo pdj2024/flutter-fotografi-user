@@ -9,7 +9,13 @@ class DatePickerField extends StatefulWidget {
   final String label;
   final DateTime? selectedDate;
   final String? errorMessage;
+  final String? placeholder;
   final bool isPenawaran;
+
+  /// Override eksplisit untuk minDate picker. Kalau diisi, ini menang atas
+  /// default dari [isPenawaran] (dipakai mis. saat tanggal harus setelah
+  /// suatu deadline tertentu, bukan sekadar "hari ini").
+  final DateTime? minDate;
 
   final Function(DateTime) onDateSelected;
 
@@ -18,8 +24,10 @@ class DatePickerField extends StatefulWidget {
     required this.label,
     required this.selectedDate,
     required this.onDateSelected,
+    this.placeholder = "",
     this.isPenawaran = false,
     this.errorMessage,
+    this.minDate,
   });
 
   @override
@@ -68,14 +76,23 @@ class _DatePickerFieldState extends State<DatePickerField> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Text(
-              chosenDate != null
-                  ? DateFormat("dd-MM-yyyy").format(chosenDate!)
-                  : "Pilih tanggal lahir",
-              style: TextStyle(
-                fontSize: 15,
-                color: chosenDate != null ? Colors.black : Colors.grey,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  chosenDate != null
+                      ? DateFormat("dd-MM-yyyy").format(chosenDate!)
+                      : widget.placeholder ?? '',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: chosenDate != null ? Colors.black : Colors.grey,
+                  ),
+                ),
+                const Icon(
+                  Icons.calendar_month_outlined,
+                  color: Colors.grey,
+                ),
+              ],
             ),
           ),
         ),
@@ -187,7 +204,8 @@ class _DatePickerFieldState extends State<DatePickerField> {
                             selectionMode: DateRangePickerSelectionMode.single,
                             showNavigationArrow: true,
                             initialSelectedDate: initialDate ?? DateTime(2000),
-                            minDate: widget.isPenawaran ? DateTime.now() : null,
+                            minDate: widget.minDate ??
+                                (widget.isPenawaran ? DateTime.now() : null),
                             maxDate: widget.isPenawaran ? null : DateTime.now(),
                             onSelectionChanged: (args) {
                               tempPicked = args.value;

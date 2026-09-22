@@ -19,10 +19,16 @@ class KategoriService {
     String? status,
     String? orderBy,
     String? orderDir,
+    String? canSearch,
   }) async {
     try {
       final response = await apiClient.get(
         '/$controller/getAll',
+        // Kategori dibaca guest juga (dipanggil dari splash untuk SEMUA
+        // user termasuk yang belum login). Tanpa ini, guest tanpa token
+        // dapat 401 → dianggap sesi kedaluwarsa → force-logout ke halaman
+        // login walau tidak pernah login sama sekali.
+        requireAuth: false,
         queryParameters: {
           if (noId != null) 'no_id': noId,
           if (namaKategori != null) 'nama_kategori': namaKategori,
@@ -30,17 +36,11 @@ class KategoriService {
           if (status != null) 'status': status,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,
+          if (canSearch != null) 'can_search': canSearch,
         },
       );
-      debugPrint('==============================');
-      debugPrint('Response Body: ${response.body}');
-      debugPrint('Status Code: ${response.statusCode}');
-      debugPrint('==============================');
-
-      // debugPrint('==============================');
-      // debugPrint('Response Body: ${response.body}');
-      // debugPrint('Status Code: ${response.statusCode}');
-      // debugPrint('==============================');
+      debugPrint('[KategoriService] getAll → ${response.statusCode} '
+          '(${response.body.length} bytes)');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);

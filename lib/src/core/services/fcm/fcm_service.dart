@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:mpjnew/src/core/services/fcm/handlers/complain_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/payment_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/handlers/progres_notification_handler.dart';
 import 'package:mpjnew/src/core/services/fcm/models/notification_type.dart';
@@ -9,6 +10,7 @@ import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/features/customer/services/device_token_service.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
@@ -29,6 +31,7 @@ class FCMService {
   late ChatNotificationHandler _chatHandler;
   late PaymentNotificationHandler _paymentHandler;
   late ProgressNotificationHandler _progressHandler;
+  late ComplainNotificationHandler _complainHandler;
 
   String? _fcmToken;
   bool _initialized = false;
@@ -39,11 +42,13 @@ class FCMService {
   HistoryOrderProvider? _historyOrderProvider;
   PesananProvider? _pesananProvider;
   PenawaranProvider? _penawaranProvider;
+  ComplainProvider? _complainProvider;
 
   Function(ChatModel)? onChatMessageReceived;
   Function(HistoryOrderModel)? onProgressReceived;
   Function(String roomId)? onNotificationTapped;
   Function(String orderId)? onOrderNotificationTapped;
+  Function(String? noComplain, String? noOrder)? onComplainNotificationTapped;
   String Function(String roomId, String senderId)? getSenderName;
 
   String? get fcmToken => _fcmToken;
@@ -74,11 +79,17 @@ class FCMService {
     debugPrint('[FCM] ✅ PenawaranProvider injected');
   }
 
+  void setComplainProvider(ComplainProvider provider) {
+    _complainProvider = provider;
+    debugPrint('[FCM] ✅ ComplainProvider injected');
+  }
+
   void clearProviders() {
     _chatProvider = null;
     _historyOrderProvider = null;
     _pesananProvider = null;
     _penawaranProvider = null;
+    _complainProvider = null;
     debugPrint('[FCM] 🗑️ Providers cleared');
   }
 
@@ -153,11 +164,12 @@ class FCMService {
     await _notificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: _onLocalNotificationTapped,
-      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped,
+      onDidReceiveBackgroundNotificationResponse:
+          _onBackgroundNotificationTapped,
     );
 
-    final androidPlugin = _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
+    final androidPlugin =
+        _notificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
@@ -190,6 +202,26 @@ class FCMService {
       onPaymentReceived: (pesanan) {
         _pesananProvider?.handlePaymentFromFCM(pesanan);
         debugPrint('[FCM] ✅ PesananProvider updated (payment)');
+      },
+    );
+
+    _complainHandler = ComplainNotificationHandler(
+      notificationsPlugin: _notificationsPlugin,
+      onHeaderReceived: (noComplain, noOrder) {
+        debugPrint(
+            '[FCM] 📣 Complain header: noComplain=$noComplain noOrder=$noOrder');
+        _complainProvider?.onComplainHeaderPushReceived(
+          noComplain: noComplain,
+          noOrder: noOrder,
+        );
+      },
+      onDetailReceived: (noComplain, noOrder) {
+        debugPrint(
+            '[FCM] 📣 Complain detail: noComplain=$noComplain noOrder=$noOrder');
+        _complainProvider?.onComplainDetailPushReceived(
+          noComplain: noComplain,
+          noOrder: noOrder,
+        );
       },
     );
 
@@ -279,11 +311,15 @@ class FCMService {
   // =========================================
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('[FCM] ☀️ Foreground: ${message.messageId} | activeRoom: $_activeRoomId');
+    debugPrint(
+        '[FCM] ☀️ Foreground: ${message.messageId} | activeRoom: $_activeRoomId');
 
     try {
       final type = NotificationType.fromString(message.data['type']);
       debugPrint('[FCM] Type: $type');
+
+      final body = message.data;
+      debugPrint('[FCM] Body: $body');
 
       switch (type) {
         case NotificationType.chat:
@@ -296,6 +332,12 @@ class FCMService {
           break;
         case NotificationType.progress:
           await _progressHandler.handleMessage(message);
+          break;
+        case NotificationType.complainHeader:
+          await _complainHandler.handleHeaderMessage(message);
+          break;
+        case NotificationType.complainDetail:
+          await _complainHandler.handleDetailMessage(message);
           break;
         case NotificationType.like:
         case NotificationType.review:
@@ -327,6 +369,13 @@ class FCMService {
         final orderId = detail['no_order'] as String?;
         if (orderId != null) onOrderNotificationTapped?.call(orderId);
         break;
+      case NotificationType.complainHeader:
+      case NotificationType.complainDetail:
+        final noComplain =
+            (detail['No_Complain'] ?? detail['no_complain']) as String?;
+        final noOrder = (detail['No_Order'] ?? detail['no_order']) as String?;
+        onComplainNotificationTapped?.call(noComplain, noOrder);
+        break;
       default:
         debugPrint('[FCM] ℹ️ Tap ignored for type: $type');
     }
@@ -347,6 +396,12 @@ class FCMService {
         final orderId = payload['orderId'] as String?;
         if (orderId != null) onOrderNotificationTapped?.call(orderId);
         break;
+      case NotificationType.complainHeader:
+      case NotificationType.complainDetail:
+        final noComplain = payload['noComplain'] as String?;
+        final noOrder = payload['noOrder'] as String?;
+        onComplainNotificationTapped?.call(noComplain, noOrder);
+        break;
       default:
         break;
     }
@@ -363,7 +418,8 @@ class FCMService {
       _fcmToken ??= await _firebaseMessaging.getToken();
       if (_fcmToken != null) {
         await _sendTokenToBackend(_fcmToken!, userId);
-        debugPrint('[FCM] ✅ Token registered: ${_fcmToken!.substring(0, 20)}...');
+        debugPrint(
+            '[FCM] ✅ Token registered: ${_fcmToken!.substring(0, 20)}...');
       } else {
         debugPrint('[FCM] ⚠️ FCM token null saat registerToken');
       }
@@ -464,6 +520,7 @@ class FCMService {
     onProgressReceived = null;
     onNotificationTapped = null;
     onOrderNotificationTapped = null;
+    onComplainNotificationTapped = null;
     getSenderName = null;
     _currentUserId = null;
     _activeRoomId = null;

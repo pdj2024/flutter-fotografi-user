@@ -148,57 +148,59 @@ class _VendorListPackagePageState extends State<VendorListPackagePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-
-          if (isLoading)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (_, __) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: ShimmerPlaceholder(height: 150, radius: 12),
-                  ),
-                  childCount: 4,
-                ),
-              ),
-            )
-          else if (errorMessage != null)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildErrorState(),
-            )
-          else if (paketList.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildEmptyState(),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(0, 20, 0, 100),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final paket = paketList[index];
-                    final ulasanList = _ulasanByPaket[paket.no_id] ?? [];
-                    return Padding(
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        body: CustomScrollView(
+          slivers: [
+            _buildSliverAppBar(),
+      
+            if (isLoading)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, __) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: OfferCard(
-                        paket: paket,
-                        vendorId: widget.vendor.noId,
-                        ulasanList: ulasanList,
-                      ),
-                    );
-                  },
-                  childCount: paketList.length,
+                      child: ShimmerPlaceholder(height: 150, radius: 12),
+                    ),
+                    childCount: 4,
+                  ),
+                ),
+              )
+            else if (errorMessage != null)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildErrorState(),
+              )
+            else if (paketList.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildEmptyState(),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(0, 20, 0, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final paket = paketList[index];
+                      final ulasanList = _ulasanByPaket[paket.no_id] ?? [];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: OfferCard(
+                          paket: paket,
+                          vendorId: widget.vendor.noId,
+                          ulasanList: ulasanList,
+                        ),
+                      );
+                    },
+                    childCount: paketList.length,
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
-import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
@@ -22,7 +20,6 @@ import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.d
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
-import 'package:mpjnew/src/features/customer/widget/order_status_flow.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -180,23 +177,41 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
-  List<PesananModel> get _filteredOrders {
+  List<PesananModel> get _activeOrders {
     final provider = context.read<PesananProvider>();
-    final active = [
-      ...provider.pesananUnpaid,
-      ...provider.pesananProgress,
-    ];
-    active.sort((a, b) {
-      final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
-      final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
-      return bTime.compareTo(aTime);
-    });
+    return [...provider.pesananUnpaid, ...provider.pesananProgress];
+  }
+
+  static String _statusOf(PesananModel o) =>
+      o.statusProgresPesanan ?? 'menunggu bayar';
+
+  /// Terbaru di atas: Updated_At, atau Created_At kalau Updated_At kosong.
+  static int _byLatest(PesananModel a, PesananModel b) {
+    final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
+    final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
+    return bTime.compareTo(aTime);
+  }
+
+  List<PesananModel> get _filteredOrders {
+    final active = _activeOrders..sort(_byLatest);
 
     if (_selectedFilter == null) return active;
-    return active
-        .where((o) =>
-            (o.statusProgresPesanan ?? 'menunggu bayar') == _selectedFilter)
-        .toList();
+    final group = _filterGroups[_selectedFilter] ?? [_selectedFilter!];
+    final filtered = active.where((o) => group.contains(_statusOf(o))).toList();
+
+    // Chip Pengerjaan: pesanan yang menunggu review customer paling atas
+    // (butuh aksi), lalu terbaru. Satu pembanding — sort() Dart tidak
+    // dijamin stabil, jadi urutan terbaru tidak bisa diandalkan tersisa
+    // dari sort sebelumnya.
+    if (_selectedFilter == _chipPengerjaan) {
+      filtered.sort((a, b) {
+        final aReview = _statusOf(a) == 'review' ? 0 : 1;
+        final bReview = _statusOf(b) == 'review' ? 0 : 1;
+        final byReview = aReview.compareTo(bReview);
+        return byReview != 0 ? byReview : _byLatest(a, b);
+      });
+    }
+    return filtered;
   }
 
   Future<void> _onRefresh() async {
@@ -266,24 +281,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
-  Future<void> _batalkanPesanan(PesananModel o) async {
-    try {
-      await PesananService().batal(o.noBukti);
-      final history = HistoryOrderService.createDibatalkan(
-        noOrder: o.noBukti,
-        senderId: o.idCustomer ?? '',
-        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
-      );
-      await HistoryOrderService().create(history);
-      if (!mounted) return;
-      await context.read<PesananProvider>().loadOrder(context);
-      CustomSnackbar.showSuccessSnackbar(
-          context, 'Pesanan berhasil dibatalkan.');
-    } catch (e) {
-      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
-    }
-  }
-
   void _gantiMetodePembayaran(PesananModel o) {
     context.read<NavigationProvider>().navigateToPage(
           context,
@@ -296,76 +293,67 @@ class _MainOrderPageState extends State<MainOrderPage> {
   Widget build(BuildContext context) {
     context.watch<PesananProvider>();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF9F9F9),
-        title: const Text(
-          'Pesanan',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF0F0F0F),
-            letterSpacing: -0.5,
-          ),
-        ),
-        actions: [
-          GestureDetector(
-            onTap: () => context.read<NavigationProvider>().navigateToPage(
-                  context,
-                  FinishedOrderPage(),
-                  targetTabIndex: 2,
-                  targetPage: 'FinishedOrderPage',
-                  hrsLogin: true,
-                ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Text(
-                    'Selesai',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF0F0F0F),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 16, color: Colors.grey.shade500),
-                ],
-              ),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF9F9F9),
+          title: const Text(
+            'Pesanan',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F0F0F),
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(width: 20),
-        ],
-      ),
-      body: SafeArea(
-        child: SmartRefresher(
-          controller: _refreshController,
-          onRefresh: _onRefresh,
-          physics: const AlwaysScrollableScrollPhysics(),
-          header: buildRefreshHeader(),
-          child: CustomScrollView(
+          actions: [
+            // Icon-only, tanpa label — pesanan batal/expired ada di sini.
+            GestureDetector(
+              onTap: () => context.read<NavigationProvider>().navigateToPage(
+                    context,
+                    FinishedOrderPage(),
+                    targetTabIndex: 2,
+                    targetPage: 'FinishedOrderPage',
+                    hrsLogin: true,
+                  ),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.history_rounded,
+                    size: 18, color: Colors.grey.shade600),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+        ),
+        body: SafeArea(
+          child: SmartRefresher(
+            controller: _refreshController,
+            onRefresh: _onRefresh,
             physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(child: _buildSummaryRow()),
-              SliverToBoxAdapter(child: _buildFilterChips()),
-              SliverToBoxAdapter(child: _buildOrderList()),
-              SliverToBoxAdapter(child: _buildFinishedLink()),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
+            header: buildRefreshHeader(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _buildSummaryRow()),
+                SliverToBoxAdapter(child: _buildFilterChips()),
+                SliverToBoxAdapter(child: _buildOrderList()),
+                SliverToBoxAdapter(child: _buildFinishedLink()),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              ],
+            ),
           ),
         ),
       ),
@@ -431,16 +419,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFilterChips() {
+    // Titik merah = ada pesanan yang menunggu aksi customer di chip itu.
+    final statuses = _activeOrders.map(_statusOf).toSet();
     final chips = <_ChipItem>[
-      _ChipItem(value: null, label: 'Semua'),
+      const _ChipItem(value: null, label: 'Semua'),
       _ChipItem(
-          value: 'menunggu bayar',
-          label: OrderStatusFlow.displayLabel('menunggu bayar')),
+        value: 'menunggu bayar',
+        label: 'Pembayaran',
+        showDot: statuses.contains('menunggu bayar'),
+      ),
+      const _ChipItem(value: 'persiapan', label: 'Jadwal Foto'),
+      // Gabungan proses + review + revisi (lihat _filterGroups).
       _ChipItem(
-          value: 'persiapan', label: OrderStatusFlow.displayLabel('persiapan')),
-      _ChipItem(value: 'proses', label: OrderStatusFlow.displayLabel('proses')),
-      _ChipItem(value: 'review', label: OrderStatusFlow.displayLabel('review')),
-      _ChipItem(value: 'revisi', label: OrderStatusFlow.displayLabel('revisi')),
+        value: _chipPengerjaan,
+        label: 'Pengerjaan',
+        showDot: statuses.contains('review'),
+      ),
     ];
 
     return Container(
@@ -486,16 +480,36 @@ class _MainOrderPageState extends State<MainOrderPage> {
                       ]
                     : [],
               ),
-              child: Text(
-                chip.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                  letterSpacing: 0.1,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    chip.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.grey.shade700,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                  if (chip.showDot) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        shape: BoxShape.circle,
+                        // Tepi putih supaya titik tetap terlihat saat chip
+                        // aktif berwarna.
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           );
@@ -510,6 +524,26 @@ class _MainOrderPageState extends State<MainOrderPage> {
 
   Widget _buildOrderList() {
     final orders = _filteredOrders;
+
+    // Shimmer HANYA saat benar-benar belum ada data. Dulu shimmer di sini
+    // dihapus total, jadi list kosong sempat menampilkan "belum ada
+    // pesanan" sekilas sebelum data asli datang dari network.
+    final isLoading =
+        context.watch<PesananProvider>().isLoadingOrder && orders.isEmpty;
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
+        child: Column(
+          children: List.generate(
+            3,
+            (_) => const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: SkeletonCard(),
+            ),
+          ),
+        ),
+      );
+    }
 
     if (orders.isEmpty) {
       return EmptyOrder(onTap: () => setState(() => _selectedFilter = null));
@@ -539,10 +573,18 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetPage: 'RoomChatPage',
                             ),
                     onPay: () => _openPayment(o),
-                    onBatal: () => _batalkanPesanan(o),
-                    onGantiMetode: (!_isPaymentExpired(o) && (o.paymentNumber1 != null || o.expiryTime != null))
-                        ? () => _gantiMetodePembayaran(o)
-                        : null,
+                    onBatal: () => showBatalPesananFlow(context, o),
+                    // Hanya untuk pesanan yang BELUM dibayar — tanpa cek ini,
+                    // pesanan berbayar yang masih menyimpan nomor VA akan ikut
+                    // menampilkan opsi ganti metode di action sheet.
+                    onGantiMetode:
+                        (!PesananProvider.isPaymentSettled(o.statusBayar) &&
+                                !_isPaymentExpired(o) &&
+                                (o.paymentNumber1 != null ||
+                                    o.expiryTime != null ||
+                                    o.statusBayar == 'pending'))
+                            ? () => _gantiMetodePembayaran(o)
+                            : null,
                     onReview: () => showDialog(
                       context: context,
                       builder: (_) => UlasanDialog(
@@ -566,8 +608,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFinishedLink() {
-    final count = context.read<PesananProvider>().pesananSelesai.length;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 16, 10, 0),
       child: GestureDetector(
@@ -610,9 +650,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
                           color: Color(0xFF0F0F0F)),
                     ),
                     Text(
-                      count > 0
-                          ? '$count pesanan telah selesai'
-                          : 'Belum ada pesanan selesai',
+                      // Hitungan tidak lagi ditampilkan di sini -- datanya
+                      // baru di-fetch saat halaman ini dibuka (lihat
+                      // FinishedOrderPage.loadFinishedOrders), bukan lagi
+                      // ikut termuat di awal bersama pesanan aktif.
+                      'Lihat pesanan yang sudah selesai atau dibatalkan',
                       style:
                           TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
@@ -632,5 +674,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
 class _ChipItem {
   final String? value;
   final String label;
-  const _ChipItem({required this.value, required this.label});
+
+  /// Titik merah: ada pesanan yang menunggu aksi customer di chip ini.
+  final bool showDot;
+  const _ChipItem({
+    required this.value,
+    required this.label,
+    this.showDot = false,
+  });
 }
+
+const String _chipPengerjaan = 'proses';
+
+// Key chip -> daftar status backend yang direpresentasikannya. Murni
+// pengelompokan tampilan filter -- field statusProgresPesanan tiap pesanan
+// TIDAK berubah. Chip yang tidak ada di sini (menunggu bayar, persiapan)
+// berarti 1 chip = 1 status -- lihat _filteredOrders.
+const Map<String, List<String>> _filterGroups = {
+  _chipPengerjaan: ['proses', 'review', 'revisi'],
+};

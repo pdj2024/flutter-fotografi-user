@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/username_availability_service.dart';
+import 'package:mpjnew/src/core/utils/debouncer.dart';
 import 'package:mpjnew/src/core/utils/dropdown_search_config.dart';
 import 'package:mpjnew/src/data/models/customer_model.dart';
 import 'package:mpjnew/src/data/models/kota_model.dart';
@@ -22,6 +24,9 @@ class EditAccountPage extends StatefulWidget {
 
 class _EditAccountPageState extends State<EditAccountPage> {
   CustomerService customerService = CustomerService();
+  final UsernameAvailabilityService _usernameAvailabilityService =
+      UsernameAvailabilityService();
+  final Debouncer _usernameDebouncer = Debouncer(milliseconds: 500);
 
   final _formKey = GlobalKey<FormState>();
   TextEditingController nameController = TextEditingController();
@@ -35,6 +40,40 @@ class _EditAccountPageState extends State<EditAccountPage> {
   String? kotaError;
   String? emailError;
   bool isLoading = false;
+
+  // ── Cek keunikan username (debounced) ──
+  String? _originalUsername;
+  bool _isCheckingUsername = false;
+  // null = belum diverifikasi / tidak berubah dari semula, true = tersedia,
+  // false = sudah dipakai. Save hanya boleh ditekan kalau username tidak
+  // berubah dari semula, ATAU sudah lolos cek (true).
+  bool? _usernameAvailable;
+
+  bool get _canSaveUsername {
+    final current = usernameController.text.trim();
+    if (current == _originalUsername) return true;
+    return _usernameAvailable == true;
+  }
+
+  Widget? _usernameSuffixIcon() {
+    if (_isCheckingUsername) {
+      return const Padding(
+        padding: EdgeInsets.all(14),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
+        ),
+      );
+    }
+    if (_usernameAvailable == true) {
+      return const Icon(Icons.check_circle, color: Colors.green);
+    }
+    if (_usernameAvailable == false) {
+      return const Icon(Icons.cancel, color: Colors.red);
+    }
+    return null;
+  }
 
   Future<void> update(BuildContext context) async {
     final userProvider = context.read<UserProvider>();
@@ -92,6 +131,7 @@ class _EditAccountPageState extends State<EditAccountPage> {
       nameController.text = customer.namaDisplay;
       usernameController.text = customer.userName;
       emailController.text = customer.email;
+      _originalUsername = customer.userName;
       selectedKota = KotaModel(
         noId: customer.kota,
         namaKota: customer.namaKota,
@@ -101,9 +141,69 @@ class _EditAccountPageState extends State<EditAccountPage> {
     });
   }
 
+  void _onUsernameChanged() {
+    final value = usernameController.text.trim();
+    _usernameDebouncer.cancel();
+
+    if (value == _originalUsername) {
+      setState(() {
+        _isCheckingUsername = false;
+        _usernameAvailable = null;
+        if (usernameError == 'Username sudah digunakan') usernameError = null;
+      });
+      return;
+    }
+
+    // Format jelas belum valid -- biarkan validateForm() yang urus saat
+    // submit, jangan buang request API untuk input yang belum layak dicek.
+    final formatValid = value.length >= 3 &&
+        !value.contains(' ') &&
+        value == value.toLowerCase();
+    if (!formatValid) {
+      setState(() {
+        _isCheckingUsername = false;
+        _usernameAvailable = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isCheckingUsername = true;
+      _usernameAvailable = null;
+    });
+    _usernameDebouncer.run(() => _checkUsernameAvailability(value));
+  }
+
+  Future<void> _checkUsernameAvailability(String username) async {
+    final myId = context.read<UserProvider>().customer?.noId;
+    try {
+      final taken = await _usernameAvailabilityService.isTaken(
+        username,
+        excludeNoId: myId,
+      );
+      if (!mounted) return;
+      // Balasan basi -- user sudah lanjut ngetik lagi sebelum ini selesai.
+      if (usernameController.text.trim() != username) return;
+      setState(() {
+        _isCheckingUsername = false;
+        _usernameAvailable = !taken;
+        usernameError = taken ? 'Username sudah digunakan' : null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      if (usernameController.text.trim() != username) return;
+      setState(() {
+        _isCheckingUsername = false;
+        _usernameAvailable = null;
+        usernameError = 'Gagal memeriksa ketersediaan username';
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    usernameController.addListener(_onUsernameChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // ✅ Guard: tidak pakai ! langsung, cek null dulu
@@ -114,6 +214,8 @@ class _EditAccountPageState extends State<EditAccountPage> {
 
   @override
   void dispose() {
+    usernameController.removeListener(_onUsernameChanged);
+    _usernameDebouncer.dispose();
     nameController.dispose();
     usernameController.dispose();
     emailController.dispose();
@@ -127,169 +229,179 @@ class _EditAccountPageState extends State<EditAccountPage> {
     // ✅ Guard: tampilkan loading jika customer belum tersedia
     final customer = userProvider.customer;
     if (customer == null) {
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: const Color(0xFFF9F9F9),
-          elevation: 1,
-          title: const Text(
-            "Edit Profile",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Stack(
-      children: [
-        Scaffold(
+      return SafeArea(
+        child: Scaffold(
           appBar: AppBar(
             backgroundColor: const Color(0xFFF9F9F9),
             elevation: 1,
             title: const Text(
               "Edit Profile",
-              style:
-                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
             ),
           ),
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // ── Alert banner jika profil belum lengkap ──
-                    if (customer.userName.isEmpty ||
-                        customer.namaDisplay.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 20),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border:
-                              Border.all(color: Colors.blue.shade100, width: 1),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(6),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        SafeArea(
+          child: Scaffold(
+            appBar: AppBar(
+              backgroundColor: const Color(0xFFF9F9F9),
+              elevation: 1,
+              title: const Text(
+                "Edit Profile",
+                style:
+                    TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              ),
+            ),
+            body: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // ── Alert banner jika profil belum lengkap ──
+                      if (customer.userName.isEmpty ||
+                          customer.namaDisplay.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border:
+                                Border.all(color: Colors.blue.shade100, width: 1),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(Icons.info_outline,
+                                    color: Colors.blue.shade700, size: 18),
                               ),
-                              child: Icon(Icons.info_outline,
-                                  color: Colors.blue.shade700, size: 18),
-                            ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
-                                maxLines: null,
-                                overflow: TextOverflow.visible,
-                                style: TextStyle(
-                                  color: Colors.grey.shade700,
-                                  fontSize: 13,
-                                  height: 1.4,
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  "Lengkapi nama dan username Anda untuk pengalaman yang lebih personal.",
+                                  maxLines: null,
+                                  overflow: TextOverflow.visible,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontSize: 13,
+                                    height: 1.4,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // ── Foto Section ──
-                    userProvider.photoUrl == null
-                        ? Container(
-                            width: 82,
-                            height: 82,
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.person),
-                          )
-                        : AvatarCircle(size: 82, imgUrl: userProvider.photoUrl),
-                    const SizedBox(height: 10),
-                    const SizedBox(height: 30),
-
-                    // ── Form Section ──
-                    CustomTextField(
-                      label: "Nama Lengkap",
-                      controller: nameController,
-                      placeholder: "Nama Lengkap",
-                      keyboardType: TextInputType.text,
-                      errorMessage: nameError,
-                    ),
-                    CustomTextField(
-                      label: "Username",
-                      controller: usernameController,
-                      placeholder: "Username",
-                      keyboardType: TextInputType.text,
-                      errorMessage: usernameError,
-                    ),
-                    CustomTextField(
-                      label: "Email",
-                      controller: emailController,
-                      readOnly: true,
-                      placeholder: "Email",
-                      keyboardType: TextInputType.text,
-                      errorMessage: emailError,
-                    ),
-                    SingleSelectDropdown<KotaModel>(
-                      config: KotaDropdownConfig(
-                        label: 'Kota Domisili',
-                        errorMessage: kotaError,
-                        debounceDuration: 500,
-                        enableRemoteSearch: true,
-                      ),
-                      selectedValue: selectedKota,
-                      onChanged: (value) {
-                        setState(() => selectedKota = value);
-                      },
-                    ),
-
-                    // ── Button Section ──
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 50),
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          backgroundColor: Constants.primaryColorVendor,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            ],
                           ),
                         ),
-                        onPressed: () async {
-                          var isValid = validateForm();
-                          if (!isValid) return;
-
-                          try {
-                            await update(context);
-                            if (!context.mounted) return;
-                            // ✅ Hanya pop jika update berhasil
-                            context.read<NavigationProvider>().showBottomNav();
-                            context
-                                .read<NavigationProvider>()
-                                .navigatorKeys[3]
-                                .currentState
-                                ?.pop();
-                          } catch (e) {
-                            // Error sudah ditampilkan di dalam update(), tidak perlu pop
-                          }
-                        },
-                        child: const Text("Simpan",
-                            style: TextStyle(fontSize: 16)),
+          
+                      // ── Foto Section ──
+                      userProvider.photoUrl == null
+                          ? Container(
+                              width: 82,
+                              height: 82,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.person),
+                            )
+                          : AvatarCircle(size: 82, imgUrl: userProvider.photoUrl),
+                      const SizedBox(height: 10),
+                      const SizedBox(height: 30),
+          
+                      // ── Form Section ──
+                      CustomTextField(
+                        label: "Nama Lengkap",
+                        controller: nameController,
+                        placeholder: "Nama Lengkap",
+                        keyboardType: TextInputType.text,
+                        errorMessage: nameError,
                       ),
-                    ),
-                  ],
+                      CustomTextField(
+                        label: "Username",
+                        controller: usernameController,
+                        placeholder: "Username",
+                        keyboardType: TextInputType.text,
+                        errorMessage: usernameError,
+                        suffixIcon: _usernameSuffixIcon(),
+                      ),
+                      CustomTextField(
+                        label: "Email",
+                        controller: emailController,
+                        readOnly: true,
+                        placeholder: "Email",
+                        keyboardType: TextInputType.text,
+                        errorMessage: emailError,
+                      ),
+                      SingleSelectDropdown<KotaModel>(
+                        config: KotaDropdownConfig(
+                          label: 'Kota Domisili',
+                          errorMessage: kotaError,
+                          debounceDuration: 500,
+                          enableRemoteSearch: true,
+                        ),
+                        selectedValue: selectedKota,
+                        onChanged: (value) {
+                          setState(() => selectedKota = value);
+                        },
+                      ),
+          
+                      // ── Button Section ──
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 50),
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            backgroundColor: Constants.primaryColorVendor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed:
+                              (_isCheckingUsername || !_canSaveUsername)
+                                  ? null
+                                  : () async {
+                                      var isValid = validateForm();
+                                      if (!isValid) return;
+
+                                      try {
+                                        await update(context);
+                                        if (!context.mounted) return;
+                                        // ✅ Hanya pop jika update berhasil
+                                        context
+                                            .read<NavigationProvider>()
+                                            .showBottomNav();
+                                        context
+                                            .read<NavigationProvider>()
+                                            .navigatorKeys[3]
+                                            .currentState
+                                            ?.pop();
+                                      } catch (e) {
+                                        // Error sudah ditampilkan di dalam update(), tidak perlu pop
+                                      }
+                                    },
+                          child: const Text("Simpan",
+                              style: TextStyle(fontSize: 16)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

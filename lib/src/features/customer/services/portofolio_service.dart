@@ -79,10 +79,11 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      debugPrint('==============================');
-      debugPrint('Response Body: ${response.body}');
-      debugPrint('Status Code: ${response.statusCode}');
-      debugPrint('==============================');
+      // Sengaja TIDAK mencetak response.body: debugPrint di-throttle ~12 KB/s,
+      // dan payload portofolio besar — mencetaknya menahan UI thread
+      // ratusan milidetik di debug build.
+      debugPrint('[PortofolioService] → ${response.statusCode} '
+          '(${response.body.length} bytes)');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
@@ -115,10 +116,11 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      debugPrint('==============================');
-      debugPrint('Response Body: ${response.body}');
-      debugPrint('Status Code: ${response.statusCode}');
-      debugPrint('==============================');
+      // Sengaja TIDAK mencetak response.body: debugPrint di-throttle ~12 KB/s,
+      // dan payload portofolio besar — mencetaknya menahan UI thread
+      // ratusan milidetik di debug build.
+      debugPrint('[PortofolioService] → ${response.statusCode} '
+          '(${response.body.length} bytes)');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
@@ -151,10 +153,11 @@ class PortofolioService {
             'orderDir': orderDir,
         },
       );
-      debugPrint('==============================');
-      debugPrint('Response Body: ${response.body}');
-      debugPrint('Status Code: ${response.statusCode}');
-      debugPrint('==============================');
+      // Sengaja TIDAK mencetak response.body: debugPrint di-throttle ~12 KB/s,
+      // dan payload portofolio besar — mencetaknya menahan UI thread
+      // ratusan milidetik di debug build.
+      debugPrint('[PortofolioService] → ${response.statusCode} '
+          '(${response.body.length} bytes)');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);

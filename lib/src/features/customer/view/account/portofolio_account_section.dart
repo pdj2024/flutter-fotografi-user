@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
@@ -379,20 +379,27 @@ class _MediaImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Thumbnail grid: decode sebesar sel grid, bukan resolusi penuh foto —
+    // resolusi penuh (mis. 3000×4000 ≈ 48MB/gambar) langsung memenuhi cache
+    // memori sehingga gambar lain terus terbuang dan dimuat ulang.
+    final decodeWidth =
+        decodeWidthFor(context, MediaQuery.sizeOf(context).width / 2);
+
     if (media.isCached && media.localPath != null) {
       final file = File(media.localPath!);
       if (file.existsSync()) {
         return Image.file(
           file,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _networkImage(),
+          cacheWidth: decodeWidth,
+          errorBuilder: (_, __, ___) => _networkImage(decodeWidth),
         );
       }
     }
-    return _networkImage();
+    return _networkImage(decodeWidth);
   }
 
-  Widget _networkImage() {
+  Widget _networkImage(int decodeWidth) {
     final isVideo = media.contentType?.startsWith('video') ?? false;
     final url = isVideo ? (media.thumbUrl ?? media.url) : media.url;
     final effectiveUrl = (url != null && url.trim().isNotEmpty)
@@ -403,12 +410,10 @@ class _MediaImage extends StatelessWidget {
       return _errorWidget();
     }
 
-    return CachedNetworkImage(
-      imageUrl: effectiveUrl,
-      fit: BoxFit.cover,
-      placeholder: (_, __) => const ShimmerPlaceholder(radius: 10),
-      errorWidget: (_, __, ___) => _errorWidget(),
-      fadeInDuration: const Duration(milliseconds: 250),
+    return AppNetworkImage(
+      url: effectiveUrl,
+      decodeWidth: decodeWidth,
+      errorWidget: _errorWidget(),
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/features/customer/view/account/legal_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/complain_list_page.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,109 +20,125 @@ class SettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF5F5F7),
-        elevation: 0,
-        title: const Text(
-          'Pengaturan',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
-          // ── Section: Informasi ────────────────────────────
-          _SectionLabel(label: 'Informasi'),
-          _SettingCard(
-            children: [
-              _SettingTile(
-                icon: Icons.shield_outlined,
-                iconColor: const Color(0xFFE67E22),
-                iconBg: const Color(0xFFFEF3E8),
-                title: 'Kebijakan Privasi',
-                subtitle: 'Cara kami melindungi data Anda',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const LegalPage(type: LegalType.privacy),
-                  ),
-                ),
-              ),
-              _Divider(),
-              _SettingTile(
-                icon: Icons.description_outlined,
-                iconColor: const Color(0xFF2980B9),
-                iconBg: const Color(0xFFE8F4FD),
-                title: 'Syarat & Ketentuan',
-                subtitle: 'Aturan penggunaan aplikasi',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const LegalPage(type: LegalType.terms),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // ── Section: Lainnya ──────────────────────────────
-          _SectionLabel(label: 'Lainnya'),
-          _SettingCard(
-            children: [
-              _SettingTile(
-                icon: Icons.flag_outlined,
-                iconColor: const Color(0xFF27AE60),
-                iconBg: const Color(0xFFE9F7EF),
-                title: 'Laporan & Keluhan',
-                subtitle: 'Kirim laporan atau keluhan ke tim kami',
-                onTap: () => _showLaporanDialog(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          _SettingCard(
-            children: [
-              _SettingTile(
-                icon: Icons.logout_rounded,
-                iconColor: const Color(0xFFE74C3C),
-                iconBg: const Color(0xFFFDECEC),
-                title: 'Keluar',
-                subtitle: 'Logout dari akun ini',
-                titleColor: const Color(0xFFE74C3C),
-                onTap: () {
-                  ConfirmDialog.showLogoutDialog(
-                    context: context,
-                    onConfirm: () {
-                      final navProv = Provider.of<NavigationProvider>(context,
-                          listen: false);
-                      navProv.handleLogout(context);
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 32),
-
-          // ── App version ───────────────────────────────────
-          Center(
-            child: Text(
-              'Versi ${Constants.versionApp}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF5F5F7),
+          elevation: 0,
+          title: const Text(
+            'Pengaturan',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
             ),
           ),
-          const SizedBox(height: 24),
-        ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          children: [
+            // ── Section: Informasi ────────────────────────────
+            _SectionLabel(label: 'Informasi'),
+            _SettingCard(
+              children: [
+                _SettingTile(
+                  icon: Icons.shield_outlined,
+                  iconColor: const Color(0xFFE67E22),
+                  iconBg: const Color(0xFFFEF3E8),
+                  title: 'Kebijakan Privasi',
+                  subtitle: 'Cara kami melindungi data Anda',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LegalPage(type: LegalType.privacy),
+                    ),
+                  ),
+                ),
+                _Divider(),
+                _SettingTile(
+                  icon: Icons.description_outlined,
+                  iconColor: const Color(0xFF2980B9),
+                  iconBg: const Color(0xFFE8F4FD),
+                  title: 'Syarat & Ketentuan',
+                  subtitle: 'Aturan penggunaan aplikasi',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LegalPage(type: LegalType.terms),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+      
+            const SizedBox(height: 20),
+      
+            // ── Section: Lainnya ──────────────────────────────
+            _SectionLabel(label: 'Lainnya'),
+            _SettingCard(
+              children: [
+                _SettingTile(
+                  icon: Icons.report_problem_outlined,
+                  iconColor: const Color(0xFFC0392B),
+                  iconBg: const Color(0xFFFDEDEC),
+                  title: 'Complain',
+                  subtitle: 'Lihat complain aktif dan yang sudah selesai',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ComplainListPage(),
+                    ),
+                  ),
+                ),
+                _Divider(),
+                _SettingTile(
+                  icon: Icons.flag_outlined,
+                  iconColor: const Color(0xFF27AE60),
+                  iconBg: const Color(0xFFE9F7EF),
+                  title: 'Laporan & Keluhan',
+                  subtitle: 'Kirim laporan atau keluhan ke tim kami',
+                  onTap: () => _showLaporanDialog(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+      
+            _SettingCard(
+              children: [
+                _SettingTile(
+                  icon: Icons.logout_rounded,
+                  iconColor: const Color(0xFFE74C3C),
+                  iconBg: const Color(0xFFFDECEC),
+                  title: 'Keluar',
+                  subtitle: 'Logout dari akun ini',
+                  titleColor: const Color(0xFFE74C3C),
+                  onTap: () {
+                    ConfirmDialog.showLogoutDialog(
+                      context: context,
+                      onConfirm: () {
+                        final navProv = Provider.of<NavigationProvider>(context,
+                            listen: false);
+                        navProv.handleLogout(context);
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+      
+            const SizedBox(height: 32),
+      
+            // ── App version ───────────────────────────────────
+            Center(
+              child: Text(
+                'Versi ${Constants.versionApp}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }

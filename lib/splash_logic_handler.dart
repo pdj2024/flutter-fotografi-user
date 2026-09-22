@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/services/agreement_check_service.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
 import 'package:mpjnew/src/core/services/version_check_service.dart';
@@ -115,13 +116,26 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
     try {
       debugPrint('🚀 LOADING INITIAL DATA (Customer)');
 
-      apiClient.onSessionExpired = () {
-        if (mounted) context.read<NavigationProvider>().handleLogout(context);
-      };
+      // Sengaja TIDAK menimpa apiClient.onSessionExpired di sini — main.dart
+      // sudah mendaftarkannya ke _handleSessionExpired, yang melakukan
+      // cleanup chat/FCM lengkap DAN membedakan guest (jangan lempar ke
+      // login) dari user yang sesinya genuinely expired (tetap lempar ke
+      // login). Override di sini dulu menimpa itu dengan versi tanpa
+      // pembedaan tersebut dan tanpa cleanup.
 
-      // 0️⃣ Version check
+      // 0️⃣ Version check — dijalankan BERBARENGAN dengan restore session.
+      //    Keduanya tidak saling bergantung; hasilnya baru di-await tepat
+      //    sebelum dipakai, jadi tidak lagi menahan seluruh boot sendirian.
       _updateMessage('Memeriksa versi aplikasi...');
-      final versionResult = await VersionCheckService().checkVersion();
+      final versionFuture = VersionCheckService().checkVersion();
+
+      // 1️⃣ Restore session
+      _updateMessage('Memulihkan sesi...');
+      final userProvider = context.read<UserProvider>();
+      final sessionRestored = await userProvider.restoreSession();
+      if (!mounted) return;
+
+      final versionResult = await versionFuture;
       if (!mounted) return;
 
       if (!versionResult.isCompatible) {
@@ -129,12 +143,6 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
             context, versionResult);
         return;
       }
-
-      // 1️⃣ Restore session
-      _updateMessage('Memulihkan sesi...');
-      final userProvider = context.read<UserProvider>();
-      final sessionRestored = await userProvider.restoreSession();
-      if (!mounted) return;
 
       // portoProvider dideklarasikan di luar blok auth agar bisa digunakan
       // baik untuk user yang sudah login maupun guest.
@@ -218,6 +226,15 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
         });
       }
 
+      // 6️⃣ Gate persetujuan dokumen legal — hanya untuk user yang login.
+      //    Ditempatkan sebelum _startPage di-set: splash masih ter-render
+      //    jadi context-nya valid untuk dialog, dan belum ada perpindahan
+      //    route yang bisa membatalkannya.
+      if (sessionRestored && userProvider.customer != null && mounted) {
+        await AgreementCheckService.ensure(context);
+        if (!mounted) return;
+      }
+
       _updateMessage('Hampir selesai...');
       _startPage = const MainMenu();
       debugPrint('✅ INITIAL DATA LOAD COMPLETE');
@@ -290,73 +307,72 @@ class _SplashLogicHandlerState extends State<SplashLogicHandler>
         backgroundColor: const Color(0xFF3b3add),
         body: FadeTransition(
           opacity: _fadeOutOpacity,
-          child: SafeArea(
-            child: SizedBox.expand(
-              child: Column(
-                children: [
-                  const Spacer(flex: 3),
+          child: SizedBox.expand(
+            child: Column(
+              children: [
+                const Spacer(flex: 3),
 
-                  // ── Logo ───────────────────────────────
-                  FadeTransition(
-                    opacity: _logoOpacity,
-                    child: ScaleTransition(
-                      scale: _logoScale,
-                      child: Image.asset(
-                        'assets/icon.png',
-                        width: 250,
-                        height: 250,
-                      ),
+                // ── Logo ───────────────────────────────
+                FadeTransition(
+                  opacity: _logoOpacity,
+                  child: ScaleTransition(
+                    scale: _logoScale,
+                    child: Image.asset(
+                      'assets/icon_pictmax.png',
+                      width: 250,
+                      height: 250,
+                      fit: BoxFit.contain,
                     ),
                   ),
+                ),
 
-                  const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-                  // ── App name ───────────────────────────
-                  // FadeTransition(
-                  //   opacity: _textOpacity,
-                  //   child: const Text(
-                  //     'Fotografi',
-                  //     style: TextStyle(
-                  //       fontSize: 24,
-                  //       fontWeight: FontWeight.w700,
-                  //       color: Colors.white,
-                  //       letterSpacing: -0.5,
-                  //     ),
-                  //   ),
-                  // ),
+                // ── App name ───────────────────────────
+                // FadeTransition(
+                //   opacity: _textOpacity,
+                //   child: const Text(
+                //     'Fotografi',
+                //     style: TextStyle(
+                //       fontSize: 24,
+                //       fontWeight: FontWeight.w700,
+                //       color: Colors.white,
+                //       letterSpacing: -0.5,
+                //     ),
+                //   ),
+                // ),
 
-                  const Spacer(flex: 2),
+                const Spacer(flex: 2),
 
-                  // ── Dot loader + message ───────────────
-                  FadeTransition(
-                    opacity: _textOpacity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _DotLoader(
-                          controller: _pulseController,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(height: 16),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          child: Text(
-                            _loadingMessage,
-                            key: ValueKey(_loadingMessage),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white.withOpacity(0.5),
-                              fontWeight: FontWeight.w400,
-                            ),
+                // ── Dot loader + message ───────────────
+                FadeTransition(
+                  opacity: _textOpacity,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _DotLoader(
+                        controller: _pulseController,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: Text(
+                          _loadingMessage,
+                          key: ValueKey(_loadingMessage),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.5),
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
 
-                  const Spacer(flex: 1),
-                ],
-              ),
+                const Spacer(flex: 1),
+              ],
             ),
           ),
         ),

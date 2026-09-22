@@ -27,16 +27,19 @@ class ChatPenawaranCard extends StatelessWidget {
         DateFormat("dd MMM yyyy", "id_ID").format(penawaran.tglRealisasi);
     final waktu = Helper.toLocalTime(penawaran.tglRealisasi);
     final isCancelled = penawaran.status == 'nonaktif';
+    final isExpired = penawaran.expiredAt != null &&
+        DateTime.now().isAfter(penawaran.expiredAt!);
+    final isDisabled = isCancelled || isExpired;
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       decoration: BoxDecoration(
-        color: isCancelled ? Colors.grey.shade50 : Colors.white,
+        color: isDisabled ? Colors.grey.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isCancelled ? 0.06 : 0.2),
+            color: Colors.black.withOpacity(isDisabled ? 0.06 : 0.2),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -49,7 +52,7 @@ class ChatPenawaranCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isCancelled
+              color: isDisabled
                   ? Colors.grey.shade200
                   : Constants.primaryColor.withOpacity(0.1),
               borderRadius: const BorderRadius.only(
@@ -72,7 +75,7 @@ class ChatPenawaranCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: isCancelled
+                                color: isDisabled
                                     ? Colors.grey.shade500
                                     : Colors.black54,
                               ),
@@ -107,6 +110,35 @@ class ChatPenawaranCard extends StatelessWidget {
                                 ],
                               ),
                             ),
+                          ] else if (isExpired) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: Colors.orange.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.timer_off_outlined,
+                                      size: 11,
+                                      color: Colors.orange.shade700),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Kadaluarsa',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -116,7 +148,7 @@ class ChatPenawaranCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: isCancelled
+                          color: isDisabled
                               ? Colors.grey.shade400
                               : Constants.primaryColor,
                           decoration: isCancelled
@@ -143,7 +175,7 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.inventory_2_outlined,
                   "Paket",
                   penawaran.namaPaket,
-                  isCancelled: isCancelled,
+                  isCancelled: isDisabled,
                 ),
                 const SizedBox(height: 12),
 
@@ -152,7 +184,16 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.calendar_today_outlined,
                   "Tanggal Realisasi",
                   "$waktu, $tanggal",
-                  isCancelled: isCancelled,
+                  isCancelled: isDisabled,
+                ),
+                const SizedBox(height: 12),
+
+                // Estimasi Pengerjaan
+                _buildInfoRow(
+                  Icons.hourglass_bottom_outlined,
+                  "Estimasi Pengerjaan",
+                  Helper.formatEstimasiPengerjaan(penawaran.estimasiPengerjaan),
+                  isCancelled: isDisabled,
                 ),
                 const SizedBox(height: 12),
 
@@ -161,7 +202,7 @@ class ChatPenawaranCard extends StatelessWidget {
                   Icons.location_on_outlined,
                   "Lokasi",
                   penawaran.lokasi,
-                  isCancelled: isCancelled,
+                  isCancelled: isDisabled,
                 ),
 
                 // Kota (jika berbeda dengan lokasi)
@@ -174,15 +215,15 @@ class ChatPenawaranCard extends StatelessWidget {
                     Icons.location_city_outlined,
                     "Kota",
                     penawaran.namaKota,
-                    isCancelled: isCancelled,
+                    isCancelled: isDisabled,
                   ),
                 ],
               ],
             ),
           ),
 
-          // Tombol Action — hanya tampil jika bukan dibatalkan
-          if (!isCancelled)
+          // Tombol Action — hanya tampil jika bukan dibatalkan/kadaluarsa
+          if (!isDisabled)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: SizedBox(

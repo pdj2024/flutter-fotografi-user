@@ -34,6 +34,10 @@ const _colorTable = <String, (Color, IconData)>{
   'dibatalkan': (Color(0xFFDC2626), Icons.cancel_outlined), // Merah
   'batal': (Color(0xFFDC2626), Icons.cancel_rounded), // Merah
   'expired': (Color(0xFFD97706), Icons.timer_off_rounded), // Oranye
+  'closed': (
+    Color(0xFF64748B),
+    Icons.lock_outline_rounded
+  ), // Abu — ditutup admin
 };
 
 const _fallbackColor = Color(0xFF64748B);
@@ -41,10 +45,49 @@ const _fallbackBg = Color(0xFFF1F5F9);
 const _fallbackIcon = Icons.hourglass_empty_outlined;
 const _fallbackLabel = 'Tidak Diketahui';
 
+// ── Status refund ─────────────────────────────────────────────────
+// Refund bukan nilai Status_Progress_Pesanan tersendiri — diturunkan dari
+// Tgl_Refund/Tgl_Refunded (lihat PesananModel.isRefundProcessing), lalu
+// menimpa tampilan status terminal.
+
+const _terminalKeys = {
+  'batal',
+  'dibatalkan',
+  'refund paid',
+  'expired',
+  'closed',
+};
+
+const _refundProcessingConfig = StatusConfig(
+  color: Color(0xFFD97706),
+  bgColor: Color(0x1AD97706),
+  label: 'Dana Sedang Direfund',
+  icon: Icons.currency_exchange_rounded,
+);
+
+const _refundDoneConfig = StatusConfig(
+  color: Color(0xFF16A34A),
+  bgColor: Color(0x1A16A34A),
+  label: 'Refund Selesai',
+  icon: Icons.check_circle_outline_rounded,
+);
+
 // ── Factory function ──────────────────────────────────────────────
 
-StatusConfig getStatus(String status) {
+StatusConfig getStatus(
+  String status, {
+  bool isRefundProcessing = false,
+  bool isRefundDone = false,
+}) {
   final key = status.toLowerCase().trim();
+
+  if (_terminalKeys.contains(key)) {
+    // 'refund paid' sudah menyatakan dananya kembali, tanpa perlu
+    // menunggu Tgl_Refunded terisi.
+    if (isRefundDone || key == 'refund paid') return _refundDoneConfig;
+    if (isRefundProcessing) return _refundProcessingConfig;
+  }
+
   final label = OrderStatusFlow.displayLabel(key);
   final entry = _colorTable[key];
 

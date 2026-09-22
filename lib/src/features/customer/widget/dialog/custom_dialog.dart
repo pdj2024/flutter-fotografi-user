@@ -161,6 +161,7 @@ class CustomDialog {
                               child: TextField(
                                 controller: roomChatProvider.messageController,
                                 minLines: 1,
+                                autofocus: true,
                                 maxLines: null,
                                 cursorColor: Constants.primaryColor,
                                 decoration: InputDecoration(
@@ -462,6 +463,7 @@ class CustomDialog {
                                   // ✅ Auto expand kebawah
                                   minLines: 1,
                                   maxLines: 5,
+                                  autofocus: true,
                                   keyboardType: TextInputType.multiline,
                                   textInputAction: TextInputAction.newline,
                                   cursorColor: Constants.primaryColor,

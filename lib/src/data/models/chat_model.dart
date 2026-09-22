@@ -58,6 +58,28 @@ enum JenisPesan {
   }
 }
 
+/// Satu-satunya sumber teks preview "pesan terakhir" di room list.
+///
+/// [jenis] HARUS hasil `resolvedJenisPesan`, bukan field `jenis_pesan` mentah:
+/// server sering mengirim "text" padahal tipe aslinya ada di no_penawaran /
+/// no_invoice / id_paket. Pakai mentah → preview jatuh ke "Pesan baru".
+String chatPreviewText({required JenisPesan jenis, String message = ''}) {
+  if (message.isNotEmpty) return message;
+  switch (jenis) {
+    case JenisPesan.paket:
+      return '📦 Paket ditawarkan';
+    case JenisPesan.penawaran:
+      return '💰 Penawaran baru';
+    case JenisPesan.pesanan:
+      return '🧾 Detail pesanan';
+    case JenisPesan.image:
+      return '🖼️ Gambar';
+    case JenisPesan.text:
+    case JenisPesan.system:
+      return 'Pesan baru';
+  }
+}
+
 /// ✅ FIXED: ChatModel with correct status field names
 class ChatModel {
   final String messageId;

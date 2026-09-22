@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
@@ -31,6 +33,10 @@ class MainMenu extends StatefulWidget {
 class _MainMenuState extends State<MainMenu> {
   bool _sudahCekLogin = false;
 
+  /// Tab yang pernah dibuka — sekali masuk, tetap di-mount agar state dan
+  /// posisi scroll-nya bertahan saat user berpindah tab.
+  final Set<int> _mountedTabs = {0};
+
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
@@ -45,140 +51,154 @@ class _MainMenuState extends State<MainMenu> {
       });
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        final provider =
-            Provider.of<NavigationProvider>(context, listen: false);
-        return await provider.onWillPop(context);
+    // Tombol back perangkat SELALU ditangani shell ini (NavigationProvider.
+    // onWillPop): pop halaman di tab aktif → pindah ke Home → tekan 2x keluar.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit =
+            await context.read<NavigationProvider>().onWillPop(context);
+        if (shouldExit) SystemNavigator.pop();
       },
-      child: Scaffold(
-        key: const PageStorageKey('MainMenu'),
-        body: Consumer<NavigationProvider>(
-          builder: (context, navigationProvider, child) {
-            return Stack(
-              children: [
-                _buildOffstageNavigator(0, (_) => CustomerHomePage()),
-                _buildOffstageNavigator(1, (_) => const ChatListPage()),
-                _buildOffstageNavigator(2, (_) => const MainOrderPage()),
-                _buildOffstageNavigator(3, (_) => const CustomerAccountPage()),
-                Consumer<NavigationProvider>(
-                  builder: (context, nav, _) {
-                    final isHiddenTab = nav.selectedIndex == 1;
-                    final isNestedPage = !nav.isBottomNavVisible;
+      // Navigator per-tab melapor "tidak bisa back" ke Android begitu kembali
+      // ke halaman awalnya (mis. setelah detail pesanan ditutup). Laporan itu
+      // membuat Android menutup app langsung, tanpa lewat onWillPop di atas —
+      // jadi app keluar tanpa ke Home dulu. Telan di sini.
+      child: NotificationListener<NavigationNotification>(
+        onNotification: (_) => true,
+        child: SafeArea(
+          child: Scaffold(
+            key: const PageStorageKey('MainMenu'),
+            body: Consumer<NavigationProvider>(
+              builder: (context, navigationProvider, child) {
+                return Stack(
+                  children: [
+                    _buildOffstageNavigator(0, (_) => CustomerHomePage()),
+                    _buildOffstageNavigator(1, (_) => const ChatListPage()),
+                    _buildOffstageNavigator(2, (_) => const MainOrderPage()),
+                    _buildOffstageNavigator(
+                        3, (_) => const CustomerAccountPage()),
+                    Consumer<NavigationProvider>(
+                      builder: (context, nav, _) {
+                        final isHiddenTab = nav.selectedIndex == 1;
+                        final isNestedPage = !nav.isBottomNavVisible;
 
-                    if (isHiddenTab || isNestedPage) {
-                      return const SizedBox.shrink();
-                    }
+                        if (isHiddenTab || isNestedPage) {
+                          return const SizedBox.shrink();
+                        }
 
-                    return const Positioned(
-                      bottom: 20,
-                      right: 16,
-                      child: HelpFab(),
-                    );
-                  },
-                ),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: navigationProvider.isBottomNavVisible
-            ? Consumer<NavigationProvider>(
-                builder: (context, navigationProvider, child) {
-                  int selectedIndex = navigationProvider.selectedIndex;
+                        return const Positioned(
+                          bottom: 20,
+                          right: 16,
+                          child: HelpFab(),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+            bottomNavigationBar: navigationProvider.isBottomNavVisible
+                ? Consumer<NavigationProvider>(
+                    builder: (context, navigationProvider, child) {
+                      int selectedIndex = navigationProvider.selectedIndex;
 
-                  return BottomNavigationBar(
-                    currentIndex: selectedIndex,
-                    selectedItemColor: Constants.primaryColor,
-                    unselectedItemColor: Colors.grey,
-                    type: BottomNavigationBarType.fixed,
-                    onTap: (index) =>
-                        _handleTabTap(index, context, selectedIndex),
-                    items: [
-                      BottomNavigationBarItem(
-                        icon: Icon(selectedIndex == 0
-                            ? Icons.explore
-                            : Icons.explore_outlined),
-                        label: 'Jelajah',
-                      ),
-                      BottomNavigationBarItem(
-                        icon: SizedBox(
-                          width: 40,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.center,
-                            children: [
-                              Icon(
-                                selectedIndex == 1
-                                    ? Icons.chat
-                                    : Icons.chat_outlined,
-                              ),
-                              if (chatProvider.totalUnreadCount > 0 &&
-                                  userProvider.userId != null)
-                                Positioned(
-                                  top: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.shade200,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 18,
-                                      minHeight: 18,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        chatProvider.totalUnreadCount > 99
-                                            ? '99+'
-                                            : chatProvider.totalUnreadCount
-                                                .toString(),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
+                      return BottomNavigationBar(
+                        currentIndex: selectedIndex,
+                        selectedItemColor: Constants.primaryColor,
+                        unselectedItemColor: Colors.grey,
+                        type: BottomNavigationBarType.fixed,
+                        onTap: (index) =>
+                            _handleTabTap(index, context, selectedIndex),
+                        items: [
+                          BottomNavigationBarItem(
+                            icon: Icon(selectedIndex == 0
+                                ? Icons.explore
+                                : Icons.explore_outlined),
+                            label: 'Jelajah',
+                          ),
+                          BottomNavigationBarItem(
+                            icon: SizedBox(
+                              width: 40,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    selectedIndex == 1
+                                        ? Icons.chat
+                                        : Icons.chat_outlined,
                                   ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        label: 'Pesan',
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Icon(selectedIndex == 2
-                            ? Icons.assignment
-                            : Icons.assignment_outlined),
-                        label: 'Order',
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selectedIndex == 3
-                                  ? Constants.primaryColor
-                                  : Colors.transparent,
-                              width: 2,
+                                  if (chatProvider.totalUnreadCount > 0 &&
+                                      userProvider.userId != null)
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent.shade200,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 18,
+                                          minHeight: 18,
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            chatProvider.totalUnreadCount > 99
+                                                ? '99+'
+                                                : chatProvider.totalUnreadCount
+                                                    .toString(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
+                            label: 'Pesan',
                           ),
-                          child: const Icon(Icons.person),
-                        ),
-                        label: 'Profile',
-                      ),
-                    ],
-                  );
-                },
-              )
-            : null,
+                          BottomNavigationBarItem(
+                            icon: Icon(selectedIndex == 2
+                                ? Icons.assignment
+                                : Icons.assignment_outlined),
+                            label: 'Order',
+                          ),
+                          BottomNavigationBarItem(
+                            icon: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selectedIndex == 3
+                                      ? Constants.primaryColor
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(Icons.person),
+                            ),
+                            label: 'Profile',
+                          ),
+                        ],
+                      );
+                    },
+                  )
+                : null,
+          ),
+        ),
       ),
     );
   }
@@ -282,8 +302,12 @@ class _MainMenuState extends State<MainMenu> {
         final noOrder = progressData.noOrder;
         if (noOrder != null) {
           historyOrderProv.handleProgressFromFCM(progressData);
-          pesananProv.updateOrderStatus(
-              noOrder, progressData.statusProgressPesanan);
+          // Full refresh (bukan updateOrderStatus) -- history progres bisa
+          // dibuat tanpa status berubah (mis. perpanjang batas pengerjaan),
+          // dan updateOrderStatus cuma menambal statusProgresPesanan +
+          // deskripsiProgresPesanan secara lokal, field lain seperti
+          // tglPengerjaanMax tidak pernah ikut ter-refresh dari situ.
+          pesananProv.refreshOrder(noOrder);
         }
       };
 
@@ -300,12 +324,16 @@ class _MainMenuState extends State<MainMenu> {
 
       debugPrint("[MainMenu] ✅ FCM callbacks configured");
 
-      // ── Load initial data (paralel) ──────────────────────────────
-      debugPrint("[MainMenu] 📥 Loading initial data...");
-      await Future.wait([
-        pesananProv.loadOrder(context),
-        context.read<PortofolioProvider>().loadPortofolio(context),
-      ]);
+      // ── Load initial data (T2 — background) ──────────────────────
+      // Portofolio SENGAJA tidak di-load di sini: splash sudah mem-prefetch-nya
+      // (splash_logic_handler _loadInitialData). Memanggil loadPortofolio lagi
+      // menyalakan ulang _isLoadingPorto → Home balik ke shimmer tepat setelah
+      // splash bilang "Menyiapkan gambar...".
+      //
+      // loadOrder tidak di-await: tab Pesanan bukan layar pertama, jadi
+      // jangan tahan Home hanya untuk itu.
+      debugPrint("[MainMenu] 📥 Loading initial data (background)...");
+      unawaited(pesananProv.loadOrder(context));
 
       debugPrint("[MainMenu] ✅ INITIALIZATION COMPLETE");
     } catch (e, st) {
@@ -395,8 +423,18 @@ class _MainMenuState extends State<MainMenu> {
   Widget _buildOffstageNavigator(int index, WidgetBuilder builder) {
     return Consumer<NavigationProvider>(
       builder: (context, provider, _) {
+        final isActive = provider.selectedIndex == index;
+        if (isActive) _mountedTabs.add(index);
+
+        // Offstage tetap MEM-BUILD child-nya. Dulu keempat tab dibangun di
+        // frame pertama, sehingga sync room chat, fetch pesanan, dan sync
+        // liked/saved semua jalan bersamaan sementara Home berusaha
+        // men-decode gambar. Sekarang tab baru dibangun saat pertama dibuka,
+        // lalu dipertahankan supaya state-nya tidak hilang saat pindah tab.
+        if (!_mountedTabs.contains(index)) return const SizedBox.shrink();
+
         return Offstage(
-          offstage: provider.selectedIndex != index,
+          offstage: !isActive,
           child: Navigator(
             key: provider.navigatorKeys[index],
             observers: [

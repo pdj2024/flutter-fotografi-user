@@ -55,6 +55,9 @@ class ChatProvider extends ChangeNotifier {
 
   // ── Pagination ────────────────────────────────────────────────
   final Map<String, int> _displayedCount = {};
+  // Jumlah pesan yang benar-benar ada di local DB per room, direkam tiap emisi
+  // stream. Dipakai untuk tahu kapan pagination sudah mentok.
+  final Map<String, int> _totalLocalCount = {};
   static const int _initialDisplayCount = 100;
   static const int _loadMoreIncrement = 100;
 
@@ -102,6 +105,7 @@ class ChatProvider extends ChangeNotifier {
     _displayedCount.putIfAbsent(roomId, () => _initialDisplayCount);
 
     return _isar.watchMessages(roomId).map((allMessages) {
+      _totalLocalCount[roomId] = allMessages.length;
       final count = _displayedCount[roomId] ?? _initialDisplayCount;
       if (allMessages.length <= count) return allMessages;
       return allMessages.sublist(allMessages.length - count);
@@ -493,16 +497,25 @@ class ChatProvider extends ChangeNotifier {
   }
 
   bool loadMoreDisplayedMessages(String roomId) {
+    if (!hasMoreToDisplay(roomId)) return false;
+
     final current = _displayedCount[roomId] ?? _initialDisplayCount;
     _displayedCount[roomId] = current + _loadMoreIncrement;
     notifyListeners();
     return true;
   }
 
-  int getTotalMessagesCount(String roomId) => _displayedCount[roomId] ?? 0;
+  int getTotalMessagesCount(String roomId) => _totalLocalCount[roomId] ?? 0;
   int getDisplayedMessagesCount(String roomId) =>
       _displayedCount[roomId] ?? _initialDisplayCount;
-  bool hasMoreToDisplay(String roomId) => true;
+
+  /// Masih ada pesan lama yang belum masuk display window?
+  /// `false` selama stream belum pernah emit — jangan paginate data hantu.
+  bool hasMoreToDisplay(String roomId) {
+    final total = _totalLocalCount[roomId];
+    if (total == null) return false;
+    return (_displayedCount[roomId] ?? _initialDisplayCount) < total;
+  }
 
   Future<void> syncRoomFromHiveAndNotify(String roomId) async {
     if (_currentUserId == null) return;

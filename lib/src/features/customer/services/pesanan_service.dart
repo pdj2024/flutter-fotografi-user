@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/create_pesanan_result.dart';
+import 'package:mpjnew/src/data/models/refund_info_model.dart';
 
 class PesananService {
   final String entity = 'order';
@@ -23,6 +24,8 @@ class PesananService {
     String? idPayment,
     String? orderBy,
     String? orderDir,
+    String? tglCreated1,
+    String? tglCreated2,
   }) async {
     try {
       final response = await _client.get(
@@ -33,11 +36,15 @@ class PesananService {
           if (idVendor != null) 'id_vendor': idVendor,
           if (status != null) 'status': status,
           if (statusBayar != null) 'status_bayar': statusBayar,
+          // Dulu salah ditulis ke key 'status_bayar' juga (bentrok dengan
+          // param di atas), jadi filter ini efektif tidak pernah jalan.
           if (statusProgresPesanan != null)
-            'status_bayar': statusProgresPesanan,
+            'status_progress_pesanan': statusProgresPesanan,
           if (idPayment != null) 'id_payment_gateway': idPayment,
           if (orderBy != null) 'orderby': orderBy,
           if (orderDir != null) 'orderdir': orderDir,
+          if (tglCreated1 != null) 'tgl_created_1': tglCreated1,
+          if (tglCreated2 != null) 'tgl_created_2': tglCreated2,
         },
       );
 
@@ -167,5 +174,53 @@ class PesananService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Gagal membatalkan pesanan (${response.statusCode})');
     }
+  }
+
+  /// BATAL oleh customer — PUT /order/updateHeader dengan `status: batal`.
+  ///
+  /// [denganRefund] untuk pesanan yang SUDAH dibayar: `tgl_refund` ikut diisi
+  /// dalam PUT yang sama, jadi status batal dan penanda refund tidak mungkin
+  /// tersimpan setengah-setengah.
+  Future<void> batalkanPesanan(PesananModel model,
+      {bool denganRefund = false}) {
+    return update(model.copyWith(
+      status: 'batal',
+      tglRefund: denganRefund ? DateTime.now().toUtc() : null,
+    ));
+  }
+
+  /// INFO REFUND — GET /order/info-refund
+  ///
+  /// Server yang menentukan tier refund yang berlaku sekaligus nominalnya,
+  /// dihitung terhadap jam server. App tidak menghitung ulang apa pun.
+  /// Mengembalikan null kalau pesanan tidak punya info refund (204/Data kosong).
+  Future<RefundInfoModel?> getInfoRefund({
+    required String idPesanan,
+    required String noTrackingPesanan,
+    required String idCustomer,
+  }) async {
+    final response = await _client.get(
+      '/$controller/info-refund',
+      queryParameters: {
+        'id_pesanan': idPesanan,
+        'no_tracking_pesanan': noTrackingPesanan,
+        'id_customer': idCustomer,
+      },
+    );
+
+    debugPrint('==============================');
+    debugPrint('URL: ${response.request?.url}');
+    debugPrint('Status Code: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+    debugPrint('==============================');
+
+    if (response.statusCode == 204) return null;
+    if (response.statusCode != 200) {
+      throw Exception('Gagal load info refund (${response.statusCode})');
+    }
+
+    final data = jsonDecode(response.body)['Data'];
+    if (data is! List || data.isEmpty) return null;
+    return RefundInfoModel.fromJson(data.first);
   }
 }

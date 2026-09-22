@@ -4,14 +4,16 @@
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/utils/deadline_helper.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/card_button.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/extend_deadline_flow.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PaymentTimerStatus {
@@ -62,7 +64,13 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
       PesananProvider.isPaymentSettled(widget.order.statusBayar);
 
   bool get _isUnpaid => _statusStr == 'menunggu bayar' && !_isSettledPending;
+
+  /// Pesanan sudah dibayar tapi pengerjaan belum dimulai — masih boleh
+  /// dibatalkan customer, dengan konsekuensi dana direfund.
+  bool get _canCancelPaid => PesananProvider.needsRefund(widget.order);
   bool get _isReview => _statusStr == 'review';
+
+  Duration? get _remaining => remainingIfNearDeadline(widget.order);
 
   /// Pembayaran sudah expired — deteksi Snap dan Core.
   /// Snap  : cek linkSnap + expiryTime / umur > 30 hari.
@@ -190,7 +198,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cfg = getStatus(_statusStr);
+    final cfg = getStatus(_statusStr,
+        isRefundProcessing: widget.order.isRefundProcessing,
+        isRefundDone: widget.order.isRefundDone);
 
     return Container(
       decoration: BoxDecoration(
@@ -244,6 +254,12 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                 if (!_isUnpaid && !_isSettledPending) ...[
                   const SizedBox(height: 12),
                   _buildProgressBanner(),
+                ],
+
+                // Reminder batas pengerjaan
+                if (_remaining != null) ...[
+                  const SizedBox(height: 12),
+                  _buildDeadlineReminder(),
                 ],
 
                 // Payment Timer/Expired Banner — tampil untuk menunggu bayar
@@ -401,7 +417,10 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                     Icon(Icons.chevron_right, color: Colors.grey.shade400),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showConfirmBatal(context);
+                  // Dialog konfirmasi + info refund dipegang showBatalPesananFlow
+                  // (lihat batal_pesanan_flow.dart) supaya semua titik masuk
+                  // pembatalan menampilkan hal yang sama.
+                  widget.onBatal?.call();
                 },
               ),
               const SizedBox(height: 8),
@@ -412,16 +431,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
     );
   }
 
-  void _showConfirmBatal(BuildContext context) {
-    ConfirmDialog.showBatalkanPesananDialog(
-      context: context,
-      onConfirm: () => widget.onBatal?.call(),
-    );
-  }
-
   // ─── Vendor row ────────────────────────────────────────────────
   Widget _buildVendorRow() {
-    final canShowMenu = _isUnpaid && widget.onBatal != null;
+    final canShowMenu = (_isUnpaid || _canCancelPaid) && widget.onBatal != null;
     return Row(
       children: [
         _VendorAvatar(url: widget.order.idMediaVendor ?? ''),
@@ -478,7 +490,9 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   // ─── Progress Status Banner — persiapan / proses / review / revisi ──
   Widget _buildProgressBanner() {
-    final cfg = getStatus(_statusStr);
+    final cfg = getStatus(_statusStr,
+        isRefundProcessing: widget.order.isRefundProcessing,
+        isRefundDone: widget.order.isRefundDone);
     final deskripsi = widget.order.deskripsiProgresPesanan ?? '';
 
     return Container(
@@ -528,6 +542,63 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Deadline reminder ──────────────────────────────────────────
+  Widget _buildDeadlineReminder() {
+    final remaining = _remaining!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timer_outlined, size: 15, color: Colors.red.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sisa waktu pengerjaan: ${formatRemainingDeadline(remaining)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.red.shade700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlineButton(
+                icon: Icons.chat_outlined,
+                label: 'Ingatkan Vendor',
+                onTap: widget.onChat,
+                color: Colors.red.shade700,
+                borderColor: Colors.red.shade300,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PrimaryButton(
+                  icon: Icons.event_available_outlined,
+                  label: 'Perpanjang',
+                  onTap: () => showExtendDeadlineFlow(context, widget.order),
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -670,7 +741,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
         icon: Icons.arrow_forward_rounded,
         label: 'Detail',
         onTap: widget.onTap,
-        color: Colors.green.shade700,
+        color: Constants.primaryColor,
       );
     } else if (_isUnpaid) {
       // Pembayaran expired → langsung ke detail, jangan buka WebView
@@ -690,7 +761,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
             icon: Icons.payment_rounded,
             label: 'Bayar Sekarang',
             onTap: widget.onPay,
-            color: const Color(0xFF1565C0),
+            color: Constants.primaryColor,
           );
         } else if (status.isExpired) {
           // Expired → Coba Lagi (orange)
@@ -706,7 +777,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
             icon: Icons.payment_rounded,
             label: 'Lanjut Bayar',
             onTap: widget.onPay,
-            color: Colors.orange.shade700,
+            color: Constants.primaryColor,
           );
         } else {
           // Belum mulai → Bayar Sekarang (biru)
@@ -723,7 +794,7 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
         icon: Icons.arrow_forward_rounded,
         label: 'Detail',
         onTap: widget.onTap,
-        color: const Color(0xFF8B5CF6), // Sesuai StatusProgresConstant review
+        color: Constants.primaryColor, // Sesuai StatusProgresConstant review
       );
     } else {
       primaryButton = PrimaryButton(
@@ -866,10 +937,22 @@ class _VendorAvatar extends StatelessWidget {
         child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
       );
     }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: Colors.grey.shade200,
-      backgroundImage: NetworkImage(url),
+    return CachedNetworkImage(
+      imageUrl: url,
+      imageBuilder: (_, imageProvider) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+        backgroundImage: imageProvider,
+      ),
+      placeholder: (_, __) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+      ),
+      errorWidget: (_, __, ___) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Constants.primaryColor.withOpacity(0.15),
+        child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
+      ),
     );
   }
 }

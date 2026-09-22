@@ -17,7 +17,10 @@ class PortofolioSection extends StatelessWidget {
     final error = provider.errorPorto;
 
     // ── Loading ──────────────────────────────────────────────────────
-    if (isLoading) {
+    // Shimmer HANYA saat benar-benar belum ada data. Kalau list sudah terisi
+    // (dari cache atau prefetch splash), refresh berjalan diam-diam di
+    // belakang — jangan tarik balik UI ke skeleton.
+    if (isLoading && list.isEmpty) {
       return SliverList(
         delegate: SliverChildListDelegate(
           List.generate(5, (_) => _ShimmerCard()),

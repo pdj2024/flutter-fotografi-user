@@ -53,11 +53,21 @@ class RoomChatProvider extends ChangeNotifier {
   bool _isInitializing = false;
   bool _disposed = false;
 
+  // Percakapan yang genuinely baru — dibuka via partnerId, belum ada room
+  // sama sekali. Dipakai halaman untuk menampilkan empty state langsung,
+  // bukan shimmer, karena messagesStream tetap non-null di kasus ini
+  // (fallback ke pending-message stream) sehingga null-check biasa tidak
+  // bisa membedakan "room baru" dari "room lama yang sedang loading".
+  bool _isNewConversationNoHistory = false;
+  bool get isNewConversationNoHistory => _isNewConversationNoHistory;
+
   // =========================================
   // GETTERS
   // =========================================
 
-  Stream<List<ChatMessageEntity>> get messagesStream {
+  Stream<List<ChatMessageEntity>> get messagesStream => _ensureMergedStream();
+
+  Stream<List<ChatMessageEntity>> _ensureMergedStream() {
     if (_mergedStream != null) return _mergedStream!;
 
     final roomId = _activeRoomId;
@@ -79,6 +89,18 @@ class RoomChatProvider extends ChangeNotifier {
     }
 
     return _mergedStream!;
+  }
+
+  /// Snapshot sinkron pesan room aktif, untuk `initialData` StreamBuilder.
+  /// Null kalau room ini belum pernah dibaca — barulah shimmer wajar tampil.
+  /// Kalau belum ada room sama sekali (partnerId-only), fallback ke cache
+  /// pending-message milik user saat ini.
+  List<ChatMessageEntity>? get cachedMessages {
+    final roomId = _activeRoomId;
+    if (roomId != null) return ChatIsarService.instance.cachedMessages(roomId);
+    final userId = chatProv.currentUserId;
+    if (userId == null) return null;
+    return ChatIsarService.instance.cachedPendingMessages(userId);
   }
 
   bool get hasMoreToDisplay {
@@ -105,6 +127,7 @@ class RoomChatProvider extends ChangeNotifier {
       _activeRoomId = null;
       roomInfo = null;
       _mergedStream = null;
+      _isNewConversationNoHistory = false;
       await _messagesSub?.cancel();
       _messagesSub = null;
 
@@ -127,6 +150,7 @@ class RoomChatProvider extends ChangeNotifier {
         } else {
           debugPrint('[RoomChatProv] ℹ️ Belum ada room dengan: $partnerId');
           debugPrint('[RoomChatProv]    Kirim pesan pertama untuk memulai');
+          _isNewConversationNoHistory = true;
         }
 
         isLoading = false;
@@ -143,6 +167,11 @@ class RoomChatProvider extends ChangeNotifier {
 
   Future<void> _setupRoom(String roomId) async {
     _mergedStream = null;
+    // Bangun stream SEBELUM kerja async apa pun. Replay cache di
+    // ChatIsarService langsung mengembalikan pesan tersimpan, jadi room
+    // terisi di frame pertama tanpa shimmer.
+    _ensureMergedStream();
+    notifyListeners();
 
     await ChatStorageService.setActiveRoomPref(roomId);
     ChatStorageService.instance.setActiveRoom(roomId);
@@ -150,14 +179,14 @@ class RoomChatProvider extends ChangeNotifier {
     chatProv.setActiveRoom(roomId);
     FCMService.instance.setActiveRoom(roomId);
 
-    // Drain background queue dulu agar pesan yang antri di SharedPrefs
-    // masuk ke Isar sebelum markRoomAsRead berjalan.
-    // Ini mencegah race condition saat user membuka room chat setelah
-    // app resume dari minimize (lifecycle event sudah terjadi sebelum
-    // RoomChatPage dibuat, sehingga onAppResumed tidak otomatis terpanggil).
-    await ChatStorageService.instance.drainBackgroundQueue(activeRoomId: roomId);
-
-    unawaited(ChatStorageService.instance.markRoomAsRead(roomId));
+    // Drain jalan di background — jangan tahan first paint. markRoomAsRead
+    // tetap menunggu drain selesai supaya pesan yang antri di SharedPrefs
+    // sudah masuk DB sebelum room ditandai terbaca.
+    unawaited(
+      ChatStorageService.instance
+          .drainBackgroundQueue(activeRoomId: roomId)
+          .then((_) => ChatStorageService.instance.markRoomAsRead(roomId)),
+    );
     chatProv.loadMessages(roomId, silent: true, forceRefresh: false);
 
     notifyListeners();
@@ -250,6 +279,7 @@ class RoomChatProvider extends ChangeNotifier {
 
         if (existingRoom != null) {
           debugPrint('[RoomChatProv] ✅ Room ditemukan: ${existingRoom.roomId}');
+          _isNewConversationNoHistory = false;
           _activeRoomId = existingRoom.roomId;
           roomInfo = existingRoom;
           await _setupRoom(existingRoom.roomId);
@@ -397,6 +427,7 @@ class RoomChatProvider extends ChangeNotifier {
       // ✅ Reset _mergedStream agar rebuild dengan roomId asli
       // Tanpa ini, StreamBuilder masih subscribe ke stream roomId=''
       _mergedStream = null;
+      _isNewConversationNoHistory = false;
 
       _activeRoomId = newRoomId;
       roomInfo = chatProv.getRoom(newRoomId);

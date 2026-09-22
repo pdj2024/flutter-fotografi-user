@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:mpjnew/src/core/services/company_service.dart';
 import 'package:mpjnew/src/core/services/document_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -59,9 +60,14 @@ class _LegalPageState extends State<LegalPage> {
     });
 
     try {
-      final doc = widget.type == LegalType.privacy
-          ? await _service.getKebijakanPrivasiAplikasi()
-          : await _service.getSyaratKetentuanAplikasi();
+      // Kode dokumen berasal dari company profile (satu sumber kebenaran
+      // dengan gate persetujuan), bukan hardcode.
+      final company = await CompanyService().get();
+      final ref = widget.type == LegalType.privacy
+          ? company.privacyPolicy
+          : company.termsConditions;
+
+      final doc = await _service.getByKode(ref.kode);
 
       if (mounted)
         setState(() {
@@ -83,49 +89,51 @@ class _LegalPageState extends State<LegalPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.black87, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: _bgColor,
-                borderRadius: BorderRadius.circular(9),
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.black87, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: _bgColor,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(_icon, color: _color, size: 18),
               ),
-              child: Icon(_icon, color: _color, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              _title,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-                fontSize: 17,
+              const SizedBox(width: 10),
+              Text(
+                _title,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _isLoading
-                ? _buildLoading()
-                : _error != null
-                    ? _buildError()
-                    : _buildContent(),
-            const SizedBox(height: 32),
-          ],
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              _isLoading
+                  ? _buildLoading()
+                  : _error != null
+                      ? _buildError()
+                      : _buildContent(),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

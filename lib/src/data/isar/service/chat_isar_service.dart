@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/isar/data/room_chat_entity.dart';
+import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/data/sqflite/chat_database.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -32,6 +33,24 @@ class ChatIsarService {
       _messageControllers = {};
 
   final Map<String, StreamController<void>> _roomWatchControllers = {};
+
+  // Emisi terakhir per stream. Broadcast controller polos tidak mengirim
+  // apa-apa ke subscriber baru, jadi tanpa cache ini setiap StreamBuilder
+  // selalu mulai dari ConnectionState.waiting → shimmer walau data sudah ada.
+  List<RoomChatEntity>? _latestRooms;
+  final Map<String, List<ChatMessageEntity>> _latestMessages = {};
+  final Map<String, List<ChatMessageEntity>> _latestPendingMessages = {};
+
+  /// Snapshot sinkron untuk dipakai sebagai `initialData` StreamBuilder.
+  List<ChatMessageEntity>? cachedMessages(String roomId) =>
+      _latestMessages[roomId];
+
+  /// Sama seperti [cachedMessages] tapi untuk pesan pending (belum ada room
+  /// resmi — dikirim sebelum room pertama terbentuk).
+  List<ChatMessageEntity>? cachedPendingMessages(String senderId) =>
+      _latestPendingMessages[senderId];
+
+  List<RoomChatEntity>? get cachedRooms => _latestRooms;
 
   StreamController<List<ChatMessageEntity>> _msgCtrl(String roomId) {
     return _messageControllers.putIfAbsent(
@@ -72,6 +91,7 @@ class ChatIsarService {
   Future<void> _notifyRoomsChanged() async {
     if (_roomsController.isClosed) return;
     final rooms = await getAllRooms();
+    _latestRooms = rooms;
     _roomsController.add(rooms);
   }
 
@@ -79,6 +99,29 @@ class ChatIsarService {
     final ctrl = _messageControllers[roomId];
     if (ctrl == null || ctrl.isClosed) return;
     final msgs = await getMessagesByRoom(roomId);
+    _latestMessages[roomId] = msgs;
+    ctrl.add(msgs);
+  }
+
+  /// Pesan pending (roomId == '') di-notify lewat controller '__pending__$senderId',
+  /// bukan controller ber-key roomId — perlu jalur notify sendiri.
+  Future<List<ChatMessageEntity>> _queryPendingMessages(String senderId) async {
+    final db = await _db;
+    final maps = await db.query(
+      'messages',
+      where: "room_id = '' AND sender_id = ?",
+      whereArgs: [senderId],
+      orderBy: 'sent_at ASC',
+    );
+    return maps.map(ChatMessageEntity.fromMap).toList();
+  }
+
+  Future<void> _notifyPendingMessagesChanged(String senderId) async {
+    final key = '__pending__$senderId';
+    final ctrl = _messageControllers[key];
+    if (ctrl == null || ctrl.isClosed) return;
+    final msgs = await _queryPendingMessages(senderId);
+    _latestPendingMessages[senderId] = msgs;
     ctrl.add(msgs);
   }
 
@@ -177,6 +220,15 @@ class ChatIsarService {
             ..listIdMessageReceived =
                 List<String>.from(existing.listIdMessageReceived)
             ..unread = existing.unread;
+
+          // Server mengirim Last_Message kosong untuk pesan pesanan/penawaran.
+          // Tanpa ini, preview hasil repair lokal ketimpa string kosong tiap
+          // kali room list di-refresh → "Belum ada pesan" padahal ada pesan.
+          if (newRoom.lastMessage.isEmpty && existing.lastMessage.isNotEmpty) {
+            newRoom
+              ..lastMessage = existing.lastMessage
+              ..lastMessageAt = existing.lastMessageAt;
+          }
         }
         batch.insert('rooms', newRoom.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace);
@@ -266,73 +318,113 @@ class ChatIsarService {
     // Fire immediately dengan data saat ini, lalu repair lastMessage kosong
     Future.microtask(() async {
       final rooms = await getAllRooms();
+      _latestRooms = rooms;
       if (!_roomsController.isClosed) _roomsController.add(rooms);
       // Repair rooms dengan lastMessage kosong dari pesan tersimpan
       await _repairEmptyLastMessages(rooms);
     });
-    return _roomsController.stream;
+    // Replay emisi terakhir ke subscriber baru supaya UI tidak balik ke
+    // loading state saat halaman dibuka ulang.
+    return Stream.multi((c) {
+      final latest = _latestRooms;
+      if (latest != null) c.add(latest);
+      final sub = _roomsController.stream.listen(c.add, onError: c.addError);
+      c.onCancel = sub.cancel;
+    });
   }
 
   /// Repair rooms yang lastMessage-nya kosong atau 'Pesan baru' (placeholder generik).
   /// Mengambil pesan terakhir dari tabel messages dan mengisi ulang lastMessage.
+  ///
+  /// Ini cuma jalan SEKALI, tepat saat watchAllRooms() pertama kali
+  /// di-subscribe (ChatListPage cache stream-nya sekali di initState). Kalau
+  /// di momen itu pesannya belum tersimpan lokal, room ini permanen
+  /// tertinggal — makanya ada refreshRoomPreviewIfStale() untuk dipanggil
+  /// ulang tepat saat pesan sebuah room BENAR-BENAR baru tersimpan lokal
+  /// (lihat ChatSyncService.loadMessages).
   Future<void> _repairEmptyLastMessages(List<RoomChatEntity> rooms) async {
     if (!_isAvailable) return;
-    final db = await _db;
     bool anyUpdated = false;
     for (final room in rooms) {
-      if (room.lastMessage.isNotEmpty && room.lastMessage != 'Pesan baru') {
-        continue;
-      }
-      try {
-        final maps = await db.query(
-          'messages',
-          where: 'room_id = ?',
-          whereArgs: [room.roomId],
-          orderBy: 'sent_at DESC',
-          limit: 1,
-        );
-        if (maps.isEmpty) continue;
-        final last = ChatMessageEntity.fromMap(maps.first);
-
-        String preview;
-        if (last.message.isNotEmpty) {
-          preview = last.message;
-        } else {
-          final jenis = last.resolvedJenisPesan;
-          switch (jenis) {
-            case 'pesanan':
-              preview = '🧾 Detail pesanan';
-              break;
-            case 'penawaran':
-              preview = '💼 Penawaran baru';
-              break;
-            case 'paket':
-              preview = '📦 Paket ditawarkan';
-              break;
-            case 'image':
-              preview = '🖼️ Gambar';
-              break;
-            default:
-              continue; // tetap kosong, jangan overwrite dengan generic
-          }
-        }
-
-        await db.update(
-          'rooms',
-          {
-            'last_message': preview,
-            'last_message_at': last.sentAt.millisecondsSinceEpoch,
-          },
-          where: 'room_id = ?',
-          whereArgs: [room.roomId],
-        );
+      if (await _rebuildRoomPreview(room.roomId, currentLastMessage: room.lastMessage)) {
         anyUpdated = true;
-        debugPrint('[ChatIsarService] 🔧 Repaired lastMessage: ${room.roomId} → "$preview"');
-      } catch (e) {
-        debugPrint('[ChatIsarService] ⚠️ _repairEmptyLastMessages $e');
       }
     }
     if (anyUpdated) await _notifyRoomsChanged();
+  }
+
+  /// Tulis ulang preview room dari pesan lokal terakhirnya kalau preview
+  /// saat ini masih kosong/generik. Return true kalau benar-benar menulis.
+  /// currentLastMessage opsional — kalau tidak diisi, dibaca dari DB dulu.
+  Future<bool> _rebuildRoomPreview(String roomId,
+      {String? currentLastMessage}) async {
+    if (!_isAvailable) return false;
+    try {
+      final db = await _db;
+      String lastMessage;
+      DateTime? currentLastMessageAt;
+      if (currentLastMessage != null) {
+        lastMessage = currentLastMessage;
+      } else {
+        final room = await getRoomById(roomId);
+        if (room == null) return false;
+        lastMessage = room.lastMessage;
+        currentLastMessageAt = room.lastMessageAt;
+      }
+      // Sudah ada preview bermakna — jangan timpa (no-op murah, dipanggil
+      // tiap kali room dibuka jadi ini harus cepat untuk kasus normal).
+      if (lastMessage.isNotEmpty && lastMessage != 'Pesan baru') return false;
+
+      final maps = await db.query(
+        'messages',
+        where: 'room_id = ?',
+        whereArgs: [roomId],
+        orderBy: 'sent_at DESC',
+        limit: 1,
+      );
+      if (maps.isEmpty) return false;
+      final last = ChatMessageEntity.fromMap(maps.first);
+      final jenis = JenisPesan.fromString(last.resolvedJenisPesan);
+      // Pesan teks kosong bertipe text → tidak ada preview bermakna;
+      // biarkan apa adanya daripada menimpa dengan "Pesan baru".
+      if (last.message.isEmpty && jenis == JenisPesan.text) return false;
+
+      // Guard anti-timpa: kalau ada lastMessageAt yang lebih baru sudah
+      // ter-set (mis. FCM live yang datang sesaat sebelum ini jalan), jangan
+      // timpa dengan hasil baca lokal yang lebih basi.
+      currentLastMessageAt ??= (await getRoomById(roomId))?.lastMessageAt;
+      if (currentLastMessageAt != null &&
+          last.sentAt.isBefore(currentLastMessageAt)) {
+        return false;
+      }
+
+      final preview = chatPreviewText(jenis: jenis, message: last.message);
+
+      await db.update(
+        'rooms',
+        {
+          'last_message': preview,
+          'last_message_at': last.sentAt.millisecondsSinceEpoch,
+        },
+        where: 'room_id = ?',
+        whereArgs: [roomId],
+      );
+      debugPrint('[ChatIsarService] 🔧 Repaired lastMessage: $roomId → "$preview"');
+      return true;
+    } catch (e) {
+      debugPrint('[ChatIsarService] ⚠️ _rebuildRoomPreview $roomId: $e');
+      return false;
+    }
+  }
+
+  /// Dipanggil tepat setelah pesan sebuah room benar-benar tersimpan lokal
+  /// (lihat ChatSyncService.loadMessages) — supaya room yang lolos dari
+  /// _repairEmptyLastMessages (karena saat itu belum ada pesan lokal) tetap
+  /// dapat preview yang benar begitu pesannya ada.
+  Future<void> refreshRoomPreviewIfStale(String roomId) async {
+    if (await _rebuildRoomPreview(roomId)) {
+      await _notifyRoomsChanged();
+    }
   }
 
   Stream<void> watchRoom(String roomId) {
@@ -348,6 +440,9 @@ class ChatIsarService {
   void disposeRoomStream(String roomId) {
     _messageControllers.remove(roomId)?.close();
     _roomWatchControllers.remove(roomId)?.close();
+    // _latestMessages sengaja TIDAK dihapus: snapshot-nya masih valid dan
+    // itu yang membuat buka room yang sama lagi langsung tampil tanpa shimmer.
+    // Dibersihkan di resetStreamCache() saat logout.
   }
 
   void resetStreamCache() {
@@ -359,6 +454,9 @@ class ChatIsarService {
       ctrl.close();
     }
     _roomWatchControllers.clear();
+    _latestMessages.clear();
+    _latestPendingMessages.clear();
+    _latestRooms = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -458,7 +556,14 @@ class ChatIsarService {
       entity.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    await _notifyMessagesChanged(entity.roomId);
+    // Pesan pending (belum ada room resmi) di-notify lewat controller
+    // '__pending__$senderId' — bukan roomId kosong, yang tidak pernah
+    // dipakai controller manapun.
+    if (entity.roomId.isEmpty) {
+      await _notifyPendingMessagesChanged(entity.senderId);
+    } else {
+      await _notifyMessagesChanged(entity.roomId);
+    }
   }
 
   Future<void> saveAllMessages(List<ChatMessageEntity> entities) async {
@@ -644,9 +749,17 @@ class ChatIsarService {
     // Fire immediately
     Future.microtask(() async {
       final msgs = await getMessagesByRoom(roomId);
+      _latestMessages[roomId] = msgs;
       if (!ctrl.isClosed) ctrl.add(msgs);
     });
-    return ctrl.stream;
+    // Replay emisi terakhir ke subscriber baru supaya buka-tutup room tidak
+    // memicu shimmer padahal pesannya sudah ada di memory.
+    return Stream.multi((c) {
+      final latest = _latestMessages[roomId];
+      if (latest != null) c.add(latest);
+      final sub = ctrl.stream.listen(c.add, onError: c.addError);
+      c.onCancel = sub.cancel;
+    });
   }
 
   Stream<List<ChatMessageEntity>> watchPendingMessages(String senderId) {
@@ -659,18 +772,20 @@ class ChatIsarService {
     );
 
     Future.microtask(() async {
-      final db = await _db;
-      final maps = await db.query(
-        'messages',
-        where: "room_id = '' AND sender_id = ?",
-        whereArgs: [senderId],
-        orderBy: 'sent_at ASC',
-      );
-      final msgs = maps.map(ChatMessageEntity.fromMap).toList();
+      final msgs = await _queryPendingMessages(senderId);
+      _latestPendingMessages[senderId] = msgs;
       if (!ctrl.isClosed) ctrl.add(msgs);
     });
 
-    return ctrl.stream;
+    // Replay emisi terakhir ke subscriber baru — tanpa ini, tiap kali chat
+    // dengan partner baru (belum ada room) dibuka, StreamBuilder-nya selalu
+    // mulai dari waiting/!hasData walau jawabannya (list kosong) trivial.
+    return Stream.multi((c) {
+      final latest = _latestPendingMessages[senderId];
+      if (latest != null) c.add(latest);
+      final sub = ctrl.stream.listen(c.add, onError: c.addError);
+      c.onCancel = sub.cancel;
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -147,8 +147,13 @@ class ChatSyncService {
     try {
       if (!forceRefresh) {
         final cached = await _isar.getAllRooms();
-        if (cached.isNotEmpty)
+        if (cached.isNotEmpty) {
+          // Kembalikan cache seketika (UI langsung tercat), lalu sync API di
+          // background. Tanpa ini room list tidak pernah update selain lewat
+          // pull-to-refresh. Merge non-destruktif — bukan replace.
+          _backgroundSyncRooms(userId);
           return cached.map((e) => e.toRoomChatModel()).toList();
+        }
       }
       if (_syncingAllRooms) {
         final cached = await _isar.getAllRooms();
@@ -193,6 +198,7 @@ class ChatSyncService {
               tipeUser: tipeUser,
               roomType: roomType,
               userIds: userIds);
+          unawaited(_isar.refreshRoomPreviewIfStale(roomId));
           return (
             cached
                 .map((e) => e.toChatModel(
@@ -215,6 +221,7 @@ class ChatSyncService {
         await _isar.saveAllMessages(entities);
       }
       final saved = await _isar.getMessagesByRoom(roomId);
+      if (saved.isNotEmpty) unawaited(_isar.refreshRoomPreviewIfStale(roomId));
       return (
         saved
             .map((e) => e.toChatModel(
@@ -500,9 +507,10 @@ class ChatSyncService {
       // ── 5. Update lastMessage room ─────────────────────────────────────
       await _isar.updateRoomLastMessage(
         roomId: roomId,
-        lastMessage: serverMessage.message.isNotEmpty
-            ? serverMessage.message
-            : _formatPreview(serverMessage.jenisPesan ?? 'text'),
+        lastMessage: chatPreviewText(
+          jenis: serverMessage.resolvedJenisPesan,
+          message: serverMessage.message,
+        ),
         lastMessageAt: serverMessage.sentAt,
       );
 
@@ -545,9 +553,10 @@ class ChatSyncService {
       ..roomId = roomId
       ..roomType = localMessage.roomType
       ..idLawan = idLawan
-      ..lastMessage = serverMessage.message.isNotEmpty
-          ? serverMessage.message
-          : _formatPreview(serverMessage.jenisPesan ?? 'text')
+      ..lastMessage = chatPreviewText(
+        jenis: serverMessage.resolvedJenisPesan,
+        message: serverMessage.message,
+      )
       ..lastMessageAt = serverMessage.sentAt
       ..unread = 0
       ..countStatusReceived = 0
@@ -558,21 +567,6 @@ class ChatSyncService {
 
     await _isar.saveRoom(minimalRoom);
     debugPrint('[ChatSync] 💾 Minimal room saved: $roomId (idLawan: $idLawan)');
-  }
-
-  static String _formatPreview(String jenisPesan) {
-    switch (jenisPesan) {
-      case 'image':
-        return '🖼️ Gambar';
-      case 'paket':
-        return '📦 Paket';
-      case 'penawaran':
-        return '💼 Penawaran';
-      case 'pesanan':
-        return '🧾 Pesanan';
-      default:
-        return 'Pesan baru';
-    }
   }
 
   Future<void> _updateRoomOptimistic(ChatModel message) async {
@@ -607,6 +601,26 @@ class ChatSyncService {
       debugPrint('[ChatSync] ❌ retryFailedMessages: $e\n$st');
       return 0;
     }
+  }
+
+  /// Sync room list dari API tanpa memblokir UI. Selalu merge (replace: false)
+  /// supaya preview lokal yang sudah benar tidak ketimpa Last_Message kosong.
+  void _backgroundSyncRooms(String userId) {
+    Future(() async {
+      if (_syncingAllRooms) return;
+      _syncingAllRooms = true;
+      try {
+        final rooms = await _api.fetchRooms(userId: userId);
+        if (rooms.isNotEmpty) {
+          await _storage.persistRoomsFromApi(rooms);
+          debugPrint('[ChatSync] ✅ BG room sync: ${rooms.length}');
+        }
+      } catch (e) {
+        debugPrint('[ChatSync] ⚠️ BG room sync: $e');
+      } finally {
+        _syncingAllRooms = false;
+      }
+    });
   }
 
   void _backgroundFreshSync({

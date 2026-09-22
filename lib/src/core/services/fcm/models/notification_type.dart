@@ -5,6 +5,8 @@ enum NotificationType {
   progress,
   review,
   payment,
+  complainHeader,
+  complainDetail,
   unknown;
 
   static NotificationType fromString(String? type) {
@@ -21,6 +23,10 @@ enum NotificationType {
         return NotificationType.review;
       case 'payment':
         return NotificationType.payment;
+      case 'komplain_header':
+        return NotificationType.complainHeader;
+      case 'komplain_detail':
+        return NotificationType.complainDetail;
       default:
         return NotificationType.unknown;
     }

@@ -1,12 +1,9 @@
-import 'dart:async';
-
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
-import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
@@ -65,10 +62,11 @@ class _PortofolioCardState extends State<PortofolioCard> {
       return;
     }
 
-    final url = media[0].idMedia!;
-    // Cache HIT: assign sinkron sebelum build pertama — tidak ada shimmer
-    if (_ratioCache.containsKey(url)) {
-      _resolvedRatio = _ratioCache[url];
+    // Key stabil: signed URL berubah tiap fetch, gambarnya tetap sama.
+    final key = stableImageKey(media[0].idMedia!);
+    // Cache HIT: assign sinkron sebelum build pertama — tidak ada placeholder
+    if (_ratioCache.containsKey(key)) {
+      _resolvedRatio = _ratioCache[key];
     }
     // Cache MISS: biarkan null → _AdaptiveImage yang akan callback
   }
@@ -84,10 +82,14 @@ class _PortofolioCardState extends State<PortofolioCard> {
   /// ada di Flutter image cache, tidak ada jeda antara gambar muncul dan
   /// ukuran card berubah.
   void _onRatioResolved(String url, double ratio) {
-    _ratioCache[url] = ratio;
-    if (mounted && _resolvedRatio != ratio) {
-      setState(() => _resolvedRatio = ratio);
-    }
+    _ratioCache[stableImageKey(url)] = ratio;
+    // Dipanggil dari listener gambar yang bisa jalan sinkron saat build
+    // (gambar sudah di cache) — setState ditunda ke luar fase build.
+    runOutsideBuild(() {
+      if (mounted && _resolvedRatio != ratio) {
+        setState(() => _resolvedRatio = ratio);
+      }
+    });
   }
 
   String? get _plainCaption {
@@ -156,6 +158,7 @@ class _PortofolioCardState extends State<PortofolioCard> {
                   ? (firstUrl != null
                       ? _AdaptiveImage(
                           url: firstUrl,
+                          decodeWidth: feedDecodeWidth(context),
                           onRatioResolved: (r) => _onRatioResolved(firstUrl, r),
                         )
                       : _NoImageBox(height: 220))
@@ -220,14 +223,11 @@ class _PortofolioCardState extends State<PortofolioCard> {
                                   width: 30,
                                   height: 30,
                                   child: isAvatarValid
-                                      ? CachedNetworkImage(
-                                          imageUrl: widget.photographerIcon,
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, __) =>
-                                              const ShimmerPlaceholder(
-                                                  radius: 15),
-                                          errorWidget: (_, __, ___) =>
-                                              _DefaultAvatar(),
+                                      ? AppNetworkImage(
+                                          url: widget.photographerIcon,
+                                          decodeWidth:
+                                              decodeWidthFor(context, 30),
+                                          errorWidget: _DefaultAvatar(),
                                         )
                                       : _DefaultAvatar(),
                                 ),
@@ -434,14 +434,11 @@ class _PortofolioCardState extends State<PortofolioCard> {
   }
 
   Widget _buildImageItem(MediaUrlModel media) {
-    return CachedNetworkImage(
-      imageUrl: media.idMedia!,
-      fit: BoxFit.cover,
+    return AppNetworkImage(
+      url: media.idMedia!,
+      decodeWidth: feedDecodeWidth(context),
       width: double.infinity,
-      memCacheWidth: 1080,
-      maxWidthDiskCache: 1080,
-      placeholder: (_, __) => const _ImageShimmer(),
-      errorWidget: (_, __, ___) => _ErrorBox(),
+      errorWidget: const _ErrorBox(),
     );
   }
 
@@ -497,16 +494,23 @@ class _PortofolioCardState extends State<PortofolioCard> {
 // _AdaptiveImage
 //
 // Menampilkan gambar DAN mendeteksi ratio pada saat gambar selesai di-decode.
-// Teknik: CachedNetworkImage.imageBuilder dipanggil tepat saat ImageInfo
-// tersedia di memori → resolve ratio dari sana → tidak ada race condition.
+// Teknik: resolve ImageProvider (yang sama persis dipakai untuk render) lewat
+// ImageStreamListener sendiri → begitu ImageInfo tersedia, hitung ratio dari
+// situ → tidak ada race condition, dan tidak ada double-fetch karena provider
+// instance-nya identik dengan yang dipakai Image() di build().
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AdaptiveImage extends StatefulWidget {
   final String url;
+
+  /// Harus sama dengan lebar decode di PageView, supaya setelah rasio
+  /// diketahui gambar yang sama diambil dari cache memori, bukan didecode lagi.
+  final int decodeWidth;
   final void Function(double ratio) onRatioResolved;
 
   const _AdaptiveImage({
     required this.url,
+    required this.decodeWidth,
     required this.onRatioResolved,
   });
 
@@ -516,70 +520,84 @@ class _AdaptiveImage extends StatefulWidget {
 
 class _AdaptiveImageState extends State<_AdaptiveImage> {
   bool _reported = false;
+  late ImageProvider _imageProvider;
+  ImageStream? _imageStream;
+  late final ImageStreamListener _imageStreamListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageStreamListener =
+        ImageStreamListener(_onImageInfo, onError: _onImageError);
+    _imageProvider =
+        appImageProvider(widget.url, decodeWidth: widget.decodeWidth);
+    _listenToStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdaptiveImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // URL signed baru untuk gambar yang sama → key stabil sama → tidak perlu
+    // resolve ulang.
+    if (stableImageKey(oldWidget.url) != stableImageKey(widget.url) ||
+        oldWidget.decodeWidth != widget.decodeWidth) {
+      _reported = false;
+      _imageProvider =
+          appImageProvider(widget.url, decodeWidth: widget.decodeWidth);
+      _listenToStream();
+    }
+  }
+
+  void _listenToStream() {
+    final newStream = _imageProvider.resolve(const ImageConfiguration());
+    if (newStream.key != _imageStream?.key) {
+      _imageStream?.removeListener(_imageStreamListener);
+      _imageStream = newStream;
+      _imageStream!.addListener(_imageStreamListener);
+    }
+  }
+
+  void _onImageInfo(ImageInfo info, bool _) {
+    if (_reported) return;
+    _reported = true;
+    final w = info.image.width.toDouble();
+    final h = info.image.height.toDouble();
+    if (h > 0) widget.onRatioResolved(w / h);
+  }
+
+  void _onImageError(Object error, StackTrace? stackTrace) {
+    if (_reported) return;
+    _reported = true;
+    widget.onRatioResolved(4 / 3);
+  }
+
+  @override
+  void dispose() {
+    _imageStream?.removeListener(_imageStreamListener);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return CachedNetworkImage(
-      imageUrl: widget.url,
+    return Image(
+      image: _imageProvider,
       fit: BoxFit.cover,
       width: double.infinity,
-      memCacheWidth: 1080,
-      maxWidthDiskCache: 1080,
-      // imageBuilder dipanggil HANYA saat gambar sudah di-decode sempurna.
-      // Di sini kita baca dimensi asli → callback ke parent → parent setState.
-      imageBuilder: (context, imageProvider) {
-        if (!_reported) {
-          _reported = true;
-          _readRatio(imageProvider);
-        }
-        return Image(
-          image: imageProvider,
-          fit: BoxFit.cover,
+      // Kotak polos (bukan shimmer) selagi gambar belum siap.
+      frameBuilder: (context, child, frame, wasSyncLoaded) {
+        if (wasSyncLoaded || frame != null) return child;
+        return const SizedBox(
+          height: 220,
           width: double.infinity,
+          child: ColoredBox(color: kImagePlaceholderColor),
         );
       },
-      placeholder: (_, __) => const SizedBox(
-        height: 220,
-        width: double.infinity,
-        child: ShimmerPlaceholder(width: double.infinity, height: 220),
-      ),
-      errorWidget: (_, __, ___) => _ErrorBox(height: 220),
+      errorBuilder: (_, __, ___) => const _ErrorBox(height: 220),
     );
-  }
-
-  /// Baca width/height dari ImageProvider yang sudah ada di Flutter image cache.
-  /// Karena imageBuilder sudah dipanggil, gambar PASTI ada di cache → listener
-  /// akan fire hampir seketika (synchronous-like).
-  void _readRatio(ImageProvider provider) {
-    final stream = provider.resolve(const ImageConfiguration());
-    late ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (ImageInfo info, bool _) {
-        final w = info.image.width.toDouble();
-        final h = info.image.height.toDouble();
-        if (h > 0) widget.onRatioResolved(w / h);
-        stream.removeListener(listener);
-      },
-      onError: (_, __) {
-        widget.onRatioResolved(4 / 3);
-        stream.removeListener(listener);
-      },
-    );
-    stream.addListener(listener);
   }
 }
 
 // ── Reusable small widgets ─────────────────────────────────────────────────
-
-class _ImageShimmer extends StatelessWidget {
-  const _ImageShimmer();
-
-  @override
-  Widget build(BuildContext context) => const ShimmerPlaceholder(
-        width: double.infinity,
-        height: double.infinity,
-      );
-}
 
 class _NoImageBox extends StatelessWidget {
   final double? height;

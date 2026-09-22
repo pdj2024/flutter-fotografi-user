@@ -64,7 +64,7 @@ class RoomChatModel extends Equatable {
   String get displayName => usernameLawan ?? 'Unknown';
 
   String get previewMessage {
-    if (lastMessage.isEmpty) return 'Belum ada pesan';
+    if (lastMessage.isEmpty ) return 'Belum ada pesan';
     if (lastMessage.length > 50) {
       return '${lastMessage.substring(0, 50)}...';
     }
@@ -125,24 +125,10 @@ class RoomChatModel extends Equatable {
   /// Update dengan pesan baru
   RoomChatModel withNewMessage(ChatModel message,
       {bool incrementUnread = false}) {
-    String preview = message.message;
-
-    // Set preview berdasarkan jenis pesan
-    if (message.message.isEmpty) {
-      switch (message.resolvedJenisPesan) {
-        case JenisPesan.paket:
-          preview = '📦 Paket ditawarkan';
-          break;
-        case JenisPesan.penawaran:
-          preview = '💰 Penawaran baru';
-          break;
-        case JenisPesan.pesanan:
-          preview = '🧾 Detail pesanan';
-          break;
-        default:
-          preview = 'Pesan baru';
-      }
-    }
+    final preview = chatPreviewText(
+      jenis: message.resolvedJenisPesan,
+      message: message.message,
+    );
 
     return copyWith(
       lastMessage: preview,

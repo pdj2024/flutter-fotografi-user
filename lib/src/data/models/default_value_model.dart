@@ -236,21 +236,31 @@ class AppConfigModel {
   /// Batas revisi default saat vendor membuat paket baru
   final int batasRevisi;
 
+  final int batasPembatalanBayar;
+
+  final int limitPesananCustomer;
+
   const AppConfigModel({
     required this.chatHelp,
     required this.batasRevisi,
+    required this.batasPembatalanBayar,
+    required this.limitPesananCustomer,
   });
 
   factory AppConfigModel.fromJson(Map<String, dynamic> json) {
     return AppConfigModel(
       chatHelp: json['Chat_Help'] as String? ?? 'Hai',
       batasRevisi: (json['Batas_Revisi'] as num?)?.toInt() ?? 3,
+      batasPembatalanBayar: (json['Batas_Pembatalan_Bayar'] as num?)?.toInt() ?? 3,
+      limitPesananCustomer: (json['Chat_Limit_Penawaran_Customer'] as num?)?.toInt() ?? 0,
     );
   }
 
   static const AppConfigModel fallback = AppConfigModel(
     chatHelp: 'Hai',
     batasRevisi: 3,
+    batasPembatalanBayar: 3,
+    limitPesananCustomer:0,
   );
 }
 

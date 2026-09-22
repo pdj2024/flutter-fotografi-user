@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
 import 'package:mpjnew/src/features/customer/view/search_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
@@ -97,10 +98,10 @@ class _KategoriSectionState extends State<KategoriSection> {
                       children: [
                         // ── Background image ─────────────
                         if (hasImage)
-                          Image.network(
-                            kategori.id_media!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                          AppNetworkImage(
+                            url: kategori.id_media!,
+                            decodeWidth: decodeWidthFor(context, 150),
+                            errorWidget: Container(
                               color: Constants.primaryColor.withOpacity(0.15),
                               child: Center(
                                 child: Icon(

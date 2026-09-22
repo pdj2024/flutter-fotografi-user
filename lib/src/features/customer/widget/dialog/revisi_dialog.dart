@@ -200,6 +200,7 @@ class _RevisiDialogState extends State<RevisiDialog> {
                         controller: _keteranganController,
                         maxLines: 6,
                         maxLength: 1000,
+                        autofocus: true,
                         style: const TextStyle(
                           fontSize: 14,
                         ),

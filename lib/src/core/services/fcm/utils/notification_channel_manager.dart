@@ -6,6 +6,7 @@ class NotificationChannelManager {
   static const String likeChannelId = 'likes';
   static const String progressChannelId = 'order_progress';
   static const String reviewChannelId = 'reviews';
+  static const String complainChannelId = 'complain';
 
   /// Create all notification channels
   static Future<void> createAllChannels(
@@ -21,6 +22,7 @@ class NotificationChannelManager {
       _createLikeChannel(androidPlugin),
       _createProgressChannel(androidPlugin),
       _createReviewChannel(androidPlugin),
+      _createComplainChannel(androidPlugin),
     ]);
 
     debugPrint('[Channels] ✅ All notification channels created');
@@ -87,5 +89,21 @@ class NotificationChannelManager {
 
     await plugin.createNotificationChannel(channel);
     debugPrint('[Channels] ✅ Review channel created');
+  }
+
+  static Future<void> _createComplainChannel(
+    AndroidFlutterLocalNotificationsPlugin plugin,
+  ) async {
+    const channel = AndroidNotificationChannel(
+      complainChannelId,
+      'Complain',
+      description: 'Notifications for new complain messages',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await plugin.createNotificationChannel(channel);
+    debugPrint('[Channels] ✅ Complain channel created');
   }
 }

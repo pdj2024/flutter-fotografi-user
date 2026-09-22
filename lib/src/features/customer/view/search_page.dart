@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -119,6 +122,8 @@ class _SearchPageState extends State<SearchPage>
         hargaPaketMin: parseNumber(filters['min_price']),
         hargaPaketMax: parseNumber(filters['max_price']),
         kota: filters['id_lokasi'],
+        orderBy: 'Tgl_Created',
+        orderDir: 'desc',
       );
 
       if (!mounted) return; // ← add — widget mungkin dispose saat await
@@ -130,11 +135,22 @@ class _SearchPageState extends State<SearchPage>
           _currentPage++;
         });
       } else {
-        setState(() => portofolioList = pList);
+        setState(() {
+          portofolioList = pList;
+          // PortofolioService.getAll() tidak pernah menerima/mengirim
+          // parameter page/offset ke backend (lihat _currentPage di atas —
+          // dihitung tapi tidak pernah dipakai di query), dan backend tidak
+          // membalas metadata pagination apa pun (total/has_more). Jadi
+          // "halaman berikutnya" sebenarnya adalah request YANG SAMA PERSIS
+          // dengan yang pertama -- kalau _hasMoreData dibiarkan true, scroll
+          // ke bawah akan memicu fetch ulang dataset yang identik dan
+          // di-addAll() begitu saja, menghasilkan data dobel. Endpoint ini
+          // tidak mendukung pagination sama sekali, jadi matikan trigger
+          // load-more permanen setelah load pertama.
+          _hasMoreData = false;
+        });
         _fadeController.forward();
       }
-
-      _precacheImages();
     } catch (e) {
       if (!mounted) return; // ← add
       setState(() => errorPorto = 'Gagal memuat portofolio');
@@ -144,18 +160,6 @@ class _SearchPageState extends State<SearchPage>
         isLoadingPorto = false;
         _isLoadingMore = false;
       });
-    }
-  }
-
-  void _precacheImages() {
-    for (final porto in portofolioList.take(12)) {
-      if (porto.mediaUrls.isNotEmpty) {
-        final url = porto.mediaUrls[0].idMedia;
-        if (url != null && url.isNotEmpty) {
-          precacheImage(CachedNetworkImageProvider(url), context)
-              .catchError((_) {});
-        }
-      }
     }
   }
 
@@ -193,67 +197,66 @@ class _SearchPageState extends State<SearchPage>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F3),
-      body: Stack(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: RefreshIndicator(
-              onRefresh: _doRefresh,
-              color: Constants.primaryColor,
-              child: ListView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
-                children: [
-                  // Search bar
-                  _buildSearchBar(),
-
-                  // Header row
-                  _buildHeaderRow(),
-
-                  // Content body — satu widget, kondisi di dalam
-                  _buildContentBody(),
-
-                  // Load more indicator
-                  if (_isLoadingMore)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Constants.primaryColor,
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F3),
+        body: Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: RefreshIndicator(
+                onRefresh: _doRefresh,
+                color: Constants.primaryColor,
+                // CustomScrollView + SliverGrid: kartu dibangun lazy sesuai
+                // posisi scroll, jadi hanya gambar yang terlihat yang dimuat.
+                // Dulu GridView shrinkWrap di dalam ListView membangun SEMUA
+                // kartu sekaligus sehingga puluhan gambar berebut bandwidth.
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildSearchBar()),
+                    SliverToBoxAdapter(child: _buildHeaderRow()),
+                    _buildContentBody(),
+                    if (_isLoadingMore)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Constants.primaryColor,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-
-                  const SizedBox(height: 48),
-                ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Filter overlay
-          if (_showFilterOverlay)
-            Positioned.fill(
-              child: FilterOverlay(
-                selectedCategory: filters['id_kategori'] ?? '',
-                selectedLocation: filters['id_lokasi'] ?? '',
-                selectedPhotographer: filters['id_vendor'] ?? '',
-                usernamePhotographer: filters['username_vendor'] ?? '',
-                minPrice: (filters['min_price'] ?? '').toString(),
-                maxPrice: (filters['max_price'] ?? '').toString(),
-                onApply: (f) async => applyFilter(f),
-                onReset: (_) async => applyFilter({}),
-                onClose: () => setState(() => _showFilterOverlay = false),
+            // Filter overlay
+            if (_showFilterOverlay)
+              Positioned.fill(
+                child: FilterOverlay(
+                  selectedCategory: filters['id_kategori'] ?? '',
+                  selectedLocation: filters['id_lokasi'] ?? '',
+                  selectedPhotographer: filters['id_vendor'] ?? '',
+                  usernamePhotographer: filters['username_vendor'] ?? '',
+                  minPrice: (filters['min_price'] ?? '').toString(),
+                  maxPrice: (filters['max_price'] ?? '').toString(),
+                  onApply: (f) async => applyFilter(f),
+                  onReset: (_) async => applyFilter({}),
+                  onClose: () => setState(() => _showFilterOverlay = false),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -425,32 +428,30 @@ class _SearchPageState extends State<SearchPage>
   // agar slivers[] selalu punya index yang stabil
   // ─────────────────────────────────────────────────────────────
 
+  /// Selalu mengembalikan sliver.
   Widget _buildContentBody() {
     if (isLoadingPorto) {
-      return _buildShimmerInline();
+      return SliverToBoxAdapter(child: _buildShimmerInline());
     }
     if (errorPorto != null) {
-      return _buildErrorInline();
+      return SliverToBoxAdapter(child: _buildErrorInline());
     }
     if (portofolioList.isEmpty) {
-      return _buildEmptyInline();
+      return SliverToBoxAdapter(child: _buildEmptyInline());
     }
     return _buildGridInline();
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GRID INLINE — GridView biasa (bukan Sliver), di dalam
-  // SliverToBoxAdapter agar index stabil
+  // GRID — SliverGrid lazy
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildGridInline() {
-    return FadeTransition(
-      opacity: _fadeAnim,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverFadeTransition(
+        opacity: _fadeAnim,
+        sliver: SliverGrid.builder(
           itemCount: portofolioList.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
@@ -650,7 +651,7 @@ class _SearchPageState extends State<SearchPage>
 //   └─────────────────────┘
 // ═══════════════════════════════════════════════════════════════
 
-class _PortoCard extends StatelessWidget {
+class _PortoCard extends StatefulWidget {
   final PortofolioModel porto;
   final VoidCallback onTap;
   final VoidCallback onVendorTap;
@@ -661,6 +662,13 @@ class _PortoCard extends StatelessWidget {
     required this.onVendorTap,
   });
 
+  @override
+  State<_PortoCard> createState() => _PortoCardState();
+}
+
+class _PortoCardState extends State<_PortoCard> {
+  PortofolioModel get porto => widget.porto;
+
   String get _firstImageUrl =>
       porto.mediaUrls.isNotEmpty ? (porto.mediaUrls[0].idMedia ?? '') : '';
 
@@ -669,7 +677,7 @@ class _PortoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -692,17 +700,16 @@ class _PortoCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _firstImageUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: _firstImageUrl,
-                          fit: BoxFit.cover,
-                          maxWidthDiskCache: 600,
-                          memCacheWidth: 400,
-                          fadeInDuration: const Duration(milliseconds: 200),
-                          placeholder: (_, __) => const _ImgShimmer(),
-                          errorWidget: (_, __, ___) => _imgFallback(),
-                        )
-                      : _imgFallback(),
+                  if (_firstImageUrl.isEmpty)
+                    _imgFallback()
+                  else
+                    AppNetworkImage(
+                      url: _firstImageUrl,
+                      // Kartu = setengah lebar layar (grid 2 kolom).
+                      decodeWidth: decodeWidthFor(
+                          context, MediaQuery.sizeOf(context).width / 2),
+                      errorWidget: _imgFallback(),
+                    ),
 
                   // Gradient bawah tipis untuk kedalaman
                   Positioned.fill(
@@ -758,7 +765,7 @@ class _PortoCard extends StatelessWidget {
             // ── Footer vendor ────────────────────────────────
             Expanded(
               child: GestureDetector(
-                onTap: onVendorTap,
+                onTap: widget.onVendorTap,
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding:
@@ -837,9 +844,12 @@ class _Avatar extends StatelessWidget {
     }
     return CachedNetworkImage(
       imageUrl: url,
+      cacheKey: stableImageKey(url),
       imageBuilder: (_, img) => CircleAvatar(radius: 14, backgroundImage: img),
       maxWidthDiskCache: 80,
       memCacheWidth: 56,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
       placeholder: (_, __) =>
           CircleAvatar(radius: 14, backgroundColor: Colors.grey.shade100),
       errorWidget: (_, __, ___) => CircleAvatar(
@@ -847,23 +857,6 @@ class _Avatar extends StatelessWidget {
         backgroundColor: Colors.grey.shade100,
         child: Icon(Icons.person, size: 13, color: Colors.grey.shade400),
       ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// IMAGE SHIMMER
-// ═══════════════════════════════════════════════════════════════
-
-class _ImgShimmer extends StatelessWidget {
-  const _ImgShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey.shade200,
-      highlightColor: Colors.grey.shade50,
-      child: Container(color: Colors.white),
     );
   }
 }

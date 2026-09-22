@@ -1,6 +1,10 @@
+import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
@@ -19,8 +23,304 @@ import 'package:provider/provider.dart';
 // Diakses dari MainOrderPage via Navigator.push
 // ═══════════════════════════════════════════════════════════════
 
-class FinishedOrderPage extends StatelessWidget {
+class FinishedOrderPage extends StatefulWidget {
   const FinishedOrderPage({super.key});
+
+  @override
+  State<FinishedOrderPage> createState() => _FinishedOrderPageState();
+}
+
+class _FinishedOrderPageState extends State<FinishedOrderPage> {
+  late DateTime _rangeStart;
+  late DateTime _rangeEnd;
+  late DateTime _defaultRangeStart;
+  late DateTime _defaultRangeEnd;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _rangeStart = DateTime(now.year, now.month, 1);
+    // Tanggal terakhir bulan berjalan -- bukan cuma "sampai hari ini".
+    _rangeEnd = DateTime(now.year, now.month + 1, 0);
+    _defaultRangeStart = _rangeStart;
+    _defaultRangeEnd = _rangeEnd;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  bool get _hasCustomRange =>
+      !_rangeStart.isAtSameMomentAs(_defaultRangeStart) ||
+      !_rangeEnd.isAtSameMomentAs(_defaultRangeEnd);
+
+  Future<void> _load() {
+    return context
+        .read<PesananProvider>()
+        .loadFinishedOrders(context, start: _rangeStart, end: _rangeEnd);
+  }
+
+  // tanggal1 (dari) & tanggal2 (sampai) dipisah jadi 2 field agar user bisa
+  // atur masing-masing ujung rentang secara independen. Fetch tidak langsung
+  // jalan tiap ganti 1 field — user tekan tombol "Cari" setelah kedua
+  // tanggal sesuai, biar tidak double-fetch tiap ganti satu field.
+  Future<void> _pickSingleDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final minDate = isStart ? DateTime(2020) : _rangeStart;
+    final maxDate = isStart ? _rangeEnd : today;
+    final initial = isStart ? _rangeStart : _rangeEnd;
+    final safeInitial = initial.isBefore(minDate)
+        ? minDate
+        : (initial.isAfter(maxDate) ? maxDate : initial);
+
+    final picked = await _showSingleDatePickerSheet(
+      context,
+      label: isStart ? 'Tanggal Dari' : 'Tanggal Sampai',
+      initialDate: safeInitial,
+      minDate: minDate,
+      maxDate: maxDate,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _rangeStart = picked;
+      } else {
+        _rangeEnd = picked;
+      }
+    });
+  }
+
+  // Bottom sheet date picker — style disamakan dengan DatePickerField
+  // (dipakai di FormPenawaranPage vendor): blur backdrop + slide-up sheet.
+  Future<DateTime?> _showSingleDatePickerSheet(
+    BuildContext context, {
+    required String label,
+    required DateTime initialDate,
+    required DateTime minDate,
+    required DateTime maxDate,
+  }) async {
+    final controller = DateRangePickerController();
+    DateTime tempPicked = initialDate;
+
+    return showGeneralDialog<DateTime>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black45,
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionBuilder: (dialogContext, animation, _, child) {
+        return StatefulBuilder(
+          builder: (sbContext, setDialogState) {
+            return Stack(
+              children: [
+                // ── BLUR BACKGROUND ──────────────────────────────────
+                GestureDetector(
+                  onTap: () => Navigator.pop(dialogContext),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                    child: Container(color: Colors.black.withOpacity(0.2)),
+                  ),
+                ),
+
+                // ── BOTTOM SHEET ─────────────────────────────────────
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: SlideTransition(
+                    position: Tween(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(
+                        parent: animation, curve: Curves.easeOut)),
+                    child: Material(
+                      elevation: 8,
+                      color: Colors.white,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(22)),
+                      child: SizedBox(
+                        height: 460,
+                        child: Column(
+                          children: [
+                            // ── HEADER ────────────────────────────────
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => Navigator.pop(dialogContext),
+                                    child: const Text(
+                                      "Batal",
+                                      style: TextStyle(
+                                          fontSize: 16, color: Colors.grey),
+                                    ),
+                                  ),
+                                  Text(
+                                    label,
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => Navigator.pop(
+                                        dialogContext, tempPicked),
+                                    child: Text(
+                                      "Pilih",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Constants.primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const Divider(height: 0),
+
+                            // ── DATE PICKER ────────────────────────────
+                            Expanded(
+                              child: SfDateRangePicker(
+                                controller: controller,
+                                backgroundColor: Colors.white,
+                                selectionMode:
+                                    DateRangePickerSelectionMode.single,
+                                showNavigationArrow: true,
+                                view: DateRangePickerView.month,
+                                initialSelectedDate: initialDate,
+                                initialDisplayDate: initialDate,
+                                minDate: minDate,
+                                maxDate: maxDate,
+                                selectionColor: Constants.primaryColor,
+                                todayHighlightColor: Constants.primaryColor,
+                                headerStyle: DateRangePickerHeaderStyle(
+                                  backgroundColor: Colors.white,
+                                  textAlign: TextAlign.center,
+                                  textStyle: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: Constants.primaryColor,
+                                  ),
+                                ),
+                                onSelectionChanged: (args) {
+                                  if (args.value is DateTime) {
+                                    tempPicked = args.value as DateTime;
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRangeFields() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildDateField(
+              label: 'Tanggal Dari',
+              date: _rangeStart,
+              onTap: () => _pickSingleDate(isStart: true),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _buildDateField(
+              label: 'Tanggal Sampai',
+              date: _rangeEnd,
+              onTap: () => _pickSingleDate(isStart: false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateField({
+    required String label,
+    required DateTime date,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade500,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('d MMM yyyy').format(date),
+                  style: const TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+                Icon(Icons.calendar_today_rounded,
+                    size: 13, color: Constants.primaryColor),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchButton() {
+    if (!_hasCustomRange) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.search_rounded, size: 18),
+          label: const Text('Cari'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Constants.primaryColor,
+            side: BorderSide(color: Constants.primaryColor),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            textStyle:
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,28 +334,66 @@ class FinishedOrderPage extends StatelessWidget {
         return bTime.compareTo(aTime);
       });
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F2),
-      appBar: AppBar(
+    final isLoading = provider.isLoadingFinished && orders.isEmpty;
+    final hasError = provider.errorFinished != null && orders.isEmpty;
+
+    return SafeArea(
+      child: Scaffold(
         backgroundColor: const Color(0xFFF4F4F2),
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Pesanan Selesai',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF4F4F2),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          title: const Text(
+            'Pesanan Selesai',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-      ),
-      body: orders.isEmpty
-          ? _buildEmpty()
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 48),
-              itemCount: orders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, i) => _FinishedCard(order: orders[i]),
+        body: Column(
+          children: [
+            _buildRangeFields(),
+            _buildSearchButton(),
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : hasError
+                      ? _buildError(provider.errorFinished!)
+                      : orders.isEmpty
+                          ? _buildEmpty()
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(10, 0, 10, 48),
+                              itemCount: orders.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (ctx, i) =>
+                                  _FinishedCard(order: orders[i]),
+                            ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 40, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: _load, child: const Text('Coba Lagi')),
+          ],
+        ),
+      ),
     );
   }
 
@@ -81,7 +419,7 @@ class FinishedOrderPage extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             const Text(
-              'Belum ada pesanan selesai',
+              'Tidak ada pesanan pada rentang ini',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -91,7 +429,7 @@ class FinishedOrderPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Pesanan yang sudah selesai\nakan muncul di sini',
+              'Coba ubah rentang tanggal di atas,\natau pesanan yang selesai/dibatalkan\nakan muncul di sini',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13.5,
@@ -125,10 +463,26 @@ class _FinishedCardState extends State<_FinishedCard> {
   UlasanModel? _ulasan;
   bool _loadingUlasan = true;
 
+  // Pembatalan lewat chat/FCM progress cuma nulis 'dibatalkan' ke
+  // statusProgresPesanan, bukan ke status order-level — cek dua-duanya
+  // biar tidak salah anggap pesanan batal sebagai "Selesai".
+  bool get _isCancelledOrExpired =>
+      widget.order.status == 'batal' ||
+      widget.order.status == 'expired' ||
+      const {'dibatalkan', 'refund paid', 'expired', 'closed'}
+          .contains(widget.order.statusProgresPesanan);
+
+  bool get _isRefundPaid => widget.order.statusProgresPesanan == 'refund paid';
+  bool get _isClosed => widget.order.statusProgresPesanan == 'closed';
+
   @override
   void initState() {
     super.initState();
-    _fetchUlasan();
+    if (!_isCancelledOrExpired) {
+      _fetchUlasan();
+    } else {
+      _loadingUlasan = false;
+    }
   }
 
   Future<void> _fetchUlasan() async {
@@ -212,9 +566,7 @@ class _FinishedCardState extends State<_FinishedCard> {
                 const SizedBox(height: 14),
 
                 // ── Rating / Ulasan section (hanya untuk selesai) ──
-                if (widget.order.status != 'batal' &&
-                    widget.order.status != 'expired')
-                  _buildUlasanSection(),
+                if (!_isCancelledOrExpired) _buildUlasanSection(),
 
                 const SizedBox(height: 12),
 
@@ -230,8 +582,9 @@ class _FinishedCardState extends State<_FinishedCard> {
 
   // ─── Status bar ──────────────────────────────────────────────
   Widget _buildStatusBar() {
-    final isExpired = widget.order.status == "expired";
-    final isBatal = widget.order.status == "batal";
+    final isExpired = widget.order.status == "expired" ||
+        widget.order.statusProgresPesanan == 'expired';
+    final isBatal = !isExpired && _isCancelledOrExpired;
 
     final Color bgColor;
     final Color iconColor;
@@ -239,7 +592,27 @@ class _FinishedCardState extends State<_FinishedCard> {
     final IconData icon;
     final String label;
 
-    if (isExpired) {
+    // Refund menimpa label terminal — customer perlu tahu status dananya,
+    // bukan sekadar bahwa pesanannya batal.
+    if (widget.order.isRefundDone || _isRefundPaid) {
+      bgColor = const Color(0xFFE8F5E9);
+      iconColor = const Color(0xFF2E7D32);
+      textColor = const Color(0xFF2E7D32);
+      icon = Icons.check_circle_outline_rounded;
+      label = 'Refund Selesai';
+    } else if (_isClosed) {
+      bgColor = const Color(0xFFF1F5F9);
+      iconColor = const Color(0xFF64748B);
+      textColor = const Color(0xFF64748B);
+      icon = Icons.lock_outline_rounded;
+      label = 'Ditutup';
+    } else if (widget.order.isRefundProcessing) {
+      bgColor = const Color(0xFFFFF3E0);
+      iconColor = const Color(0xFFD97706);
+      textColor = const Color(0xFFD97706);
+      icon = Icons.currency_exchange_rounded;
+      label = 'Dana Sedang Direfund';
+    } else if (isExpired) {
       bgColor = const Color(0xFFFFF3E0);
       iconColor = const Color(0xFFE65100);
       textColor = const Color(0xFFE65100);
@@ -258,10 +631,6 @@ class _FinishedCardState extends State<_FinishedCard> {
       icon = Icons.check_circle_rounded;
       label = 'Selesai';
     }
-
-    final noBuktiShort = widget.order.noBukti.length > 8
-        ? '#${widget.order.noBukti.substring(widget.order.noBukti.length - 8)}'
-        : '#${widget.order.noBukti}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -283,7 +652,7 @@ class _FinishedCardState extends State<_FinishedCard> {
           ),
           const Spacer(),
           Text(
-            noBuktiShort,
+            "#${widget.order.noTrackingPesanan ?? ""}",
             style: TextStyle(
               fontSize: 11,
               color: textColor,
@@ -636,11 +1005,22 @@ class _VendorAvatar extends StatelessWidget {
         child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
       );
     }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: Colors.grey.shade200,
-      backgroundImage: NetworkImage(url),
-      onBackgroundImageError: (_, __) {},
+    return CachedNetworkImage(
+      imageUrl: url,
+      imageBuilder: (_, imageProvider) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+        backgroundImage: imageProvider,
+      ),
+      placeholder: (_, __) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+      ),
+      errorWidget: (_, __, ___) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Constants.primaryColor.withOpacity(0.12),
+        child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
+      ),
     );
   }
 }

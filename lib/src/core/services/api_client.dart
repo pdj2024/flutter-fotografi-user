@@ -52,6 +52,48 @@ class ApiClient {
     );
   }
 
+  /// GET dengan body di request-nya — dibutuhkan beberapa endpoint
+  /// (mis. /mediacloud/read-url-batch) yang menerima payload lewat method
+  /// GET, bukan query string. `http.get()` bawaan Dart tidak punya
+  /// parameter body sama sekali, jadi di sini turun ke `http.Request` +
+  /// `Client.send()` manual — level yang sama dipakai `http.get()`/`post()`
+  /// di baliknya, cuma method-nya kita set sendiri jadi 'GET'.
+  Future<http.Response> getWithBody(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+    Map<String, dynamic>? queryParameters,
+    bool requireAuth = true,
+  }) async {
+    final uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters);
+
+    return _executeWithRetry(
+      () async {
+        final mergedHeaders =
+            await _mergedHeaders(headers, requireAuth: requireAuth);
+
+        final request = http.Request('GET', uri)
+          ..headers.addAll(mergedHeaders);
+        if (body != null) {
+          request.body = body is String ? body : jsonEncode(body);
+        }
+
+        debugPrint("📥 [GET+BODY] $uri");
+        final client = http.Client();
+        try {
+          final streamedResponse = await client.send(request);
+          return await http.Response.fromStream(streamedResponse);
+        } finally {
+          client.close();
+        }
+      },
+      method: 'GET',
+      path: path,
+      requireAuth: requireAuth,
+    );
+  }
+
   Future<http.Response> post(
     String path, {
     Map<String, String>? queryParameters,

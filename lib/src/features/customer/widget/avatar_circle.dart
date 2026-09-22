@@ -1,6 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 
 class AvatarCircle extends StatelessWidget {
   final String? imgUrl;
@@ -24,21 +23,12 @@ class AvatarCircle extends StatelessWidget {
                   child:
                       const Icon(Icons.person, color: Colors.white, size: 40),
                 )
-              : CachedNetworkImage(
-                  imageUrl: imgUrl!, // dijamin non-null
+              : AppNetworkImage(
+                  url: imgUrl!, // dijamin non-null
                   width: size,
                   height: size,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Shimmer.fromColors(
-                    baseColor: Colors.grey.shade300,
-                    highlightColor: Colors.white,
-                    child: Container(
-                      width: size,
-                      height: size,
-                      color: Colors.white,
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
+                  decodeWidth: decodeWidthFor(context, size),
+                  errorWidget: Container(
                     width: size,
                     height: size,
                     color: Colors.grey,

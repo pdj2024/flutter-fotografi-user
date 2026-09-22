@@ -25,6 +25,7 @@ import 'package:mpjnew/src/data/isar/service/chat_isar_service.dart';
 import 'package:mpjnew/src/data/isar/service/chat_storage_service.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
 import 'package:mpjnew/src/data/repositories/kota_provider.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
 import 'package:mpjnew/src/features/customer/services/kategori_service.dart';
 import 'package:mpjnew/src/features/customer/services/kota_service.dart';
@@ -33,9 +34,11 @@ import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/vendor_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
+import 'package:mpjnew/src/features/customer/view/complain/complain_thread_page.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/view/main_menu.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/kategori_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
@@ -44,6 +47,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/penawaran_provider.dart'
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/portofolio_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
+import 'package:mpjnew/src/features/customer/viewmodels/ui_state_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/vendor_provider.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/services/customer_service.dart';
@@ -78,6 +82,23 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       if (success) {
         await _showBackgroundChatNotification(message);
       }
+    } else if (type == NotificationType.complainHeader ||
+        type == NotificationType.complainDetail) {
+      // Antre "thread ini butuh refetch" -- payload complain cuma bawa ID,
+      // bukan isi pesan, jadi tidak bisa direkonstruksi lokal seperti chat.
+      // Drain-nya (ComplainProvider.drainPendingComplainRefetch) selalu
+      // berujung network call saat thread dibuka/app resume.
+      final detail = NotificationHelper.parseDetail(message.data['detail']);
+      final noComplain =
+          (detail['No_Complain'] ?? detail['no_complain'])?.toString();
+      final noOrder = (detail['No_Order'] ?? detail['no_order'])?.toString();
+      if (noComplain != null && noComplain.isNotEmpty) {
+        await ComplainProvider.enqueuePendingComplainRefetch(noComplain);
+      }
+      if (noOrder != null && noOrder.isNotEmpty) {
+        await ComplainProvider.enqueuePendingComplainRefetch(noOrder);
+      }
+      await _showBackgroundNonChatNotification(message, type);
     } else if (type == NotificationType.progress ||
         type == NotificationType.review) {
       await _showBackgroundNonChatNotification(message, type);
@@ -93,6 +114,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Default 100MB. Feed berisi banyak foto; dengan batas kecil, gambar yang
+  // sudah di-scroll lewat cepat dibuang dan terlihat "loading lagi" saat user
+  // scroll balik. Gambar sudah didecode seukuran tampilan (AppNetworkImage),
+  // jadi 250MB muat jauh lebih banyak gambar.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 250 << 20;
 
   try {
     debugPrint('🚀 APP INIT START');
@@ -141,9 +168,14 @@ void main() async {
     }
     debugPrint('✅ AuthService ready');
 
-    // ── 4. FCMService — butuh Auth sudah siap ─────────────────────
-    await FCMService.instance.initialize();
-    debugPrint('✅ FCM ready');
+    // ── 4. FCMService — SENGAJA tidak di-await ────────────────────
+    // initialize() memanggil requestPermission() (dialog izin OS) dan
+    // getToken() (round-trip network, dengan retry Future.delayed 2 detik).
+    // Kalau di-await di sini, semua itu terjadi sebelum ada satu pun frame
+    // Flutter — user melihat layar kosong lalu dialog izin tanpa konteks.
+    // Handler background sudah terdaftar di atas, jadi tidak ada pesan hilang,
+    // dan registerToken() tidak bergantung pada initialize().
+    unawaited(FCMService.instance.initialize());
 
     debugPrint('✅ APP INIT COMPLETE');
 
@@ -183,6 +215,7 @@ void main() async {
             ),
           ),
           ChangeNotifierProvider(create: (_) => ChatProvider()),
+          ChangeNotifierProvider(create: (_) => ComplainProvider()),
           ChangeNotifierProxyProvider<ChatProvider, RoomChatProvider>(
             create: (context) =>
                 RoomChatProvider(chatProv: context.read<ChatProvider>()),
@@ -193,6 +226,7 @@ void main() async {
             create: (_) => HistoryOrderProvider()..initialize(),
           ),
           ChangeNotifierProvider(create: (_) => OrderTabProvider()),
+          ChangeNotifierProvider(create: (_) => UiStateProvider()),
         ],
         child: const MyApp(),
       ),
@@ -226,6 +260,21 @@ class MyApp extends StatelessWidget {
       title: 'Aplikasi Customer',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
+      // enableScrollWhenRefreshCompleted default-nya false di package
+      // pull_to_refresh -- begitu RefreshStatus.completed selesai (durasi
+      // endRefresh(), ~500ms), SmartRefresherState.setCanDrag(false)
+      // dipanggil dan viewport jadi NeverScrollableScrollPhysics sampai
+      // headerMode berhasil balik ke idle. Transisi balik ke idle itu
+      // bergantung posisi scroll presisi (_inVisual()/ballistic spring-back)
+      // yang jauh lebih rapuh di real device (timing/velocity sentuhan
+      // asli) dibanding emulator (event mouse sintetis) -- itu sebabnya bug
+      // "list tidak bisa discroll setelah animasi refresh selesai" cuma
+      // muncul di real device. true = viewport tetap draggable begitu
+      // completed, tidak pernah bergantung transisi idle itu sama sekali.
+      builder: (context, child) => RefreshConfiguration(
+        enableScrollWhenRefreshCompleted: true,
+        child: child!,
+      ),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -268,6 +317,7 @@ class MyApp extends StatelessWidget {
       final historyOrderProvider = context.read<HistoryOrderProvider>();
       final pesananProvider = context.read<PesananProvider>();
       final penawaranProvider = context.read<PenawaranProvider>();
+      final complainProvider = context.read<ComplainProvider>();
       final navigationProvider = context.read<NavigationProvider>();
 
       // ── Inject semua provider ke FCMService ─────────────────────────────
@@ -276,6 +326,7 @@ class MyApp extends StatelessWidget {
       FCMService.instance.setHistoryOrderProvider(historyOrderProvider);
       FCMService.instance.setPesananProvider(pesananProvider);
       FCMService.instance.setPenawaranProvider(penawaranProvider);
+      FCMService.instance.setComplainProvider(complainProvider);
 
       // ── getSenderName ────────────────────────────────────────────────────
       FCMService.instance.getSenderName = (roomId, senderId) {
@@ -376,6 +427,27 @@ class MyApp extends StatelessWidget {
         }
       };
 
+      // ── Tap notifikasi complain → navigasi ke ComplainThreadPage ─────────
+      FCMService.instance.onComplainNotificationTapped = (noComplain, noOrder) {
+        debugPrint(
+            '[Main] 👆 Complain notification tapped: noComplain=$noComplain noOrder=$noOrder');
+        try {
+          final ctx = navigatorKey.currentContext;
+          if (ctx == null) return;
+
+          // Tidak perlu panggil onComplainDetailPushReceived/HeaderPushReceived
+          // di sini — ComplainThreadPage sendiri akan loadActive() pas dibuka.
+          navigationProvider.navigateToPage(
+            ctx,
+            ComplainThreadPage(noComplain: noComplain, noOrder: noOrder),
+            targetTabIndex: 2,
+            hrsLogin: true,
+          );
+        } catch (e, st) {
+          debugPrint('[Main] ❌ onComplainNotificationTapped error: $e\n$st');
+        }
+      };
+
       debugPrint('[Main] ✅ FCM callbacks configured');
     } catch (e, st) {
       debugPrint('[Main] ❌ _setupFCMCallbacks error: $e\n$st');
@@ -403,6 +475,11 @@ class MyApp extends StatelessWidget {
 
   void _handleSessionExpired(BuildContext context) async {
     debugPrint('🚪 [MyApp] Handling session expired...');
+    // Tangkap SEBELUM apapun dibersihkan: kalau customer sudah null di sini,
+    // sesi ini memang tidak pernah benar-benar login (mis. guest yang cache
+    // Hive-nya sempat "menghidupkan" customer basi lalu gagal auth) — jangan
+    // lempar ke halaman login, cukup bersih-bersih dan biarkan di Home.
+    final wasLoggedIn = context.read<UserProvider>().customer != null;
     try {
       FCMService.instance.clearAllMessageGroups();
 
@@ -414,7 +491,8 @@ class MyApp extends StatelessWidget {
       await ChatStorageService.instance.clearAll();
 
       final navigationProvider = context.read<NavigationProvider>();
-      await navigationProvider.handleLogout(context);
+      await navigationProvider.handleLogout(context,
+          showLoginPage: wasLoggedIn);
 
       await Future.delayed(const Duration(milliseconds: 300));
       if (!context.mounted) return;
@@ -534,6 +612,15 @@ Future<void> _showBackgroundNonChatNotification(
         channelId = NotificationChannelManager.reviewChannelId;
         title = message.notification?.title ?? 'Ulasan Baru';
         body = message.notification?.body ?? 'Kamu mendapat ulasan baru';
+        break;
+      case NotificationType.complainHeader:
+      case NotificationType.complainDetail:
+        // Backend kirim title/body siap pakai di data payload (bukan di
+        // message.notification), sama seperti di ComplainNotificationHandler.
+        channelId = NotificationChannelManager.complainChannelId;
+        title = message.data['title']?.toString() ?? 'Complain';
+        body = message.data['body']?.toString() ??
+            'Ada pembaruan pada complain Anda';
         break;
       default:
         return;
