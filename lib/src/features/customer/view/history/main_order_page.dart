@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
@@ -308,34 +309,48 @@ class _MainOrderPageState extends State<MainOrderPage> {
             ),
           ),
           actions: [
-            // Icon-only, tanpa label — pesanan batal/expired ada di sini.
-            GestureDetector(
-              onTap: () => context.read<NavigationProvider>().navigateToPage(
-                    context,
-                    FinishedOrderPage(),
-                    targetTabIndex: 2,
-                    targetPage: 'FinishedOrderPage',
-                    hrsLogin: true,
-                  ),
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(Icons.history_rounded,
-                    size: 18, color: Colors.grey.shade600),
+            PopupMenuButton<String>(
+              color: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.black26,
+              popUpAnimationStyle: AnimationStyle(
+                duration: const Duration(milliseconds: 150),
               ),
-            ),
-            const SizedBox(width: 16),
+              icon: const Icon(Icons.more_vert, color: Colors.black87),
+              onSelected: (value) {
+                if (value == 'history') {
+                  context.read<NavigationProvider>().navigateToPage(
+                        context,
+                        FinishedOrderPage(),
+                        targetTabIndex: 2,
+                        targetPage: 'FinishedOrderPage',
+                        hrsLogin: true,
+                      );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'history',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const FaIcon(
+                        FontAwesomeIcons.fileCircleCheck,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "Riwayat pesanan",
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
           ],
         ),
         body: SafeArea(
