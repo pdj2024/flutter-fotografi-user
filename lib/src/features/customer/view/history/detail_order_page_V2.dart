@@ -399,10 +399,9 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        PaymentSection(pesanan: pesanan),
-                        if (_refundTransaksi != null)
+                        if (_refundTransaksi != null &&
+                            _refundTransaksi!.adaDanaCustomer)
                           RefundSection(transaksi: _refundTransaksi!),
-                        ProgressSection(pesanan: pesanan),
                         LocationSection(
                           pesanan: pesanan,
                           onExtendDeadline: (pesanan.tglPengerjaanMax != null &&
@@ -413,6 +412,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                               ? () => showExtendDeadlineFlow(context, pesanan)
                               : null,
                         ),
+                        ProgressSection(pesanan: pesanan),
+                        PaymentSection(pesanan: pesanan),
                         if (paket != null)
                           ExpandableCard(
                             title: 'Detail Paket',
@@ -443,7 +444,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   static bool _statusTerminal(String? status) => const {
         'batal',
         'dibatalkan',
-        'dibatalkan paid',
+        'refund paid',
         'expired',
         'closed',
       }.contains((status ?? '').toLowerCase().trim());

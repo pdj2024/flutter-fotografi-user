@@ -18,7 +18,7 @@ class RefundSection extends StatefulWidget {
 }
 
 class _RefundSectionState extends State<RefundSection> {
-  bool isExpanded = true;
+  bool isExpanded = false;
 
   // Warna badge memakai config refund yang sudah ada di status_config.
   StatusConfig get _cfg => getStatus(
@@ -86,9 +86,11 @@ class _RefundSectionState extends State<RefundSection> {
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(alignment: Alignment.centerLeft, child: _badge()),
-          if (t.refundTime != null) ...[
+          if (t.adaDanaCustomer) ...[
+            Align(alignment: Alignment.centerLeft, child: _badge()),
             const SizedBox(height: 12),
+          ],
+          if (t.refundTime != null) ...[
             InfoRow(
               label: 'Waktu Pengajuan',
               value: '${Helper.formatTanggal(t.refundTime!)}, '
@@ -99,23 +101,8 @@ class _RefundSectionState extends State<RefundSection> {
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 12),
-          const Text(
-            'Rincian Pengembalian',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
           PriceRow(
-            label: 'Total Pembayaran',
-            value: Helper.formatCurrency(t.nilai),
-          ),
-          const SizedBox(height: 6),
-          PriceRow(
-            label: 'Hak Vendor',
-            value: Helper.formatCurrency(t.refundVen),
-          ),
-          const Divider(height: 20),
-          PriceRow(
-            label: 'Dikembalikan ke Anda',
+            label: 'Jumlah refund',
             value: _nominalCustomer,
             isBold: true,
             valueColor: t.adaDanaCustomer

@@ -339,6 +339,17 @@ class PesananProvider with ChangeNotifier {
   // LOAD FINISHED ORDERS — dipanggil dari FinishedOrderPage saat dibuka
   // ═══════════════════════════════════════════════════════════
 
+  /// Status_Progress_Pesanan yang dianggap "akhir" dan masuk halaman riwayat.
+  /// Index 0 harus 'selesai' (jadi [_pesananSelesai]); sisanya digabung ke
+  /// [_pesananBatal].
+  static const List<String> _historyStatuses = [
+    'selesai',
+    'dibatalkan',
+    'refund paid',
+    'expired',
+    'closed',
+  ];
+
   /// Order selesai/dibatalkan tidak selalu `status: 'aktif'` (order selesai
   /// pun bisa tetap `Status: "aktif"` di backend), jadi filternya cukup dari
   /// status_progress_pesanan saja, tanpa param `status`.
@@ -358,27 +369,23 @@ class PesananProvider with ChangeNotifier {
       final tgl1 = fmt.format(start);
       final tgl2 = fmt.format(end);
 
-      final results = await Future.wait([
-        pesananService.getAll(
+      // Semua status akhir, satu request per status (backend tidak menerima
+      // banyak status sekaligus). Dulu hanya 'selesai' & 'dibatalkan', jadi
+      // pesanan yang berubah jadi 'refund paid'/'expired'/'closed' hilang dari
+      // riwayat. Urut Updated_At: yang terakhir berubah tampil paling atas.
+      final results = await Future.wait(_historyStatuses.map(
+        (status) => pesananService.getAll(
           idCustomer: userId,
-          statusProgresPesanan: 'selesai',
+          statusProgresPesanan: status,
           tglCreated1: tgl1,
           tglCreated2: tgl2,
-          orderBy: 'Created_At',
+          orderBy: 'Updated_At',
           orderDir: 'desc',
         ),
-        pesananService.getAll(
-          idCustomer: userId,
-          statusProgresPesanan: 'dibatalkan',
-          tglCreated1: tgl1,
-          tglCreated2: tgl2,
-          orderBy: 'Created_At',
-          orderDir: 'desc',
-        ),
-      ]);
+      ));
 
       _pesananSelesai = results[0];
-      _pesananBatal = results[1];
+      _pesananBatal = results.skip(1).expand((list) => list).toList();
 
       final combined = [..._pesananSelesai, ..._pesananBatal];
       if (combined.isNotEmpty) {

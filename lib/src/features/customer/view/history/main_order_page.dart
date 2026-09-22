@@ -20,7 +20,6 @@ import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.d
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
-import 'package:mpjnew/src/features/customer/widget/order_status_flow.dart';
 import 'package:mpjnew/src/features/customer/widget/refresh_header.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -178,24 +177,41 @@ class _MainOrderPageState extends State<MainOrderPage> {
     }
   }
 
-  List<PesananModel> get _filteredOrders {
+  List<PesananModel> get _activeOrders {
     final provider = context.read<PesananProvider>();
-    final active = [
-      ...provider.pesananUnpaid,
-      ...provider.pesananProgress,
-    ];
-    active.sort((a, b) {
-      final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
-      final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
-      return bTime.compareTo(aTime);
-    });
+    return [...provider.pesananUnpaid, ...provider.pesananProgress];
+  }
+
+  static String _statusOf(PesananModel o) =>
+      o.statusProgresPesanan ?? 'menunggu bayar';
+
+  /// Terbaru di atas: Updated_At, atau Created_At kalau Updated_At kosong.
+  static int _byLatest(PesananModel a, PesananModel b) {
+    final aTime = a.updatedAt ?? a.createdAt ?? DateTime(0);
+    final bTime = b.updatedAt ?? b.createdAt ?? DateTime(0);
+    return bTime.compareTo(aTime);
+  }
+
+  List<PesananModel> get _filteredOrders {
+    final active = _activeOrders..sort(_byLatest);
 
     if (_selectedFilter == null) return active;
     final group = _filterGroups[_selectedFilter] ?? [_selectedFilter!];
-    return active
-        .where(
-            (o) => group.contains(o.statusProgresPesanan ?? 'menunggu bayar'))
-        .toList();
+    final filtered = active.where((o) => group.contains(_statusOf(o))).toList();
+
+    // Chip Pengerjaan: pesanan yang menunggu review customer paling atas
+    // (butuh aksi), lalu terbaru. Satu pembanding — sort() Dart tidak
+    // dijamin stabil, jadi urutan terbaru tidak bisa diandalkan tersisa
+    // dari sort sebelumnya.
+    if (_selectedFilter == _chipPengerjaan) {
+      filtered.sort((a, b) {
+        final aReview = _statusOf(a) == 'review' ? 0 : 1;
+        final bReview = _statusOf(b) == 'review' ? 0 : 1;
+        final byReview = aReview.compareTo(bReview);
+        return byReview != 0 ? byReview : _byLatest(a, b);
+      });
+    }
+    return filtered;
   }
 
   Future<void> _onRefresh() async {
@@ -403,16 +419,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildFilterChips() {
+    // Titik merah = ada pesanan yang menunggu aksi customer di chip itu.
+    final statuses = _activeOrders.map(_statusOf).toSet();
     final chips = <_ChipItem>[
-      _ChipItem(value: null, label: 'Semua'),
+      const _ChipItem(value: null, label: 'Semua'),
       _ChipItem(
-          value: 'menunggu bayar',
-          label: OrderStatusFlow.displayLabel('menunggu bayar')),
-      // "Proses" & "Review" masing-masing gabungan 2 status (lihat
-      // _filterGroups) -- label sengaja singkat, bukan displayLabel yang
-      // didesain untuk 1 status spesifik.
-      _ChipItem(value: 'proses', label: 'Proses'),
-      _ChipItem(value: 'review', label: 'Review'),
+        value: 'menunggu bayar',
+        label: 'Pembayaran',
+        showDot: statuses.contains('menunggu bayar'),
+      ),
+      const _ChipItem(value: 'persiapan', label: 'Jadwal Foto'),
+      // Gabungan proses + review + revisi (lihat _filterGroups).
+      _ChipItem(
+        value: _chipPengerjaan,
+        label: 'Pengerjaan',
+        showDot: statuses.contains('review'),
+      ),
     ];
 
     return Container(
@@ -458,16 +480,36 @@ class _MainOrderPageState extends State<MainOrderPage> {
                       ]
                     : [],
               ),
-              child: Text(
-                chip.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                  letterSpacing: 0.1,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    chip.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.grey.shade700,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                  if (chip.showDot) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        shape: BoxShape.circle,
+                        // Tepi putih supaya titik tetap terlihat saat chip
+                        // aktif berwarna.
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           );
@@ -632,14 +674,22 @@ class _MainOrderPageState extends State<MainOrderPage> {
 class _ChipItem {
   final String? value;
   final String label;
-  const _ChipItem({required this.value, required this.label});
+
+  /// Titik merah: ada pesanan yang menunggu aksi customer di chip ini.
+  final bool showDot;
+  const _ChipItem({
+    required this.value,
+    required this.label,
+    this.showDot = false,
+  });
 }
+
+const String _chipPengerjaan = 'proses';
 
 // Key chip -> daftar status backend yang direpresentasikannya. Murni
 // pengelompokan tampilan filter -- field statusProgresPesanan tiap pesanan
-// TIDAK berubah, tetap persis persiapan/proses/review/revisi. "Menunggu
-// Pembayaran" TIDAK masuk grup manapun (tetap 1:1) -- lihat _filteredOrders.
+// TIDAK berubah. Chip yang tidak ada di sini (menunggu bayar, persiapan)
+// berarti 1 chip = 1 status -- lihat _filteredOrders.
 const Map<String, List<String>> _filterGroups = {
-  'proses': ['persiapan', 'proses'],
-  'review': ['review', 'revisi'],
+  _chipPengerjaan: ['proses', 'review', 'revisi'],
 };

@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 
 /// Service untuk preload gambar portofolio di background
-/// 
+///
 /// Strategy:
 /// - Load semua gambar saat portofolio di-fetch
 /// - Gunakan priority queue (portofolio yang di-view dulu)
@@ -19,47 +19,47 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // CONFIGURATION
   // ═══════════════════════════════════════════════════════════
-  
+
   /// Max concurrent downloads
   static const int _maxConcurrent = 3;
-  
+
   /// Max images to preload per batch
   static const int _maxPerBatch = 30;
-  
+
   /// Delay between batches (ms)
   static const int _batchDelay = 500;
-  
+
   /// Cache manager
   final DefaultCacheManager _cacheManager = DefaultCacheManager();
-  
+
   // ═══════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════
-  
+
   /// Currently loading URLs
   final Set<String> _loadingUrls = {};
-  
+
   /// Successfully preloaded URLs
   final Set<String> _preloadedUrls = {};
-  
+
   /// Failed URLs (untuk retry logic)
   final Map<String, int> _failedUrls = {};
-  
+
   /// Is service currently preloading
   bool _isPreloading = false;
-  
+
   /// Priority queue untuk URL yang perlu di-load
   final List<_PreloadTask> _queue = [];
-  
+
   // ═══════════════════════════════════════════════════════════
   // GETTERS
   // ═══════════════════════════════════════════════════════════
-  
+
   bool get isPreloading => _isPreloading;
   int get queueLength => _queue.length;
   int get preloadedCount => _preloadedUrls.length;
   int get failedCount => _failedUrls.length;
-  
+
   /// Get preload statistics
   Map<String, dynamic> getStats() {
     return {
@@ -74,9 +74,9 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // MAIN API
   // ═══════════════════════════════════════════════════════════
-  
+
   /// Preload semua gambar dari list portofolio
-  /// 
+  ///
   /// Priority:
   /// 1. First 10 portfolios (yang muncul di screen)
   /// 2. Remaining portfolios
@@ -129,7 +129,7 @@ class MediaPreloadService {
   }) async {
     for (final url in urls) {
       if (!_shouldPreload(url)) continue;
-      
+
       _queue.add(_PreloadTask(
         url: url,
         priority: priority,
@@ -138,7 +138,7 @@ class MediaPreloadService {
     }
 
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
-    
+
     if (!_isPreloading) {
       unawaited(_processQueue());
     }
@@ -147,7 +147,7 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // BATCH PROCESSING
   // ═══════════════════════════════════════════════════════════
-  
+
   Future<void> _preloadBatch(
     List<PortofolioModel> portfolios, {
     required int priority,
@@ -157,10 +157,10 @@ class MediaPreloadService {
     for (final portfolio in portfolios) {
       // Extract all media URLs
       final urls = _extractMediaUrls(portfolio);
-      
+
       for (final url in urls) {
         if (!_shouldPreload(url)) continue;
-        
+
         tasks.add(_PreloadTask(
           url: url,
           priority: priority,
@@ -175,11 +175,12 @@ class MediaPreloadService {
       return;
     }
 
-    debugPrint('[MediaPreload] 📋 Adding ${tasks.length} tasks (priority: $priority)');
-    
+    debugPrint(
+        '[MediaPreload] 📋 Adding ${tasks.length} tasks (priority: $priority)');
+
     // Add to queue
     _queue.addAll(tasks);
-    
+
     // Sort by priority
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
 
@@ -192,17 +193,17 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // QUEUE PROCESSING
   // ═══════════════════════════════════════════════════════════
-  
+
   Future<void> _processQueue() async {
     if (_isPreloading) return;
     if (_queue.isEmpty) return;
 
     _isPreloading = true;
-    
+
     debugPrint('[MediaPreload] ⚙️ Processing queue: ${_queue.length} tasks');
 
     int batchCount = 0;
-    
+
     while (_queue.isNotEmpty) {
       // Take next batch
       final batch = _queue.take(_maxPerBatch).toList();
@@ -221,7 +222,7 @@ class MediaPreloadService {
     }
 
     _isPreloading = false;
-    
+
     debugPrint('═══════════════════════════════════════════════════');
     debugPrint('[MediaPreload] ✅ PRELOAD COMPLETE');
     debugPrint('[MediaPreload]    Batches: $batchCount');
@@ -232,14 +233,14 @@ class MediaPreloadService {
 
   Future<void> _processBatchConcurrent(List<_PreloadTask> tasks) async {
     final futures = <Future<void>>[];
-    
+
     for (int i = 0; i < tasks.length; i += _maxConcurrent) {
       final chunk = tasks.skip(i).take(_maxConcurrent).toList();
-      
+
       // Process chunk concurrently
       final chunkFutures = chunk.map((task) => _preloadSingle(task));
       futures.addAll(chunkFutures);
-      
+
       // Wait for chunk to complete before starting next
       await Future.wait(chunkFutures, eagerError: false);
     }
@@ -248,10 +249,10 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // SINGLE PRELOAD
   // ═══════════════════════════════════════════════════════════
-  
+
   Future<void> _preloadSingle(_PreloadTask task) async {
     final url = task.url;
-    
+
     if (_loadingUrls.contains(url)) return;
     if (_preloadedUrls.contains(url)) return;
 
@@ -260,16 +261,18 @@ class MediaPreloadService {
     try {
       debugPrint('[MediaPreload]    📥 Loading: ${_shortUrl(url)}');
 
-      await _cacheManager.getSingleFile(url);
+      // Key sama dengan AppNetworkImage → file hasil preload benar-benar
+      // dipakai kartu (dulu disimpan per URL signed, tidak pernah terbaca).
+      await _cacheManager.getSingleFile(url, key: stableImageKey(url));
       _preloadedUrls.add(url);
       _failedUrls.remove(url);
-
     } catch (e) {
       final failCount = (_failedUrls[url] ?? 0) + 1;
       _failedUrls[url] = failCount;
-      
-      debugPrint('[MediaPreload]    ❌ Failed: ${_shortUrl(url)} (attempt $failCount)');
-      
+
+      debugPrint(
+          '[MediaPreload]    ❌ Failed: ${_shortUrl(url)} (attempt $failCount)');
+
       // Retry once for transient errors
       if (failCount == 1 && e.toString().contains('SocketException')) {
         debugPrint('[MediaPreload]    🔄 Will retry later');
@@ -283,7 +286,7 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════════════
-  
+
   /// Extract all media URLs from portfolio
   List<String> _extractMediaUrls(PortofolioModel portfolio) {
     final urls = <String>[];
@@ -315,16 +318,16 @@ class MediaPreloadService {
   bool _shouldPreload(String url) {
     // Already preloaded
     if (_preloadedUrls.contains(url)) return false;
-    
+
     // Currently loading
     if (_loadingUrls.contains(url)) return false;
-    
+
     // Failed too many times
     if ((_failedUrls[url] ?? 0) >= 2) return false;
-    
+
     // Invalid URL
     if (url.isEmpty || !url.startsWith('http')) return false;
-    
+
     return true;
   }
 
@@ -355,17 +358,23 @@ class MediaPreloadService {
       targets.map((url) async {
         try {
           if (context.mounted) {
-            await precacheImage(CachedNetworkImageProvider(url), context);
+            // Provider & lebar decode identik dengan kartu feed → entri cache
+            // memori yang sama, gambar langsung tampil tanpa decode ulang.
+            await precacheImage(
+              appImageProvider(url, decodeWidth: feedDecodeWidth(context)),
+              context,
+            );
           }
         } catch (_) {}
       }),
     );
   }
-  
+
   /// Check if URL is cached
   Future<bool> isCached(String url) async {
     try {
-      final fileInfo = await _cacheManager.getFileFromCache(url);
+      final fileInfo =
+          await _cacheManager.getFileFromCache(stableImageKey(url));
       return fileInfo != null;
     } catch (e) {
       return false;
@@ -390,7 +399,7 @@ class MediaPreloadService {
   // ═══════════════════════════════════════════════════════════
   // CONTROL
   // ═══════════════════════════════════════════════════════════
-  
+
   /// Cancel all pending preloads
   void cancelAll() {
     _queue.clear();

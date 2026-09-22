@@ -115,6 +115,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Default 100MB. Feed berisi banyak foto; dengan batas kecil, gambar yang
+  // sudah di-scroll lewat cepat dibuang dan terlihat "loading lagi" saat user
+  // scroll balik. Gambar sudah didecode seukuran tampilan (AppNetworkImage),
+  // jadi 250MB muat jauh lebih banyak gambar.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 250 << 20;
+
   try {
     debugPrint('🚀 APP INIT START');
 

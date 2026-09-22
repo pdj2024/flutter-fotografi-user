@@ -136,13 +136,30 @@ class _ExtendDeadlineDialogState extends State<ExtendDeadlineDialog> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                'Batas pengerjaan saat ini: '
-                '${Helper.formatTanggal(widget.currentDeadline)}, '
-                '${Helper.toLocalTime(widget.currentDeadline)}',
-                style: const TextStyle(fontSize: 13, color: Colors.black54),
+              Row(
+                children: [
+                  Text(
+                    'Batas pengerjaan saat ini: ',
+                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
+                  Text(
+                    '${Helper.formatTanggal(widget.currentDeadline)}, '
+                    '${Helper.toLocalTime(widget.currentDeadline)}',
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              Text(
+                'Perpanjang hingga:',
+                style: const TextStyle(
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
 
               // ── Toggle mode ─────────────────────────────────────
               // Row(
@@ -222,7 +239,7 @@ class _ExtendDeadlineDialogState extends State<ExtendDeadlineDialog> {
                 ),
               ] else ...[
                 DatePickerField(
-                  label: 'Tanggal Baru',
+                  label: 'Tanggal',
                   selectedDate: _date,
                   isPenawaran: true,
                   placeholder: "Pilih tanggal realisasi",
@@ -233,7 +250,7 @@ class _ExtendDeadlineDialogState extends State<ExtendDeadlineDialog> {
                   }),
                 ),
                 TimePickerField(
-                  label: 'Waktu Baru',
+                  label: 'Waktu',
                   selectedTime: _time,
                   selectedZone: _zone,
                   onTimeSelected: (t, z) => setState(() {

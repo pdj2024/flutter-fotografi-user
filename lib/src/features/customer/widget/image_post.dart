@@ -1,9 +1,8 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
-import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/data/hive_entity/media_url_model.dart';
 
 class ImagePost extends StatefulWidget {
@@ -49,6 +48,40 @@ class _ImagePostState extends State<ImagePost> {
   void initState() {
     super.initState();
     _pageController = PageController();
+  }
+
+  // Kunci stabil gambar yang sudah di-precache — supaya tidak precache ulang
+  // tiap rebuild, tapi tetap precache kalau daftar media berubah.
+  final Set<String> _precached = {};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheAll();
+  }
+
+  @override
+  void didUpdateWidget(covariant ImagePost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _precacheAll();
+  }
+
+  /// PageView hanya membangun slide yang sedang tampil, jadi tanpa ini slide
+  /// ke-2, ke-3, dst. baru mulai diunduh saat di-swipe. Semua gambar post
+  /// dimuat sekaligus begitu halaman dibuka.
+  void _precacheAll() {
+    final urls = _validMedia
+        .map(_urlOf)
+        .whereType<String>()
+        .where((u) => _precached.add(stableImageKey(u)))
+        .toList();
+    if (urls.isEmpty) return;
+    precacheImages(context, urls, decodeWidth: feedDecodeWidth(context));
+  }
+
+  String? _urlOf(MediaUrlModel media) {
+    final url = media.url ?? media.idMedia;
+    return (url == null || url.isEmpty) ? null : url;
   }
 
   @override
@@ -154,30 +187,28 @@ class _ImagePostState extends State<ImagePost> {
   // ═══════════════════════════════════════════════════════════
 
   Widget _buildImageItem(MediaUrlModel media) {
-    final imageUrl = media.url ?? media.idMedia;
-    if (imageUrl == null || imageUrl.isEmpty) return _buildErrorWidget();
+    final imageUrl = _urlOf(media);
+    if (imageUrl == null) return _buildErrorWidget();
 
-    return CachedNetworkImage(
-      imageUrl: imageUrl,
+    // Provider identik dengan yang di-precache → langsung dari memori.
+    final imageProvider =
+        appImageProvider(imageUrl, decodeWidth: feedDecodeWidth(context));
+
+    return Image(
+      image: imageProvider,
       fit: widget.fit,
       width: double.infinity,
-      placeholder: (_, __) => _buildShimmerPlaceholder(),
-      errorWidget: (_, __, ___) => _buildErrorWidget(),
-      memCacheWidth: 1080,
-      maxWidthDiskCache: 1080,
-      imageBuilder: (context, imageProvider) {
+      height: _imageHeight,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (frame == null) return _buildPlaceholder();
         if (!_isImageLoaded) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _loadImageDimensions(imageProvider);
           });
         }
-        return Image(
-          image: imageProvider,
-          fit: widget.fit,
-          width: double.infinity,
-          height: _imageHeight,
-        );
+        return child;
       },
+      errorBuilder: (_, __, ___) => _buildErrorWidget(),
     );
   }
 
@@ -194,24 +225,29 @@ class _ImagePostState extends State<ImagePost> {
 
     listener = ImageStreamListener(
       (ImageInfo info, bool _) {
-        if (!mounted) return;
-        final screenWidth = MediaQuery.of(context).size.width;
         final ar = info.image.width / info.image.height;
-        setState(() {
-          _imageHeight = screenWidth / ar;
-          _isImageLoaded = true;
-        });
         stream.removeListener(listener);
         if (!completer.isCompleted) completer.complete();
+        // Bisa terpanggil sinkron di tengah build (gambar sudah di cache).
+        runOutsideBuild(() {
+          if (!mounted) return;
+          final screenWidth = MediaQuery.of(context).size.width;
+          setState(() {
+            _imageHeight = screenWidth / ar;
+            _isImageLoaded = true;
+          });
+        });
       },
       onError: (_, __) {
-        if (!mounted) return;
-        setState(() {
-          _imageHeight = 300;
-          _isImageLoaded = true;
-        });
         stream.removeListener(listener);
         if (!completer.isCompleted) completer.complete();
+        runOutsideBuild(() {
+          if (!mounted) return;
+          setState(() {
+            _imageHeight = 300;
+            _isImageLoaded = true;
+          });
+        });
       },
     );
 
@@ -276,9 +312,11 @@ class _ImagePostState extends State<ImagePost> {
   // PLACEHOLDER WIDGETS
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildShimmerPlaceholder() => ShimmerPlaceholder(
+  // Kotak polos (bukan shimmer) selagi gambar belum siap.
+  Widget _buildPlaceholder() => Container(
         width: double.infinity,
         height: _imageHeight ?? 300,
+        color: kImagePlaceholderColor,
       );
 
   Widget _buildErrorWidget() => Container(

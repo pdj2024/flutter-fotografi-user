@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
@@ -936,10 +937,22 @@ class _VendorAvatar extends StatelessWidget {
         child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
       );
     }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: Colors.grey.shade200,
-      backgroundImage: NetworkImage(url),
+    return CachedNetworkImage(
+      imageUrl: url,
+      imageBuilder: (_, imageProvider) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+        backgroundImage: imageProvider,
+      ),
+      placeholder: (_, __) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+      ),
+      errorWidget: (_, __, ___) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Constants.primaryColor.withOpacity(0.15),
+        child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
+      ),
     );
   }
 }

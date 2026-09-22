@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -468,7 +469,11 @@ class _FinishedCardState extends State<_FinishedCard> {
   bool get _isCancelledOrExpired =>
       widget.order.status == 'batal' ||
       widget.order.status == 'expired' ||
-      widget.order.statusProgresPesanan == 'dibatalkan';
+      const {'dibatalkan', 'refund paid', 'expired', 'closed'}
+          .contains(widget.order.statusProgresPesanan);
+
+  bool get _isRefundPaid => widget.order.statusProgresPesanan == 'refund paid';
+  bool get _isClosed => widget.order.statusProgresPesanan == 'closed';
 
   @override
   void initState() {
@@ -577,7 +582,8 @@ class _FinishedCardState extends State<_FinishedCard> {
 
   // ─── Status bar ──────────────────────────────────────────────
   Widget _buildStatusBar() {
-    final isExpired = widget.order.status == "expired";
+    final isExpired = widget.order.status == "expired" ||
+        widget.order.statusProgresPesanan == 'expired';
     final isBatal = !isExpired && _isCancelledOrExpired;
 
     final Color bgColor;
@@ -588,12 +594,18 @@ class _FinishedCardState extends State<_FinishedCard> {
 
     // Refund menimpa label terminal — customer perlu tahu status dananya,
     // bukan sekadar bahwa pesanannya batal.
-    if (widget.order.isRefundDone) {
+    if (widget.order.isRefundDone || _isRefundPaid) {
       bgColor = const Color(0xFFE8F5E9);
       iconColor = const Color(0xFF2E7D32);
       textColor = const Color(0xFF2E7D32);
       icon = Icons.check_circle_outline_rounded;
       label = 'Refund Selesai';
+    } else if (_isClosed) {
+      bgColor = const Color(0xFFF1F5F9);
+      iconColor = const Color(0xFF64748B);
+      textColor = const Color(0xFF64748B);
+      icon = Icons.lock_outline_rounded;
+      label = 'Ditutup';
     } else if (widget.order.isRefundProcessing) {
       bgColor = const Color(0xFFFFF3E0);
       iconColor = const Color(0xFFD97706);
@@ -993,11 +1005,22 @@ class _VendorAvatar extends StatelessWidget {
         child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
       );
     }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: Colors.grey.shade200,
-      backgroundImage: NetworkImage(url),
-      onBackgroundImageError: (_, __) {},
+    return CachedNetworkImage(
+      imageUrl: url,
+      imageBuilder: (_, imageProvider) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+        backgroundImage: imageProvider,
+      ),
+      placeholder: (_, __) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.grey.shade200,
+      ),
+      errorWidget: (_, __, ___) => CircleAvatar(
+        radius: 22,
+        backgroundColor: Constants.primaryColor.withOpacity(0.12),
+        child: Icon(Icons.person, size: 20, color: Constants.primaryColor),
+      ),
     );
   }
 }

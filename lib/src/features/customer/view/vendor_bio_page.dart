@@ -843,12 +843,14 @@ class _BioMediaImage extends StatelessWidget {
       return _errorWidget();
     }
 
-    return CachedNetworkImage(
-      imageUrl: effectiveUrl,
+    return Image.network(
+      effectiveUrl,
       fit: BoxFit.cover,
-      placeholder: (_, __) => const ShimmerPlaceholder(radius: 12),
-      errorWidget: (_, __, ___) => _errorWidget(),
-      fadeInDuration: const Duration(milliseconds: 250),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const ShimmerPlaceholder(radius: 12);
+      },
+      errorBuilder: (_, __, ___) => _errorWidget(),
     );
   }
 

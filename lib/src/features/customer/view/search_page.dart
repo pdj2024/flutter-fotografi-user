@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/app_image.dart';
 import 'package:mpjnew/src/data/hive_entity/portofolio_model.dart';
 import 'package:mpjnew/src/features/customer/view/single_post_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
@@ -76,7 +77,6 @@ class _SearchPageState extends State<SearchPage>
     _fadeController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _batchFailsafeTimer?.cancel();
     super.dispose();
   }
 
@@ -134,10 +134,6 @@ class _SearchPageState extends State<SearchPage>
           _hasMoreData = pList.length >= _itemsPerPage;
           _currentPage++;
         });
-        // Lanjutkan antrean render untuk item baru yang baru ditambahkan —
-        // batch sebelumnya mungkin sudah selesai semua jadi tidak ada trigger
-        // otomatis lain yang akan membukanya.
-        _unlockNextImageBatch();
       } else {
         setState(() {
           portofolioList = pList;
@@ -154,7 +150,6 @@ class _SearchPageState extends State<SearchPage>
           _hasMoreData = false;
         });
         _fadeController.forward();
-        _resetImageQueue();
       }
     } catch (e) {
       if (!mounted) return; // ← add
@@ -165,58 +160,6 @@ class _SearchPageState extends State<SearchPage>
         isLoadingPorto = false;
         _isLoadingMore = false;
       });
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // ANTREAN RENDER GAMBAR — 4 gambar per cycle, berurutan sesuai
-  // urutan hasil (orderBy=Tgl_Created&orderDir=desc dari API).
-  //
-  // Root cause lambatnya grid: GridView.builder di sini pakai
-  // shrinkWrap+NeverScrollableScrollPhysics, jadi SEMUA card dibangun
-  // sekaligus begitu data datang — bukan lazy per-scroll. Itu artinya
-  // semua card langsung menembak CachedNetworkImage-nya masing-masing
-  // secara bersamaan (bisa puluhan sekaligus), berebut bandwidth di
-  // koneksi seluler walau tiap gambar sendiri cuma ~90ms di kondisi
-  // normal. Antrean ini membatasi berapa banyak gambar yang BOLEH
-  // benar-benar mulai fetch dalam satu waktu — card yang belum
-  // "unlocked" cuma menampilkan shimmer, tidak memicu network request
-  // sama sekali sampai gilirannya tiba.
-  static const int _imageBatchSize = 4;
-  int _unlockedImageCount = 0;
-  int _pendingInBatch = 0;
-  Timer? _batchFailsafeTimer;
-
-  void _resetImageQueue() {
-    _batchFailsafeTimer?.cancel();
-    _unlockedImageCount = 0;
-    _pendingInBatch = 0;
-    _unlockNextImageBatch();
-  }
-
-  void _unlockNextImageBatch() {
-    if (_unlockedImageCount >= portofolioList.length) return;
-    final newCount =
-        (_unlockedImageCount + _imageBatchSize).clamp(0, portofolioList.length);
-    _pendingInBatch = newCount - _unlockedImageCount;
-    if (mounted) setState(() => _unlockedImageCount = newCount);
-
-    _batchFailsafeTimer?.cancel();
-    // Failsafe: kalau ada gambar di batch ini yang macet/sangat lambat,
-    // tetap lanjut ke batch berikutnya setelah beberapa detik supaya
-    // antrean tidak berhenti total gara-gara satu request yang gagal diam.
-    _batchFailsafeTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted) _unlockNextImageBatch();
-    });
-  }
-
-  /// Dipanggil oleh _PortoCard setiap gambarnya selesai — sukses atau
-  /// gagal — supaya kegagalan satu gambar tidak menyumbat antrean.
-  void _onCardImageSettled() {
-    _pendingInBatch--;
-    if (_pendingInBatch <= 0) {
-      _batchFailsafeTimer?.cancel();
-      _unlockNextImageBatch();
     }
   }
 
@@ -264,42 +207,39 @@ class _SearchPageState extends State<SearchPage>
               child: RefreshIndicator(
                 onRefresh: _doRefresh,
                 color: Constants.primaryColor,
-                child: ListView(
+                // CustomScrollView + SliverGrid: kartu dibangun lazy sesuai
+                // posisi scroll, jadi hanya gambar yang terlihat yang dimuat.
+                // Dulu GridView shrinkWrap di dalam ListView membangun SEMUA
+                // kartu sekaligus sehingga puluhan gambar berebut bandwidth.
+                child: CustomScrollView(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.zero,
-                  children: [
-                    // Search bar
-                    _buildSearchBar(),
-      
-                    // Header row
-                    _buildHeaderRow(),
-      
-                    // Content body — satu widget, kondisi di dalam
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildSearchBar()),
+                    SliverToBoxAdapter(child: _buildHeaderRow()),
                     _buildContentBody(),
-      
-                    // Load more indicator
                     if (_isLoadingMore)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Constants.primaryColor,
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Constants.primaryColor,
+                              ),
                             ),
                           ),
                         ),
                       ),
-      
-                    const SizedBox(height: 48),
+                    const SliverToBoxAdapter(child: SizedBox(height: 48)),
                   ],
                 ),
               ),
             ),
-      
+
             // Filter overlay
             if (_showFilterOverlay)
               Positioned.fill(
@@ -488,32 +428,30 @@ class _SearchPageState extends State<SearchPage>
   // agar slivers[] selalu punya index yang stabil
   // ─────────────────────────────────────────────────────────────
 
+  /// Selalu mengembalikan sliver.
   Widget _buildContentBody() {
     if (isLoadingPorto) {
-      return _buildShimmerInline();
+      return SliverToBoxAdapter(child: _buildShimmerInline());
     }
     if (errorPorto != null) {
-      return _buildErrorInline();
+      return SliverToBoxAdapter(child: _buildErrorInline());
     }
     if (portofolioList.isEmpty) {
-      return _buildEmptyInline();
+      return SliverToBoxAdapter(child: _buildEmptyInline());
     }
     return _buildGridInline();
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GRID INLINE — GridView biasa (bukan Sliver), di dalam
-  // SliverToBoxAdapter agar index stabil
+  // GRID — SliverGrid lazy
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildGridInline() {
-    return FadeTransition(
-      opacity: _fadeAnim,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverFadeTransition(
+        opacity: _fadeAnim,
+        sliver: SliverGrid.builder(
           itemCount: portofolioList.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
@@ -525,8 +463,6 @@ class _SearchPageState extends State<SearchPage>
             final porto = portofolioList[i];
             return _PortoCard(
               porto: porto,
-              isUnlocked: i < _unlockedImageCount,
-              onImageSettled: _onCardImageSettled,
               onTap: () {
                 HapticFeedback.selectionClick();
                 ctx.read<PortofolioProvider>().setSelectedPortofolio(porto);
@@ -717,15 +653,11 @@ class _SearchPageState extends State<SearchPage>
 
 class _PortoCard extends StatefulWidget {
   final PortofolioModel porto;
-  final bool isUnlocked;
-  final VoidCallback onImageSettled;
   final VoidCallback onTap;
   final VoidCallback onVendorTap;
 
   const _PortoCard({
     required this.porto,
-    required this.isUnlocked,
-    required this.onImageSettled,
     required this.onTap,
     required this.onVendorTap,
   });
@@ -735,8 +667,6 @@ class _PortoCard extends StatefulWidget {
 }
 
 class _PortoCardState extends State<_PortoCard> {
-  bool _settled = false;
-
   PortofolioModel get porto => widget.porto;
 
   String get _firstImageUrl =>
@@ -744,23 +674,8 @@ class _PortoCardState extends State<_PortoCard> {
 
   bool get _hasMultiple => porto.mediaUrls.length > 1;
 
-  /// Panggil sekali saja per card — sukses maupun gagal — supaya satu
-  /// gambar tidak menyumbat antrean render halaman.
-  void _notifySettledOnce() {
-    if (_settled) return;
-    _settled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onImageSettled();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_firstImageUrl.isEmpty) {
-      // Tidak ada gambar sama sekali — bukan "sedang loading", jadi jangan
-      // tahan antrean menunggu sesuatu yang tidak akan pernah datang.
-      _notifySettledOnce();
-    }
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
@@ -787,27 +702,13 @@ class _PortoCardState extends State<_PortoCard> {
                 children: [
                   if (_firstImageUrl.isEmpty)
                     _imgFallback()
-                  else if (!widget.isUnlocked)
-                    // Belum giliran antrean — jangan bangun CachedNetworkImage
-                    // sama sekali, supaya benar-benar TIDAK ada network
-                    // request yang tertembak untuk card ini dulu.
-                    const _ImgShimmer()
                   else
-                    CachedNetworkImage(
-                      imageUrl: _firstImageUrl,
-                      fit: BoxFit.cover,
-                      maxWidthDiskCache: 600,
-                      memCacheWidth: 400,
-                      fadeInDuration: const Duration(milliseconds: 200),
-                      placeholder: (_, __) => const _ImgShimmer(),
-                      imageBuilder: (ctx, imageProvider) {
-                        _notifySettledOnce();
-                        return Image(image: imageProvider, fit: BoxFit.cover);
-                      },
-                      errorWidget: (_, __, ___) {
-                        _notifySettledOnce();
-                        return _imgFallback();
-                      },
+                    AppNetworkImage(
+                      url: _firstImageUrl,
+                      // Kartu = setengah lebar layar (grid 2 kolom).
+                      decodeWidth: decodeWidthFor(
+                          context, MediaQuery.sizeOf(context).width / 2),
+                      errorWidget: _imgFallback(),
                     ),
 
                   // Gradient bawah tipis untuk kedalaman
@@ -943,9 +844,12 @@ class _Avatar extends StatelessWidget {
     }
     return CachedNetworkImage(
       imageUrl: url,
+      cacheKey: stableImageKey(url),
       imageBuilder: (_, img) => CircleAvatar(radius: 14, backgroundImage: img),
       maxWidthDiskCache: 80,
       memCacheWidth: 56,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
       placeholder: (_, __) =>
           CircleAvatar(radius: 14, backgroundColor: Colors.grey.shade100),
       errorWidget: (_, __, ___) => CircleAvatar(
@@ -953,23 +857,6 @@ class _Avatar extends StatelessWidget {
         backgroundColor: Colors.grey.shade100,
         child: Icon(Icons.person, size: 13, color: Colors.grey.shade400),
       ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// IMAGE SHIMMER
-// ═══════════════════════════════════════════════════════════════
-
-class _ImgShimmer extends StatelessWidget {
-  const _ImgShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey.shade200,
-      highlightColor: Colors.grey.shade50,
-      child: Container(color: Colors.white),
     );
   }
 }

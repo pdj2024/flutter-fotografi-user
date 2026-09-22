@@ -120,6 +120,7 @@ enum OrderProgressStatus {
   revisi,
   selesai,
   dibatalkan,
+  refundPaid,
   unknown;
 
   static OrderProgressStatus fromString(String? status) {
@@ -149,6 +150,8 @@ enum OrderProgressStatus {
       case 'cancelled':
       case 'batal':
         return OrderProgressStatus.dibatalkan;
+      case 'refund paid':
+        return OrderProgressStatus.refundPaid;
       default:
         return OrderProgressStatus.unknown;
     }
@@ -170,6 +173,8 @@ enum OrderProgressStatus {
         return '🎉';
       case OrderProgressStatus.dibatalkan:
         return '❌';
+      case OrderProgressStatus.refundPaid:
+        return '💸';
       default:
         return '📋';
     }
@@ -191,6 +196,8 @@ enum OrderProgressStatus {
         return 'Pesanan Selesai';
       case OrderProgressStatus.dibatalkan:
         return 'Pesanan Dibatalkan';
+      case OrderProgressStatus.refundPaid:
+        return 'Dana Dikembalikan';
       default:
         return 'Update Pesanan';
     }
@@ -212,6 +219,8 @@ enum OrderProgressStatus {
         return 'Pesanan telah selesai. Terima kasih!';
       case OrderProgressStatus.dibatalkan:
         return 'Pesanan telah dibatalkan.';
+      case OrderProgressStatus.refundPaid:
+        return 'Dana pembatalan pesanan telah dikembalikan.';
       default:
         return 'Status tidak diketahui';
     }

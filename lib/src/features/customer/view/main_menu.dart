@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
 import 'package:mpjnew/src/core/services/fcm/fcm_service.dart';
@@ -50,142 +51,153 @@ class _MainMenuState extends State<MainMenu> {
       });
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        final provider =
-            Provider.of<NavigationProvider>(context, listen: false);
-        return await provider.onWillPop(context);
+    // Tombol back perangkat SELALU ditangani shell ini (NavigationProvider.
+    // onWillPop): pop halaman di tab aktif → pindah ke Home → tekan 2x keluar.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit =
+            await context.read<NavigationProvider>().onWillPop(context);
+        if (shouldExit) SystemNavigator.pop();
       },
-      child: SafeArea(
-        child: Scaffold(
-          key: const PageStorageKey('MainMenu'),
-          body: Consumer<NavigationProvider>(
-            builder: (context, navigationProvider, child) {
-              return Stack(
-                children: [
-                  _buildOffstageNavigator(0, (_) => CustomerHomePage()),
-                  _buildOffstageNavigator(1, (_) => const ChatListPage()),
-                  _buildOffstageNavigator(2, (_) => const MainOrderPage()),
-                  _buildOffstageNavigator(
-                      3, (_) => const CustomerAccountPage()),
-                  Consumer<NavigationProvider>(
-                    builder: (context, nav, _) {
-                      final isHiddenTab = nav.selectedIndex == 1;
-                      final isNestedPage = !nav.isBottomNavVisible;
+      // Navigator per-tab melapor "tidak bisa back" ke Android begitu kembali
+      // ke halaman awalnya (mis. setelah detail pesanan ditutup). Laporan itu
+      // membuat Android menutup app langsung, tanpa lewat onWillPop di atas —
+      // jadi app keluar tanpa ke Home dulu. Telan di sini.
+      child: NotificationListener<NavigationNotification>(
+        onNotification: (_) => true,
+        child: SafeArea(
+          child: Scaffold(
+            key: const PageStorageKey('MainMenu'),
+            body: Consumer<NavigationProvider>(
+              builder: (context, navigationProvider, child) {
+                return Stack(
+                  children: [
+                    _buildOffstageNavigator(0, (_) => CustomerHomePage()),
+                    _buildOffstageNavigator(1, (_) => const ChatListPage()),
+                    _buildOffstageNavigator(2, (_) => const MainOrderPage()),
+                    _buildOffstageNavigator(
+                        3, (_) => const CustomerAccountPage()),
+                    Consumer<NavigationProvider>(
+                      builder: (context, nav, _) {
+                        final isHiddenTab = nav.selectedIndex == 1;
+                        final isNestedPage = !nav.isBottomNavVisible;
 
-                      if (isHiddenTab || isNestedPage) {
-                        return const SizedBox.shrink();
-                      }
+                        if (isHiddenTab || isNestedPage) {
+                          return const SizedBox.shrink();
+                        }
 
-                      return const Positioned(
-                        bottom: 20,
-                        right: 16,
-                        child: HelpFab(),
-                      );
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-          bottomNavigationBar: navigationProvider.isBottomNavVisible
-              ? Consumer<NavigationProvider>(
-                  builder: (context, navigationProvider, child) {
-                    int selectedIndex = navigationProvider.selectedIndex;
+                        return const Positioned(
+                          bottom: 20,
+                          right: 16,
+                          child: HelpFab(),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+            bottomNavigationBar: navigationProvider.isBottomNavVisible
+                ? Consumer<NavigationProvider>(
+                    builder: (context, navigationProvider, child) {
+                      int selectedIndex = navigationProvider.selectedIndex;
 
-                    return BottomNavigationBar(
-                      currentIndex: selectedIndex,
-                      selectedItemColor: Constants.primaryColor,
-                      unselectedItemColor: Colors.grey,
-                      type: BottomNavigationBarType.fixed,
-                      onTap: (index) =>
-                          _handleTabTap(index, context, selectedIndex),
-                      items: [
-                        BottomNavigationBarItem(
-                          icon: Icon(selectedIndex == 0
-                              ? Icons.explore
-                              : Icons.explore_outlined),
-                          label: 'Jelajah',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: SizedBox(
-                            width: 40,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              alignment: Alignment.center,
-                              children: [
-                                Icon(
-                                  selectedIndex == 1
-                                      ? Icons.chat
-                                      : Icons.chat_outlined,
-                                ),
-                                if (chatProvider.totalUnreadCount > 0 &&
-                                    userProvider.userId != null)
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.redAccent.shade200,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 18,
-                                        minHeight: 18,
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          chatProvider.totalUnreadCount > 99
-                                              ? '99+'
-                                              : chatProvider.totalUnreadCount
-                                                  .toString(),
-                                          style: const TextStyle(
+                      return BottomNavigationBar(
+                        currentIndex: selectedIndex,
+                        selectedItemColor: Constants.primaryColor,
+                        unselectedItemColor: Colors.grey,
+                        type: BottomNavigationBarType.fixed,
+                        onTap: (index) =>
+                            _handleTabTap(index, context, selectedIndex),
+                        items: [
+                          BottomNavigationBarItem(
+                            icon: Icon(selectedIndex == 0
+                                ? Icons.explore
+                                : Icons.explore_outlined),
+                            label: 'Jelajah',
+                          ),
+                          BottomNavigationBarItem(
+                            icon: SizedBox(
+                              width: 40,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    selectedIndex == 1
+                                        ? Icons.chat
+                                        : Icons.chat_outlined,
+                                  ),
+                                  if (chatProvider.totalUnreadCount > 0 &&
+                                      userProvider.userId != null)
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent.shade200,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
                                             color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
+                                            width: 2,
                                           ),
-                                          textAlign: TextAlign.center,
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 18,
+                                          minHeight: 18,
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            chatProvider.totalUnreadCount > 99
+                                                ? '99+'
+                                                : chatProvider.totalUnreadCount
+                                                    .toString(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          label: 'Pesan',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(selectedIndex == 2
-                              ? Icons.assignment
-                              : Icons.assignment_outlined),
-                          label: 'Order',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: selectedIndex == 3
-                                    ? Constants.primaryColor
-                                    : Colors.transparent,
-                                width: 2,
+                                ],
                               ),
                             ),
-                            child: const Icon(Icons.person),
+                            label: 'Pesan',
                           ),
-                          label: 'Profile',
-                        ),
-                      ],
-                    );
-                  },
-                )
-              : null,
+                          BottomNavigationBarItem(
+                            icon: Icon(selectedIndex == 2
+                                ? Icons.assignment
+                                : Icons.assignment_outlined),
+                            label: 'Order',
+                          ),
+                          BottomNavigationBarItem(
+                            icon: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selectedIndex == 3
+                                      ? Constants.primaryColor
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(Icons.person),
+                            ),
+                            label: 'Profile',
+                          ),
+                        ],
+                      );
+                    },
+                  )
+                : null,
+          ),
         ),
       ),
     );

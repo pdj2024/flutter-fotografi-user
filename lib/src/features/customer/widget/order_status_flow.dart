@@ -153,8 +153,8 @@ class OrderStatusFlow {
       case 'dibatalkan':
       case 'batal':
         return 'Dibatalkan';
-      case 'dibatalkan paid':
-        return 'Dibatalkan & Dana Dikembalikan';
+      case 'refund paid':
+        return 'Refund Selesai';
       case 'closed':
         return 'Ditutup';
       case 'expired':

@@ -53,7 +53,7 @@ const _fallbackLabel = 'Tidak Diketahui';
 const _terminalKeys = {
   'batal',
   'dibatalkan',
-  'dibatalkan paid',
+  'refund paid',
   'expired',
   'closed',
 };
@@ -82,9 +82,9 @@ StatusConfig getStatus(
   final key = status.toLowerCase().trim();
 
   if (_terminalKeys.contains(key)) {
-    // 'dibatalkan paid' sudah menyatakan dananya kembali, tanpa perlu
+    // 'refund paid' sudah menyatakan dananya kembali, tanpa perlu
     // menunggu Tgl_Refunded terisi.
-    if (isRefundDone || key == 'dibatalkan paid') return _refundDoneConfig;
+    if (isRefundDone || key == 'refund paid') return _refundDoneConfig;
     if (isRefundProcessing) return _refundProcessingConfig;
   }
 
