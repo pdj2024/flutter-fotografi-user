@@ -66,16 +66,17 @@ class _MainMenuState extends State<MainMenu> {
                   _buildOffstageNavigator(0, (_) => CustomerHomePage()),
                   _buildOffstageNavigator(1, (_) => const ChatListPage()),
                   _buildOffstageNavigator(2, (_) => const MainOrderPage()),
-                  _buildOffstageNavigator(3, (_) => const CustomerAccountPage()),
+                  _buildOffstageNavigator(
+                      3, (_) => const CustomerAccountPage()),
                   Consumer<NavigationProvider>(
                     builder: (context, nav, _) {
                       final isHiddenTab = nav.selectedIndex == 1;
                       final isNestedPage = !nav.isBottomNavVisible;
-        
+
                       if (isHiddenTab || isNestedPage) {
                         return const SizedBox.shrink();
                       }
-        
+
                       return const Positioned(
                         bottom: 20,
                         right: 16,
@@ -91,7 +92,7 @@ class _MainMenuState extends State<MainMenu> {
               ? Consumer<NavigationProvider>(
                   builder: (context, navigationProvider, child) {
                     int selectedIndex = navigationProvider.selectedIndex;
-        
+
                     return BottomNavigationBar(
                       currentIndex: selectedIndex,
                       selectedItemColor: Constants.primaryColor,
@@ -289,8 +290,12 @@ class _MainMenuState extends State<MainMenu> {
         final noOrder = progressData.noOrder;
         if (noOrder != null) {
           historyOrderProv.handleProgressFromFCM(progressData);
-          pesananProv.updateOrderStatus(
-              noOrder, progressData.statusProgressPesanan);
+          // Full refresh (bukan updateOrderStatus) -- history progres bisa
+          // dibuat tanpa status berubah (mis. perpanjang batas pengerjaan),
+          // dan updateOrderStatus cuma menambal statusProgresPesanan +
+          // deskripsiProgresPesanan secara lokal, field lain seperti
+          // tglPengerjaanMax tidak pernah ikut ter-refresh dari situ.
+          pesananProv.refreshOrder(noOrder);
         }
       };
 

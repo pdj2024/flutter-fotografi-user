@@ -89,18 +89,22 @@ class PesananProvider with ChangeNotifier {
   /// dimulai. Sumber tunggal aturan ini; dipakai di OrderHistoryCard (list)
   /// dan ComplainMenuAction (detail) supaya keduanya konsisten.
   static bool canCancel(PesananModel o) {
-    final prog = (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
+    final prog =
+        (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
     if (prog == 'menunggu bayar') return true;
     if (prog == 'persiapan') return isPaymentSettled(o.statusBayar);
     return false;
   }
 
   /// Order sudah dibayar (uang sudah masuk) sehingga pembatalan harus lewat
-  /// jalur refund (`batalDenganRefund`), bukan batal biasa.
+  /// jalur refund: tampilkan nominal pengembalian lalu minta rekening tujuan.
+  ///
+  /// Hanya `persiapan` — begitu pemotretan masuk tahap pengerjaan, pesanan
+  /// tidak bisa dibatalkan sama sekali (lihat [canCancel]).
   static bool needsRefund(PesananModel o) {
-    final prog = (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
-    return isPaymentSettled(o.statusBayar) &&
-        (prog == 'persiapan' || prog == 'menunggu bayar');
+    final prog =
+        (o.statusProgresPesanan ?? 'menunggu bayar').toLowerCase().trim();
+    return isPaymentSettled(o.statusBayar) && prog == 'persiapan';
   }
 
   // ═══════════════════════════════════════════════════════════

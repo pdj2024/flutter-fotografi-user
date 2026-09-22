@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
 import 'package:mpjnew/src/core/routing/navigation_provider.dart';
+import 'package:mpjnew/src/core/utils/deadline_helper.dart';
+import 'package:mpjnew/src/core/services/refund_transaksi_service.dart';
 import 'package:mpjnew/src/core/utils/shimmer_placeholder.dart';
+import 'package:mpjnew/src/data/models/refund_transaksi_model.dart';
 import 'package:mpjnew/src/data/models/metode_pembayaran_model.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/penawaran_model.dart';
@@ -14,7 +17,6 @@ import 'package:mpjnew/src/data/models/ulasan_model.dart';
 import 'package:mpjnew/src/features/customer/services/metode_pembayaran_service.dart';
 import 'package:mpjnew/src/features/customer/services/paket_service.dart';
 import 'package:mpjnew/src/features/customer/services/penawaran_service.dart';
-import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/services/ulasan_service.dart';
 import 'package:mpjnew/src/features/customer/view/chat/room_chat_page.dart';
 import 'package:mpjnew/src/features/customer/view/complain/complain_thread_page.dart';
@@ -22,6 +24,7 @@ import 'package:mpjnew/src/features/customer/view/history/detail_order_shimmer.d
 import 'package:mpjnew/src/features/customer/view/history/section/location_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/section/package_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/section/payment_section.dart';
+import 'package:mpjnew/src/features/customer/view/history/section/refund_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/section/progress_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/section/result_section.dart';
 import 'package:mpjnew/src/features/customer/view/history/section/ulasan_section.dart';
@@ -34,7 +37,7 @@ import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/extend_deadline_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/extend_deadline_flow.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/ulasan_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/konfirmasi_pemotretan_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/order_status_flow.dart';
@@ -55,6 +58,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       RefreshController(initialRefresh: false);
 
   UlasanModel? ulasan;
+  RefundTransaksiModel? _refundTransaksi;
   PaketModel? paket;
   PenawaranModel? penawaran;
   MetodePembayaranModel? metodePembayaran;
@@ -143,11 +147,11 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       // Paket adalah nilai default; penawaran yang disepakati bisa saja
       // mengubah rincian/revisi/harga dari default itu. PackageSection
       // memprioritaskan data penawaran ini, baru fallback ke paket.
-      penawaran = (pesanan.noPenawaran != null &&
-              pesanan.noPenawaran!.isNotEmpty)
-          ? (await PenawaranService().getAll(noId: pesanan.noPenawaran))
-              .firstOrNull
-          : null;
+      penawaran =
+          (pesanan.noPenawaran != null && pesanan.noPenawaran!.isNotEmpty)
+              ? (await PenawaranService().getAll(noId: pesanan.noPenawaran))
+                  .firstOrNull
+              : null;
 
       if (pesanan.metodeBayar != null && pesanan.metodeBayar!.isNotEmpty) {
         final hasLinkSnap =
@@ -165,6 +169,16 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
       if (pesanan.statusProgresPesanan?.toLowerCase() == 'selesai') {
         final list = await UlasanService().getAll(noOrder: pesanan.noBukti);
         ulasan = list.isNotEmpty ? list.first : null;
+      }
+
+      // Status refund dari transaksi refund kalau ada; kalau endpoint-nya
+      // belum siap, service mengembalikan [] dan label status jatuh balik ke
+      // pesanan.tglRefund/tglRefunded seperti sebelumnya.
+      if (_statusTerminal(pesanan.statusProgresPesanan) ||
+          _statusTerminal(pesanan.status)) {
+        final transaksi =
+            await RefundTransaksiService().getAll(idPesanan: pesanan.noBukti);
+        _refundTransaksi = transaksi.firstOrNull;
       }
     } catch (e) {
       if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
@@ -260,30 +274,6 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
     );
   }
 
-  Future<void> _showExtendDeadlineDialog(PesananModel pesanan) async {
-    final deadline = pesanan.tglPengerjaanMax;
-    if (deadline == null) return;
-
-    final newDeadline = await showDialog<DateTime>(
-      context: context,
-      builder: (_) => ExtendDeadlineDialog(currentDeadline: deadline),
-    );
-    if (newDeadline == null) return;
-
-    try {
-      await PesananService()
-          .update(pesanan.copyWith(tglPengerjaanMax: newDeadline));
-      if (!mounted) return;
-      await context.read<PesananProvider>().refreshOrder(pesanan.noBukti);
-      if (mounted) {
-        CustomSnackbar.showSuccessSnackbar(
-            context, 'Batas pengerjaan berhasil diperpanjang.');
-      }
-    } catch (e) {
-      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
-    }
-  }
-
   // ═══════════════════════════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════════════════════════
@@ -297,18 +287,19 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
           backgroundColor: const Color(0xFFF9F9F9),
           elevation: 0,
           title: const Text('Detail Pesanan',
-              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           actions: [ComplainMenuAction(pesanan: widget.pesananModel)],
         ),
         body: Consumer2<PesananProvider, ComplainProvider>(
           builder: (context, pesananProvider, complainProvider, _) {
-            final pesananFromProvider =
-                pesananProvider.getPesananByNoOrder(widget.pesananModel.noBukti);
-      
+            final pesananFromProvider = pesananProvider
+                .getPesananByNoOrder(widget.pesananModel.noBukti);
+
             if (isLoading && pesananFromProvider == null) {
               return DetailOrderShimmer(fetchData: fetchData);
             }
-      
+
             final pesanan = pesananFromProvider ?? widget.pesananModel;
             final orderStatus = pesanan.status?.toLowerCase() ?? '';
             final isTerminalOrder =
@@ -316,34 +307,35 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
             final status = isTerminalOrder
                 ? orderStatus
                 : pesanan.statusProgresPesanan?.toLowerCase() ?? '';
-      
+
             final transition = OrderStatusFlow.get('persiapan', 'proses');
             final btnLabel =
                 transition?.actionLabel ?? 'Konfirmasi Pemotretan Selesai';
-      
+
             final now = DateTime.now();
             final today = DateTime(now.year, now.month, now.day);
             final tglShoot = pesanan.tglRealisasi != null
-                ? DateTime(pesanan.tglRealisasi.year, pesanan.tglRealisasi.month,
-                    pesanan.tglRealisasi.day)
+                ? DateTime(pesanan.tglRealisasi.year,
+                    pesanan.tglRealisasi.month, pesanan.tglRealisasi.day)
                 : null;
-      
+
             final bool isBeforeShoot =
                 tglShoot != null && today.isBefore(tglShoot);
             final bool isOnShootDay =
                 tglShoot != null && today.isAtSameMomentAs(tglShoot);
-      
+
             final dotColor = _cfg(pesanan.statusProgresPesanan ?? "").color;
             final shootLabel = isBeforeShoot
                 ? 'Dijadwalkan ${Helper.formatTanggal(pesanan.tglRealisasi)}'
                 : isOnShootDay
                     ? 'Sesi pemotretan hari ini'
                     : 'Sesi pemotretan sudah berlangsung';
-      
+
             // for Complain
             final checking = complainProvider.isChecking(pesanan.noBukti);
             final error = complainProvider.getCheckError(pesanan.noBukti);
-            final complain = complainProvider.getCachedForOrder(pesanan.noBukti);
+            final complain =
+                complainProvider.getCachedForOrder(pesanan.noBukti);
             return SafeArea(
               child: Scaffold(
                 backgroundColor: const Color(0xFFF9F9F9),
@@ -408,6 +400,8 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                           const SizedBox(height: 12),
                         ],
                         PaymentSection(pesanan: pesanan),
+                        if (_refundTransaksi != null)
+                          RefundSection(transaksi: _refundTransaksi!),
                         ProgressSection(pesanan: pesanan),
                         LocationSection(
                           pesanan: pesanan,
@@ -416,7 +410,7 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                                       pesanan.statusProgresPesanan
                                           ?.trim()
                                           .toLowerCase()))
-                              ? () => _showExtendDeadlineDialog(pesanan)
+                              ? () => showExtendDeadlineFlow(context, pesanan)
                               : null,
                         ),
                         if (paket != null)
@@ -425,7 +419,10 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
                             isExpanded: isPackageExpanded,
                             onToggle: () => setState(
                                 () => isPackageExpanded = !isPackageExpanded),
-                            content: PackageSection(paket: paket, pesanan: pesanan, penawaran: penawaran),
+                            content: PackageSection(
+                                paket: paket,
+                                pesanan: pesanan,
+                                penawaran: penawaran),
                           ),
                       ],
                     ),
@@ -443,13 +440,29 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
   // PROFILE CARD
   // ═══════════════════════════════════════════════════════════════
 
+  static bool _statusTerminal(String? status) => const {
+        'batal',
+        'dibatalkan',
+        'dibatalkan paid',
+        'expired',
+        'closed',
+      }.contains((status ?? '').toLowerCase().trim());
+
   Widget _buildProfileCard(PesananModel pesanan) {
     final status = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
-    
+
+    // Transaksi refund lebih otoritatif kalau ada; kalau tidak (endpoint
+    // belum siap / belum ada barisnya), pakai penanda di pesanan.
+    // Refund 0% → bukan "Dana Sedang Direfund", cukup "Dibatalkan".
+    final trx = _refundTransaksi;
     final cfg = getStatus(
       status,
-      isRefundProcessing: pesanan.isRefundProcessing,
-      isRefundDone: pesanan.isRefundDone,
+      isRefundProcessing: trx != null
+          ? trx.isProses && trx.adaDanaCustomer
+          : pesanan.isRefundProcessing,
+      isRefundDone: trx != null
+          ? trx.isPaid && trx.adaDanaCustomer
+          : pesanan.isRefundDone,
     );
 
     return Container(
@@ -579,6 +592,85 @@ class _DetailOrderPageV2State extends State<DetailOrderPageV2> {
               onPressedBerikanUlasan: () => _showUlasanDialog(),
             ),
           ],
+          if (remainingIfNearDeadline(pesanan) != null) ...[
+            const SizedBox(height: 12),
+            _buildDeadlineReminder(pesanan, remainingIfNearDeadline(pesanan)!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeadlineReminder(PesananModel pesanan, Duration remaining) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timer_outlined, size: 16, color: Colors.red.shade700),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Sisa waktu pengerjaan: ${formatRemainingDeadline(remaining)}',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pastikan vendor bisa selesai tepat waktu -- ingatkan vendor, '
+            'atau perpanjang batas pengerjaan.',
+            style: TextStyle(
+                fontSize: 11.5, color: Colors.red.shade600, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    context.read<NavigationProvider>().popAllToRoot();
+                    context.read<NavigationProvider>().navigateToPage(
+                          context,
+                          RoomChatPage(partnerId: pesanan.idVendor),
+                          targetTabIndex: 1,
+                        );
+                  },
+                  icon: const Icon(Icons.chat_outlined, size: 16),
+                  label: const Text('Ingatkan Vendor'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                    side: BorderSide(color: Colors.red.shade300),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => showExtendDeadlineFlow(context, pesanan),
+                  icon: const Icon(Icons.event_available_outlined, size: 16),
+                  label: const Text('Perpanjang'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

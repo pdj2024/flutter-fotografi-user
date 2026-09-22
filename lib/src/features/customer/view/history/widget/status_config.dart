@@ -34,6 +34,10 @@ const _colorTable = <String, (Color, IconData)>{
   'dibatalkan': (Color(0xFFDC2626), Icons.cancel_outlined), // Merah
   'batal': (Color(0xFFDC2626), Icons.cancel_rounded), // Merah
   'expired': (Color(0xFFD97706), Icons.timer_off_rounded), // Oranye
+  'closed': (
+    Color(0xFF64748B),
+    Icons.lock_outline_rounded
+  ), // Abu — ditutup admin
 };
 
 const _fallbackColor = Color(0xFF64748B);
@@ -46,7 +50,13 @@ const _fallbackLabel = 'Tidak Diketahui';
 // Tgl_Refund/Tgl_Refunded (lihat PesananModel.isRefundProcessing), lalu
 // menimpa tampilan status terminal.
 
-const _terminalKeys = {'batal', 'dibatalkan', 'expired'};
+const _terminalKeys = {
+  'batal',
+  'dibatalkan',
+  'dibatalkan paid',
+  'expired',
+  'closed',
+};
 
 const _refundProcessingConfig = StatusConfig(
   color: Color(0xFFD97706),
@@ -72,7 +82,9 @@ StatusConfig getStatus(
   final key = status.toLowerCase().trim();
 
   if (_terminalKeys.contains(key)) {
-    if (isRefundDone) return _refundDoneConfig;
+    // 'dibatalkan paid' sudah menyatakan dananya kembali, tanpa perlu
+    // menunggu Tgl_Refunded terisi.
+    if (isRefundDone || key == 'dibatalkan paid') return _refundDoneConfig;
     if (isRefundProcessing) return _refundProcessingConfig;
   }
 

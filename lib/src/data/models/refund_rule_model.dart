@@ -13,10 +13,10 @@ class RefundRuleModel {
 
   factory RefundRuleModel.fromJson(Map<String, dynamic> json) {
     return RefundRuleModel(
-      noId: json['No_Id'],
+      noId: json['No_Id']?.toString() ?? '',
       jamLimit: (json['Jam_Limit'] as num?)?.toInt() ?? 0,
       persen: (json['Persen'] as num?)?.toDouble() ?? 0.0,
-      keterangan: json['Keterangan'],
+      keterangan: json['Keterangan']?.toString() ?? '',
     );
   }
 }

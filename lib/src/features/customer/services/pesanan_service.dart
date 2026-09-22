@@ -5,6 +5,7 @@ import 'package:mpjnew/src/core/services/api_client.dart';
 import 'package:mpjnew/src/core/services/api_singleton.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/data/models/create_pesanan_result.dart';
+import 'package:mpjnew/src/data/models/refund_info_model.dart';
 
 class PesananService {
   final String entity = 'order';
@@ -175,18 +176,51 @@ class PesananService {
     }
   }
 
-  /// BATAL + tandai refund — untuk pesanan yang SUDAH dibayar.
+  /// BATAL oleh customer — PUT /order/updateHeader dengan `status: batal`.
   ///
-  /// `update()` sengaja dipanggil DULU: `toJsonUpdate()` ikut mengirim
-  /// `status`, sehingga kalau `batal()` jalan lebih dulu, model di memori
-  /// masih `aktif` dan PUT berikutnya justru mengembalikan status itu —
-  /// membatalkan pembatalannya. Dengan urutan ini, status yang dikirim
-  /// masih nilai server yang benar, dan kalau `batal()` gagal, yang tersisa
-  /// hanya pesanan aktif ber-`tglRefund` — terlihat dan bisa diulang.
-  Future<DateTime> batalDenganRefund(PesananModel model) async {
-    final now = DateTime.now().toUtc();
-    await update(model.copyWith(tglRefund: now));
-    await batal(model.noBukti);
-    return now;
+  /// [denganRefund] untuk pesanan yang SUDAH dibayar: `tgl_refund` ikut diisi
+  /// dalam PUT yang sama, jadi status batal dan penanda refund tidak mungkin
+  /// tersimpan setengah-setengah.
+  Future<void> batalkanPesanan(PesananModel model,
+      {bool denganRefund = false}) {
+    return update(model.copyWith(
+      status: 'batal',
+      tglRefund: denganRefund ? DateTime.now().toUtc() : null,
+    ));
+  }
+
+  /// INFO REFUND — GET /order/info-refund
+  ///
+  /// Server yang menentukan tier refund yang berlaku sekaligus nominalnya,
+  /// dihitung terhadap jam server. App tidak menghitung ulang apa pun.
+  /// Mengembalikan null kalau pesanan tidak punya info refund (204/Data kosong).
+  Future<RefundInfoModel?> getInfoRefund({
+    required String idPesanan,
+    required String noTrackingPesanan,
+    required String idCustomer,
+  }) async {
+    final response = await _client.get(
+      '/$controller/info-refund',
+      queryParameters: {
+        'id_pesanan': idPesanan,
+        'no_tracking_pesanan': noTrackingPesanan,
+        'id_customer': idCustomer,
+      },
+    );
+
+    debugPrint('==============================');
+    debugPrint('URL: ${response.request?.url}');
+    debugPrint('Status Code: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+    debugPrint('==============================');
+
+    if (response.statusCode == 204) return null;
+    if (response.statusCode != 200) {
+      throw Exception('Gagal load info refund (${response.statusCode})');
+    }
+
+    final data = jsonDecode(response.body)['Data'];
+    if (data is! List || data.isEmpty) return null;
+    return RefundInfoModel.fromJson(data.first);
   }
 }

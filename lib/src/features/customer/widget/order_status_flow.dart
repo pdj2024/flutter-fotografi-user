@@ -153,6 +153,10 @@ class OrderStatusFlow {
       case 'dibatalkan':
       case 'batal':
         return 'Dibatalkan';
+      case 'dibatalkan paid':
+        return 'Dibatalkan & Dana Dikembalikan';
+      case 'closed':
+        return 'Ditutup';
       case 'expired':
         return 'Kadaluarsa';
       default:
@@ -258,7 +262,8 @@ class OrderStatusFlow {
         return const StatusInfoLabel(
           icon: '⏰',
           title: 'Pembayaran Kadaluarsa',
-          body: 'Batas waktu pembayaran telah habis. Pesanan ini tidak dapat diproses.',
+          body:
+              'Batas waktu pembayaran telah habis. Pesanan ini tidak dapat diproses.',
         );
       default:
         return StatusInfoLabel(
@@ -329,7 +334,8 @@ class OrderStatusFlow {
         return const StatusInfoLabel(
           icon: '⏰',
           title: 'Pembayaran Kadaluarsa',
-          body: 'Batas waktu pembayaran telah habis dan pesanan ini tidak dapat diproses. '
+          body:
+              'Batas waktu pembayaran telah habis dan pesanan ini tidak dapat diproses. '
               'Silakan buat pesanan baru jika masih membutuhkan layanan ini.',
         );
       default:

@@ -13,7 +13,7 @@ import 'package:mpjnew/src/features/customer/view/payment/payment_success_splash
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/order_tab_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/features/customer/widget/dialog/custom_dialog.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/counter_payment_card.dart';
 import 'package:mpjnew/src/features/customer/widget/payment/qris_payment_cart.dart';
@@ -347,47 +347,22 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
   // =========================================
 
   void _confirmManualCancel() {
-    ConfirmDialog.showBatalkanPesananDialog(
-      context: context,
-      onConfirm: _cancelOrder,
-    );
+    if (!mounted || _isNavigating) return;
+    // Pembatalan + pencatatan history + refresh provider dipegang
+    // showBatalPesananFlow; halaman ini hanya mengurus timer & navigasinya.
+    showBatalPesananFlow(context, _currentData, onSuccess: _afterCancel);
   }
 
-  Future<void> _cancelOrder() async {
-    if (!mounted || _isNavigating) return;
+  void _afterCancel() {
+    if (!mounted) return;
     setState(() => _isNavigating = true);
 
     _countdownTimer?.cancel();
     _pollingTimer?.cancel();
     _fcmSubscription?.cancel();
 
-    try {
-      await _pesananService.batal(widget.paymentData.noBukti);
-      final history = HistoryOrderService.createDibatalkan(
-        noOrder: widget.paymentData.noBukti,
-        senderId: _currentData.idCustomer,
-        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
-      );
-      await _historyOrderService.create(history);
-
-      if (!mounted) return;
-      // Sinkronkan PesananProvider supaya MainOrderPage langsung mengeluarkan
-      // pesanan ini dari daftar aktif (lihat catatan yang sama di
-      // _handleExpired) begitu navigasi kembali ke sana.
-      await context
-          .read<PesananProvider>()
-          .refreshOrder(widget.paymentData.noBukti);
-
-      if (!mounted) return;
-      context.read<NavigationProvider>().popAllToRoot();
-      context.read<NavigationProvider>().changeTab(2, context);
-    } catch (e) {
-      debugPrint('[WaitingPayment] Gagal membatalkan pesanan: $e');
-      if (mounted) {
-        setState(() => _isNavigating = false);
-        _showSnack('Gagal membatalkan pesanan', Colors.red.shade600);
-      }
-    }
+    context.read<NavigationProvider>().popAllToRoot();
+    context.read<NavigationProvider>().changeTab(2, context);
   }
 
   // =========================================
@@ -424,7 +399,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                   ),
             title: const Text(
               'Menunggu Pembayaran',
-              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
             ),
           ),
           body: Column(
@@ -446,8 +422,8 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child:
-                          const Icon(Icons.timer, color: Colors.white, size: 24),
+                      child: const Icon(Icons.timer,
+                          color: Colors.white, size: 24),
                     ),
                     const SizedBox(width: 12),
                     Column(
@@ -474,7 +450,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                   ],
                 ),
               ),
-        
+
               // ── FCM Status Indicator ──────────────────────────────────────
               // Ditampilkan saat sedang navigate (payment sukses terdeteksi)
               if (_isNavigating)
@@ -504,7 +480,7 @@ class _WaitingPaymentPageState extends State<WaitingPaymentPage> {
                     ],
                   ),
                 ),
-        
+
               // ── Content ───────────────────────────────────────────────────
               Expanded(
                 child: SmartRefresher(

@@ -75,7 +75,8 @@ class _PaymentSectionState extends State<PaymentSection> {
               ),
             )
           : null,
-      content: _buildPaymentContent(widget.pesanan, widget.metodePembayaran?.fee ?? 0),
+      content: _buildPaymentContent(
+          widget.pesanan, widget.metodePembayaran?.fee ?? 0),
     );
   }
 
@@ -214,7 +215,7 @@ class _PaymentSectionState extends State<PaymentSection> {
         if (!isInclPpn) const SizedBox(height: 6),
 
         // ── Baris PPN (exclude) ──────────────────────────
-        if (isExclPpn) ...[
+        if (isExclPpn && ppnAmount > 0) ...[
           PriceRow(
             label: ppnPercent > 0 ? 'PPN $ppnPercent%' : 'PPN',
             value: Helper.formatCurrency(ppnAmount),

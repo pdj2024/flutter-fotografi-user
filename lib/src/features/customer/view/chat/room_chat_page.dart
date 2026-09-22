@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
@@ -10,7 +12,7 @@ import 'package:mpjnew/src/data/isar/data/chat_message_entity.dart';
 import 'package:mpjnew/src/data/models/chat_model.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
 import 'package:mpjnew/src/data/models/history_order_model.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
@@ -18,7 +20,6 @@ import 'package:mpjnew/src/features/customer/view/payment/detail_pembayaran_page
 import 'package:mpjnew/src/features/customer/view/payment/waiting_payment_page.dart';
 import 'package:mpjnew/src/features/customer/view/vendor_bio_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/chat_provider.dart';
-import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/room_chat_provider.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_bubble.dart';
 import 'package:mpjnew/src/features/customer/widget/chat_package_card.dart';
@@ -602,14 +603,16 @@ class _RoomChatPageState extends State<RoomChatPage>
     final sorted = [...messages]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
     final grouped = Helper.groupMessagesByDate(sorted);
 
-    // Hitung active message IDs untuk assign GlobalKey (banner scroll-to)
-    final activeMessageIds = {
-      for (final e in [
-        ..._findActivePenawarans(entities),
-        ..._findActivePesanans(entities),
-      ])
-        e.messageId,
-    };
+    // Semua card penawaran/pesanan diberi key supaya bisa dituju scroll dari
+    // banner. Satu key hanya boleh dipakai sekali per build — GlobalKey
+    // duplikat membuat crash — jadi key jatuh ke kemunculan TERBARU (list
+    // sudah terurut terbaru-dulu). Key internal, tidak pernah ditampilkan.
+    final usedKeys = <String>{};
+    Widget withScrollKey(String keyId, Widget card) {
+      if (!usedKeys.add(keyId)) return card;
+      final key = _itemBubbleKeys.putIfAbsent(keyId, () => GlobalKey());
+      return KeyedSubtree(key: key, child: card);
+    }
 
     return SmartRefresher(
       enablePullUp: true,
@@ -663,14 +666,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                       ? () => _gantiMetodePembayaran(pesanan)
                       : null,
                 );
-                if (activeMessageIds.contains(entity!.messageId)) {
-                  final key = _itemBubbleKeys.putIfAbsent(
-                    'psn_${entity.pesanan!.noTrackingPesanan}',
-                    () => GlobalKey(),
-                  );
-                  return KeyedSubtree(key: key, child: card);
-                }
-                return card;
+                return withScrollKey(
+                    'psn_${entity!.pesanan!.noTrackingPesanan}', card);
               }
 
               // ── PENAWARAN → PESANAN (konversi) ───────────────────────
@@ -683,7 +680,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                   penawaran.noPesanan.isNotEmpty) {
                 // Pesanan embedded sudah ada → render langsung
                 if (pesanan != null) {
-                  return ChatPesananCard(
+                  final card = ChatPesananCard(
                     pesanan: pesanan,
                     roomId: widget.roomId ?? '',
                     customerId: userProv.customer?.noId ?? '',
@@ -695,6 +692,8 @@ class _RoomChatPageState extends State<RoomChatPage>
                         ? () => _gantiMetodePembayaran(pesanan)
                         : null,
                   );
+                  return withScrollKey(
+                      'psn_${pesanan.noTrackingPesanan}', card);
                 }
                 // Pesanan embedded belum ada (masih sync) → shimmer
                 return const Padding(
@@ -716,14 +715,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                   customerId: userProv.customer?.noId ?? '',
                   onTap: () => _handleOfferTap(context, penawaran, message),
                 );
-                if (activeMessageIds.contains(entity!.messageId)) {
-                  final key = _itemBubbleKeys.putIfAbsent(
-                    'pen_${entity.penawaran!.noId}',
-                    () => GlobalKey(),
-                  );
-                  return KeyedSubtree(key: key, child: card);
-                }
-                return card;
+                return withScrollKey('pen_${entity!.penawaran!.noId}', card);
               }
 
               // ── PENAWARAN / PESANAN BELUM TER-ENRICH ────────────────
@@ -834,40 +826,11 @@ class _RoomChatPageState extends State<RoomChatPage>
   }
 
   Future<void> _batalkanPesanan(dynamic pesanan) async {
-    try {
-      // Pesanan yang uangnya sudah masuk dibatalkan lewat jalur refund.
-      final prog =
-          (pesanan.statusProgresPesanan as String? ?? '').toLowerCase().trim();
-      final isRefundCase =
-          PesananProvider.isPaymentSettled(pesanan.statusBayar as String?) &&
-              (prog == 'persiapan' || prog == 'menunggu bayar');
-
-      if (isRefundCase) {
-        await PesananService().batalDenganRefund(pesanan as PesananModel);
-      } else {
-        await PesananService().batal(pesanan.noBukti);
-      }
-      final history = HistoryOrderService.createDibatalkan(
-        noOrder: pesanan.noBukti,
-        senderId: pesanan.idCustomer ?? '',
-        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
-      );
-      await HistoryOrderService().create(history);
-      if (!mounted) return;
-      context.read<PesananProvider>().refreshOrder(pesanan.noBukti);
-      // Re-fetch pesan agar embedded pesanan di Isar terupdate → card rebuild
-      final roomId = _roomChatProvider.activeRoomId;
-      if (roomId != null) {
-        await _chatProvider.loadMessages(roomId, forceRefresh: true);
-      }
-      if (!mounted) return;
-      CustomSnackbar.showSuccessSnackbar(
-        context,
-        'Pesanan berhasil dibatalkan.',
-      );
-    } catch (e) {
-      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
-    }
+    await showBatalPesananFlow(
+      context,
+      pesanan as PesananModel,
+      roomId: _roomChatProvider.activeRoomId,
+    );
   }
 
   void _gantiMetodePembayaran(dynamic pesanan) {
@@ -1123,16 +1086,54 @@ class _RoomChatPageState extends State<RoomChatPage>
     return result;
   }
 
-  void _scrollToItem(String keyId) {
-    final ctx = _itemBubbleKeys[keyId]?.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: 0.3,
+  /// Scroll ke card penawaran/pesanan dari banner item aktif.
+  ///
+  /// ListView hanya me-render item di sekitar layar, jadi card yang jauh
+  /// belum punya context. Kalau belum terlihat: kembali dulu ke pesan terbaru
+  /// (card bisa ada di bawah posisi sekarang), lalu naik bertahap sampai card
+  /// ter-render — di dekat puncak, [_onScroll] otomatis memuat pesan lama.
+  Future<void> _scrollToItem(String keyId) async {
+    if (_itemBubbleKeys[keyId]?.currentContext == null &&
+        _scrollController.hasClients &&
+        _scrollController.position.pixels > 0) {
+      await _scrollController.animateTo(
+        0,
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
       );
     }
+
+    for (var i = 0; i < 40; i++) {
+      if (!mounted) return;
+      final ctx = _itemBubbleKeys[keyId]?.currentContext;
+      if (ctx != null) {
+        await Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+        return;
+      }
+
+      if (!_scrollController.hasClients ||
+          _scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent) {
+        // Pesan lama masih dimuat — tunggu sebentar.
+        await Future.delayed(const Duration(milliseconds: 150));
+        continue;
+      }
+
+      // Langkah beranimasi linear → terlihat seperti satu scroll kontinu.
+      final pos = _scrollController.position;
+      await _scrollController.animateTo(
+        (pos.pixels + pos.viewportDimension * 0.8)
+            .clamp(0.0, pos.maxScrollExtent),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.linear,
+      );
+    }
+    debugPrint('[RoomChatPage] ⚠️ _scrollToItem: $keyId tidak ditemukan');
   }
 
   Widget _buildActiveItemsBanner(
@@ -1298,7 +1299,7 @@ class _RoomChatPageState extends State<RoomChatPage>
                   return InkWell(
                     onTap: () {
                       Navigator.pop(context);
-                      _scrollToItem(keyId);
+                      unawaited(_scrollToItem(keyId));
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(

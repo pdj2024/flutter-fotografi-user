@@ -31,17 +31,4 @@ class RefundRuleService {
       );
     }
   }
-
-  /// Pilih tier refund yang berlaku berdasarkan sisa jam sebelum tglRealisasi.
-  /// Jam_Limit adalah BATAS ATAS tiap bracket (bukan ambang minimal) — data
-  /// contoh: Jam_Limit 24→0%, 48→25%, 72→50% berarti:
-  ///   sisa jam ≤ 24        → tier Jam_Limit=24 (0%)
-  ///   24 < sisa jam ≤ 48   → tier Jam_Limit=48 (25%)
-  ///   48 < sisa jam ≤ 72   → tier Jam_Limit=72 (50%)
-  /// Ambil bracket TERKECIL yang batas atasnya >= sisaJam.
-  RefundRuleModel? resolveTier(List<RefundRuleModel> rules, double sisaJam) {
-    final eligible = rules.where((r) => sisaJam <= r.jamLimit).toList()
-      ..sort((a, b) => a.jamLimit.compareTo(b.jamLimit));
-    return eligible.isNotEmpty ? eligible.first : null;
-  }
 }

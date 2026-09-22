@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mpjnew/src/features/auth/services/user_provider.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
-import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/features/customer/view/history/detail_order_page_V2.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/history_order_provider.dart';
 import 'package:mpjnew/src/features/customer/view/history/finished_order_page.dart';
@@ -193,9 +191,10 @@ class _MainOrderPageState extends State<MainOrderPage> {
     });
 
     if (_selectedFilter == null) return active;
+    final group = _filterGroups[_selectedFilter] ?? [_selectedFilter!];
     return active
-        .where((o) =>
-            (o.statusProgresPesanan ?? 'menunggu bayar') == _selectedFilter)
+        .where(
+            (o) => group.contains(o.statusProgresPesanan ?? 'menunggu bayar'))
         .toList();
   }
 
@@ -263,37 +262,6 @@ class _MainOrderPageState extends State<MainOrderPage> {
             WaitingPaymentPage(paymentData: o),
             targetTabIndex: 2,
           );
-    }
-  }
-
-  /// Pesanan yang uangnya sudah masuk harus dibatalkan lewat jalur refund.
-  /// 'menunggu bayar' ikut dihitung: itu kasus pembayaran sudah settled di
-  /// Midtrans tapi server belum menggeser progress — uang tetap sudah masuk.
-  bool _isRefundCase(PesananModel o) {
-    final prog = (o.statusProgresPesanan ?? '').toLowerCase().trim();
-    return PesananProvider.isPaymentSettled(o.statusBayar) &&
-        (prog == 'persiapan' || prog == 'menunggu bayar');
-  }
-
-  Future<void> _batalkanPesanan(PesananModel o) async {
-    try {
-      if (_isRefundCase(o)) {
-        await PesananService().batalDenganRefund(o);
-      } else {
-        await PesananService().batal(o.noBukti);
-      }
-      final history = HistoryOrderService.createDibatalkan(
-        noOrder: o.noBukti,
-        senderId: o.idCustomer ?? '',
-        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
-      );
-      await HistoryOrderService().create(history);
-      if (!mounted) return;
-      await context.read<PesananProvider>().loadOrder(context);
-      CustomSnackbar.showSuccessSnackbar(
-          context, 'Pesanan berhasil dibatalkan.');
-    } catch (e) {
-      if (mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
     }
   }
 
@@ -440,11 +408,11 @@ class _MainOrderPageState extends State<MainOrderPage> {
       _ChipItem(
           value: 'menunggu bayar',
           label: OrderStatusFlow.displayLabel('menunggu bayar')),
-      _ChipItem(
-          value: 'persiapan', label: OrderStatusFlow.displayLabel('persiapan')),
-      _ChipItem(value: 'proses', label: OrderStatusFlow.displayLabel('proses')),
-      _ChipItem(value: 'review', label: OrderStatusFlow.displayLabel('review')),
-      _ChipItem(value: 'revisi', label: OrderStatusFlow.displayLabel('revisi')),
+      // "Proses" & "Review" masing-masing gabungan 2 status (lihat
+      // _filterGroups) -- label sengaja singkat, bukan displayLabel yang
+      // didesain untuk 1 status spesifik.
+      _ChipItem(value: 'proses', label: 'Proses'),
+      _ChipItem(value: 'review', label: 'Review'),
     ];
 
     return Container(
@@ -563,7 +531,7 @@ class _MainOrderPageState extends State<MainOrderPage> {
                               targetPage: 'RoomChatPage',
                             ),
                     onPay: () => _openPayment(o),
-                    onBatal: () => _batalkanPesanan(o),
+                    onBatal: () => showBatalPesananFlow(context, o),
                     // Hanya untuk pesanan yang BELUM dibayar — tanpa cek ini,
                     // pesanan berbayar yang masih menyimpan nomor VA akan ikut
                     // menampilkan opsi ganti metode di action sheet.
@@ -666,3 +634,12 @@ class _ChipItem {
   final String label;
   const _ChipItem({required this.value, required this.label});
 }
+
+// Key chip -> daftar status backend yang direpresentasikannya. Murni
+// pengelompokan tampilan filter -- field statusProgresPesanan tiap pesanan
+// TIDAK berubah, tetap persis persiapan/proses/review/revisi. "Menunggu
+// Pembayaran" TIDAK masuk grup manapun (tetap 1:1) -- lihat _filteredOrders.
+const Map<String, List<String>> _filterGroups = {
+  'proses': ['persiapan', 'proses'],
+  'review': ['review', 'revisi'],
+};

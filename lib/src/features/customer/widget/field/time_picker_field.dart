@@ -166,6 +166,8 @@ class _TimePickerFieldState extends State<TimePickerField> {
                     /// TIME PICKER
                     Expanded(
                       child: TimePickerSpinner(
+                        time: DateTime(
+                            2024, 1, 1, tempTime.hour, tempTime.minute),
                         is24HourMode: true,
                         spacing: 50,
                         itemHeight: 50,

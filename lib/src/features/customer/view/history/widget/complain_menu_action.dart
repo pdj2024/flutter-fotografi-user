@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:mpjnew/src/core/services/refund_rule_service.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/batal_pesanan_flow.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
-import 'package:mpjnew/src/data/models/refund_rule_model.dart';
-import 'package:mpjnew/src/features/customer/services/history_order_service.dart';
-import 'package:mpjnew/src/features/customer/services/pesanan_service.dart';
 import 'package:mpjnew/src/features/customer/view/complain/complain_thread_page.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/complain_provider.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/custom_snackbar.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -37,8 +32,7 @@ class ComplainMenuAction extends StatelessWidget {
     return Consumer2<PesananProvider, ComplainProvider>(
       builder: (context, pesananProvider, complainProv, _) {
         final order =
-            pesananProvider.getPesananByNoOrder(pesanan.noBukti) ??
-                pesanan;
+            pesananProvider.getPesananByNoOrder(pesanan.noBukti) ?? pesanan;
         final noOrder = pesanan.noBukti;
         final checking = complainProv.isChecking(noOrder);
         final error = complainProv.getCheckError(noOrder);
@@ -147,55 +141,6 @@ class ComplainMenuAction extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmBatalkan(BuildContext context, PesananModel order) async {
-    final needsRefund = PesananProvider.needsRefund(order);
-    RefundRuleModel? refundTier;
-
-    if (needsRefund) {
-      try {
-        final rules = await RefundRuleService().getAll();
-        final sisaJam = order.tglRealisasi
-            .difference(DateTime.now())
-            .inHours
-            .toDouble();
-        refundTier = RefundRuleService().resolveTier(rules, sisaJam);
-      } catch (e) {
-        debugPrint('[ComplainMenuAction] ⚠️ Gagal ambil aturan refund: $e');
-      }
-    }
-
-    if (!context.mounted) return;
-
-    ConfirmDialog.showBatalkanPesananDialog(
-      context: context,
-      isRefund: needsRefund,
-      refundTier: refundTier,
-      onConfirm: () => _batalkanPesanan(context, order),
-    );
-  }
-
-
-  Future<void> _batalkanPesanan(BuildContext context, PesananModel order) async {
-    try {
-      if (PesananProvider.needsRefund(order)) {
-        await PesananService().batalDenganRefund(order);
-      } else {
-        await PesananService().batal(order.noBukti);
-      }
-      final history = HistoryOrderService.createDibatalkan(
-        noOrder: order.noBukti,
-        senderId: order.idCustomer,
-        customDeskripsi: 'Pesanan ini dibatalkan oleh customer.',
-      );
-      await HistoryOrderService().create(history);
-
-      if (!context.mounted) return;
-      await context.read<PesananProvider>().refreshOrder(order.noBukti);
-
-      if (!context.mounted) return;
-      CustomSnackbar.showSuccessSnackbar(context, 'Pesanan berhasil dibatalkan.');
-    } catch (e) {
-      if (context.mounted) CustomSnackbar.showErrorSnackbar(context, e.toString());
-    }
-  }
+  Future<void> _confirmBatalkan(BuildContext context, PesananModel order) =>
+      showBatalPesananFlow(context, order);
 }

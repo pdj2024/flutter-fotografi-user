@@ -9,6 +9,7 @@ class DatePickerField extends StatefulWidget {
   final String label;
   final DateTime? selectedDate;
   final String? errorMessage;
+  final String? placeholder;
   final bool isPenawaran;
 
   /// Override eksplisit untuk minDate picker. Kalau diisi, ini menang atas
@@ -23,6 +24,7 @@ class DatePickerField extends StatefulWidget {
     required this.label,
     required this.selectedDate,
     required this.onDateSelected,
+    this.placeholder = "",
     this.isPenawaran = false,
     this.errorMessage,
     this.minDate,
@@ -74,14 +76,23 @@ class _DatePickerFieldState extends State<DatePickerField> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Text(
-              chosenDate != null
-                  ? DateFormat("dd-MM-yyyy").format(chosenDate!)
-                  : "Pilih tanggal lahir",
-              style: TextStyle(
-                fontSize: 15,
-                color: chosenDate != null ? Colors.black : Colors.grey,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  chosenDate != null
+                      ? DateFormat("dd-MM-yyyy").format(chosenDate!)
+                      : widget.placeholder ?? '',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: chosenDate != null ? Colors.black : Colors.grey,
+                  ),
+                ),
+                const Icon(
+                  Icons.calendar_month_outlined,
+                  color: Colors.grey,
+                ),
+              ],
             ),
           ),
         ),

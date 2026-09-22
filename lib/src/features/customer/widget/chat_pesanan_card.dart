@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
+import 'package:mpjnew/src/core/utils/deadline_helper.dart';
 import 'package:mpjnew/src/data/hive_entity/paket_model.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/extend_deadline_flow.dart';
 
 class ChatPesananCard extends StatelessWidget {
   final PesananModel pesanan;
@@ -184,22 +185,6 @@ class ChatPesananCard extends StatelessWidget {
                         ],
                       ],
                     ),
-                    // Menu ⋮ untuk batalkan / ganti metode
-                    if (_canShowMenu()) ...[
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => _showActionSheet(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Icon(Icons.more_vert,
-                              size: 16, color: Colors.black54),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ],
@@ -227,6 +212,20 @@ class ChatPesananCard extends StatelessWidget {
                   "$waktu, $tanggal",
                 ),
                 const SizedBox(height: 12),
+
+                // Estimasi tanggal pengerjaan selesai (batas pengerjaan) --
+                // field TERPISAH dari Tanggal Realisasi di atas (itu tanggal
+                // sesi pemotretan, tidak berubah). Cuma tampil kalau vendor
+                // sudah menentukan estimasinya.
+                if (pesanan.tglPengerjaanMax != null) ...[
+                  _buildInfoRow(
+                    Icons.event_available_outlined,
+                    "Estimasi Selesai",
+                    "${Helper.toLocalTime(pesanan.tglPengerjaanMax!)}, "
+                        "${Helper.formatTanggal(pesanan.tglPengerjaanMax!)}",
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // Lokasi
                 _buildInfoRow(
@@ -283,31 +282,59 @@ class ChatPesananCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _getButtonColor(),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: onTap,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(_getButtonIcon(), size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      _getButtonText(),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+              child: Row(
+                children: [
+                  // Menu ⋮ untuk batalkan / perpanjang / ganti metode --
+                  // sengaja tampil netral (outline abu-abu), bukan warna
+                  // solid seperti tombol utama, supaya tidak mencolok.
+                  if (_canShowMenu()) ...[
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          side: BorderSide(color: Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => _showActionSheet(context),
+                        child: Icon(Icons.more_vert,
+                            size: 18, color: Colors.grey.shade600),
                       ),
                     ),
+                    const SizedBox(width: 8),
                   ],
-                ),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _getButtonColor(),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: onTap,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(_getButtonIcon(), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _getButtonText(),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -620,7 +647,8 @@ class ChatPesananCard extends StatelessWidget {
 
     if (orderStatus == 'batal' || orderStatus == 'expired') {
       return 'Lihat Detail';
-    } else if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
+    } else if (paymentStatus == 'belum bayar' &&
+        progressStatus == 'menunggu bayar') {
       return 'Bayar Sekarang';
     } else if (PesananProvider.isPaymentSettled(pesanan.statusBayar)) {
       if (progressStatus == 'selesai') {
@@ -657,7 +685,8 @@ class ChatPesananCard extends StatelessWidget {
 
     if (orderStatus == 'batal' || orderStatus == 'expired') {
       return Icons.info_outline;
-    } else if (paymentStatus == 'belum bayar' && progressStatus == 'menunggu bayar') {
+    } else if (paymentStatus == 'belum bayar' &&
+        progressStatus == 'menunggu bayar') {
       return Icons.payment;
     } else if (progressStatus == 'review' || progressStatus == 'revisi') {
       return Icons.rate_review_outlined;
@@ -672,25 +701,18 @@ class ChatPesananCard extends StatelessWidget {
   // BATALKAN ACTIONS
   // ========================================
 
-  bool _canShowMenu() {
-    final orderStatus = pesanan.status?.toLowerCase() ?? '';
-    final progressStatus = pesanan.statusProgresPesanan?.toLowerCase() ?? '';
-    final bayar = pesanan.statusBayar?.toLowerCase() ?? '';
-    final isPaid = bayar == 'settlement' || bayar == 'capture';
+  /// Aturannya dipegang PesananProvider.canCancel supaya identik dengan kartu
+  /// pesanan di halaman list dan menu di halaman detail — dulu kartu ini punya
+  /// aturan sendiri yang lebih longgar dan masih meloloskan status 'proses'.
+  bool get _canBatalkan => PesananProvider.canCancel(pesanan);
 
-    // Pesanan berbayar tetap boleh dibatalkan selama pengerjaan belum mulai
-    // (dana nanti direfund). Selain itu, jalur berbayar tertutup.
-    if (isPaid &&
-        progressStatus != 'persiapan' &&
-        progressStatus != 'menunggu bayar') {
-      return false;
-    }
-
-    return orderStatus != 'batal' &&
-        orderStatus != 'expired' &&
-        progressStatus != 'selesai' &&
-        progressStatus != 'dibatalkan';
+  bool get _canExtendDeadline {
+    final status = pesanan.statusProgresPesanan?.trim().toLowerCase();
+    return pesanan.tglPengerjaanMax != null &&
+        kDeadlineEligibleStatuses.contains(status);
   }
+
+  bool _canShowMenu() => _canBatalkan || _canExtendDeadline;
 
   void _showActionSheet(BuildContext context) {
     showModalBottomSheet(
@@ -750,7 +772,7 @@ class ChatPesananCard extends StatelessWidget {
                 ),
               ),
               Divider(height: 1, color: Colors.grey.shade200),
-              if (onGantiMetode != null)
+              if (onGantiMetode != null && pesanan.statusBayar == "pending")
                 ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
@@ -773,42 +795,61 @@ class ChatPesananCard extends StatelessWidget {
                     onGantiMetode!();
                   },
                 ),
-              ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEE2E2),
-                    borderRadius: BorderRadius.circular(10),
+              if (_canExtendDeadline)
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.event_available_outlined,
+                        color: Colors.orange.shade700, size: 22),
                   ),
-                  child: const Icon(Icons.cancel_outlined,
-                      color: Color(0xFFDC2626), size: 22),
+                  title: const Text('Perpanjang Batas Pengerjaan',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+                  trailing:
+                      Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showExtendDeadlineFlow(context, pesanan, roomId: roomId);
+                  },
                 ),
-                title: const Text('Batalkan Pesanan',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: Color(0xFFDC2626))),
-                trailing:
-                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showConfirmBatal(context);
-                },
-              ),
+              if (_canBatalkan)
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.cancel_outlined,
+                        color: Color(0xFFDC2626), size: 22),
+                  ),
+                  title: const Text('Batalkan Pesanan',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Color(0xFFDC2626))),
+                  trailing:
+                      Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    // Dialog konfirmasi + info refund dipegang
+                    // showBatalPesananFlow, bukan kartu ini.
+                    onBatal?.call();
+                  },
+                ),
               const SizedBox(height: 8),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  void _showConfirmBatal(BuildContext context) {
-    ConfirmDialog.showBatalkanPesananDialog(
-      context: context,
-      onConfirm: () => onBatal?.call(),
     );
   }
 

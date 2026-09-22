@@ -7,13 +7,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mpjnew/src/core/constants/constants.dart';
 import 'package:mpjnew/src/core/constants/helper.dart';
-import 'package:mpjnew/src/core/services/refund_rule_service.dart';
+import 'package:mpjnew/src/core/utils/deadline_helper.dart';
 import 'package:mpjnew/src/data/hive_entity/pesanan_model.dart';
-import 'package:mpjnew/src/data/models/refund_rule_model.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/card_button.dart';
 import 'package:mpjnew/src/features/customer/view/history/widget/status_config.dart';
 import 'package:mpjnew/src/features/customer/viewmodels/pesanan_provider.dart';
-import 'package:mpjnew/src/features/customer/widget/dialog/confirm_dialog.dart';
+import 'package:mpjnew/src/features/customer/widget/dialog/extend_deadline_flow.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PaymentTimerStatus {
@@ -67,10 +66,10 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
 
   /// Pesanan sudah dibayar tapi pengerjaan belum dimulai — masih boleh
   /// dibatalkan customer, dengan konsekuensi dana direfund.
-  bool get _canCancelPaid =>
-      PesananProvider.isPaymentSettled(widget.order.statusBayar) &&
-      (_statusStr == 'persiapan' || _isSettledPending);
+  bool get _canCancelPaid => PesananProvider.needsRefund(widget.order);
   bool get _isReview => _statusStr == 'review';
+
+  Duration? get _remaining => remainingIfNearDeadline(widget.order);
 
   /// Pembayaran sudah expired — deteksi Snap dan Core.
   /// Snap  : cek linkSnap + expiryTime / umur > 30 hari.
@@ -256,6 +255,12 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                   _buildProgressBanner(),
                 ],
 
+                // Reminder batas pengerjaan
+                if (_remaining != null) ...[
+                  const SizedBox(height: 12),
+                  _buildDeadlineReminder(),
+                ],
+
                 // Payment Timer/Expired Banner — tampil untuk menunggu bayar
                 if (_isUnpaid &&
                     (_isPaymentExpired || _timerStatus != null)) ...[
@@ -411,7 +416,10 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                     Icon(Icons.chevron_right, color: Colors.grey.shade400),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showConfirmBatal(context);
+                  // Dialog konfirmasi + info refund dipegang showBatalPesananFlow
+                  // (lihat batal_pesanan_flow.dart) supaya semua titik masuk
+                  // pembatalan menampilkan hal yang sama.
+                  widget.onBatal?.call();
                 },
               ),
               const SizedBox(height: 8),
@@ -421,28 +429,6 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
       ),
     );
   }
-
-  Future<void> _showConfirmBatal(BuildContext context) async {
-    RefundRuleModel? refundTier;
-
-    if (_canCancelPaid) {
-      try {
-        final rules = await RefundRuleService().getAll();
-        final sisaJam = widget.order.tglRealisasi
-            .difference(DateTime.now())
-            .inHours
-            .toDouble();
-        refundTier = RefundRuleService().resolveTier(rules, sisaJam);
-      } catch (e) {
-        debugPrint('[OrderHistoryCard] ⚠️ Gagal ambil aturan refund: $e');
-      }
-    }
-
-    if(!context.mounted) return;
-
-    ConfirmDialog.showBatalkanPesananDialog(context: context, isRefund: _canCancelPaid, refundTier: refundTier, onConfirm: () => widget.onBatal?.call(),);
-  }
-
 
   // ─── Vendor row ────────────────────────────────────────────────
   Widget _buildVendorRow() {
@@ -555,6 +541,63 @@ class _OrderHistoryCardState extends State<OrderHistoryCard> {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Deadline reminder ──────────────────────────────────────────
+  Widget _buildDeadlineReminder() {
+    final remaining = _remaining!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timer_outlined, size: 15, color: Colors.red.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sisa waktu pengerjaan: ${formatRemainingDeadline(remaining)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.red.shade700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlineButton(
+                icon: Icons.chat_outlined,
+                label: 'Ingatkan Vendor',
+                onTap: widget.onChat,
+                color: Colors.red.shade700,
+                borderColor: Colors.red.shade300,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PrimaryButton(
+                  icon: Icons.event_available_outlined,
+                  label: 'Perpanjang',
+                  onTap: () => showExtendDeadlineFlow(context, widget.order),
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
           ),
         ],
       ),

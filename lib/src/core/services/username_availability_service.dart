@@ -11,7 +11,8 @@ class UsernameAvailabilityService {
   /// [excludeNoId] supaya user yang menyimpan tanpa mengubah username
   /// sendiri tidak dianggap "sudah dipakai" oleh datanya sendiri.
   Future<bool> isTaken(String username, {String? excludeNoId}) async {
-    final customerMatches = await _customerService.getByUsername(username: username);
+    final customerMatches =
+        await _customerService.getByUsername(username: username);
     final takenByCustomer = customerMatches.any((c) => c.noId != excludeNoId);
     if (takenByCustomer) return true;
     return _isTakenInVendor(username);
@@ -19,10 +20,11 @@ class UsernameAvailabilityService {
 
   Future<bool> _isTakenInVendor(String username) async {
     final response = await apiClient
-        .get('/vendor/getAll', queryParameters: {'username': username});
+        .get('/vendor/get-byUsername', queryParameters: {'username': username});
     if (response.statusCode == 204) return false;
     if (response.statusCode != 200) {
-      throw Exception('Gagal memeriksa username vendor (${response.statusCode})');
+      throw Exception(
+          'Gagal memeriksa username vendor (${response.statusCode})');
     }
     final data = jsonDecode(response.body)['Data'];
     if (data == null) return false;
