@@ -38,7 +38,7 @@ android {
     defaultConfig {
         applicationId = "app.pacificdatajaya.fotograficustomer"
         minSdkVersion flutter.minSdkVersion
-        targetSdk 35
+        targetSdk 36
         versionCode flutter.versionCode
         versionName flutter.versionName
         ndk {
@@ -54,8 +54,8 @@ android {
             // 3. GANTI signingConfig dari debug menjadi release
             signingConfig signingConfigs.release
             
-            minifyEnabled false // Set true jika ingin mengecilkan ukuran app (butuh testing extra)
-            shrinkResources false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

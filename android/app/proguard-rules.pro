@@ -9,6 +9,12 @@
 -keep class com.google.gson.internal.bind.TypeAdapters { *; }
 -keep class com.google.gson.internal.bind.TypeAdapters$* { *; }
 
+# DateTypeAdapter tidak ada di versi Gson yang ke-resolve (dipanggil dari
+# dependency lain lewat reflection) — R8 melaporkan "missing class", bukan
+# "class dihapus". -keep tidak bisa menahan kelas yang memang tidak ada;
+# -dontwarn cukup karena path kode ini tidak pernah benar-benar dieksekusi.
+-dontwarn com.google.gson.internal.bind.DateTypeAdapter
+
 # Gson TypeAdapter
 -keepclassmembers class * implements com.google.gson.TypeAdapter {
     <init>(...);
@@ -34,12 +40,19 @@
 -keep class retrofit2.** { *; }
 
 # Flutter
+# CATATAN: dulu ada blanket "-keep class io.flutter.** { *; }" dan
+# "-keep class io.flutter.plugins.** { *; }" di sini. Dua baris itu dihapus
+# karena mencakup SELURUH kode Flutter engine + kode Java/Kotlin semua plugin
+# (io.flutter.plugins.** = tempat generated code semua plugin tinggal), jadi
+# hampir seluruh DEX app jadi tidak pernah di-obfuscate R8 — inilah penyebab
+# persentase Obfuscation rendah di Play Console. Flutter engine & AAR plugin
+# sudah bawa consumer-proguard-rules sendiri, jadi tidak perlu di-keep manual
+# di sini. Baris di bawah (native <methods>) sudah cukup untuk lindungi
+# binding JNI Flutter engine.
 -keep class io.flutter.app.** { *; }
 -keep class io.flutter.plugin.** { *; }
 -keep class io.flutter.util.** { *; }
 -keep class io.flutter.view.** { *; }
--keep class io.flutter.** { *; }
--keep class io.flutter.plugins.** { *; }
 
 # Keep all native methods
 -keepclassmembers class * {

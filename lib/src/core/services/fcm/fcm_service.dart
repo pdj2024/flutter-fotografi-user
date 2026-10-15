@@ -28,7 +28,9 @@ class FCMService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  late ChatNotificationHandler _chatHandler;
+  // Nullable: session-expired bisa terpanggil sebelum initialize() selesai
+  // (cold start sebagai guest), jadi handler belum tentu ada.
+  ChatNotificationHandler? _chatHandler;
   late PaymentNotificationHandler _paymentHandler;
   late ProgressNotificationHandler _progressHandler;
   late ComplainNotificationHandler _complainHandler;
@@ -325,7 +327,7 @@ class FCMService {
         case NotificationType.chat:
           // ✅ ChatNotificationHandler menentukan read/received
           //    berdasarkan _activeRoomId vs roomId di payload
-          await _chatHandler.handleForegroundMessage(message);
+          await _chatHandler?.handleForegroundMessage(message);
           break;
         case NotificationType.payment:
           await _paymentHandler.handleMessage(message);
@@ -480,11 +482,11 @@ class FCMService {
   // =========================================
 
   void clearMessagesForSender(String senderId) {
-    _chatHandler.clearMessagesForSender(senderId);
+    _chatHandler?.clearMessagesForSender(senderId);
   }
 
   void clearAllMessageGroups() {
-    _chatHandler.clearAllMessageGroups();
+    _chatHandler?.clearAllMessageGroups();
   }
 
   Future<void> subscribeToTopic(String topic) async {
