@@ -314,7 +314,7 @@ class _LaporanDialogState extends State<_LaporanDialog> {
     const phoneNumber = '62895353837000'; // format internasional tanpa +
 
     final message = '''
-    *Laporan & Keluhan - Fotografi Vendor*
+    *Laporan & Keluhan - PictMax*
 
     *Judul:* $title
 

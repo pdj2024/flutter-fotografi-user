@@ -473,7 +473,21 @@ class MyApp extends StatelessWidget {
     debugPrint('✅ Session expired handlers registered');
   }
 
+  static bool _handlingSessionExpired = false;
+
   void _handleSessionExpired(BuildContext context) async {
+    // Beberapa request paralel bisa 401 bersamaan → tanpa guard, cleanup
+    // dan reset navigasi jalan berkali-kali.
+    if (_handlingSessionExpired) return;
+    _handlingSessionExpired = true;
+    try {
+      await _doHandleSessionExpired(context);
+    } finally {
+      _handlingSessionExpired = false;
+    }
+  }
+
+  Future<void> _doHandleSessionExpired(BuildContext context) async {
     debugPrint('🚪 [MyApp] Handling session expired...');
     // Tangkap SEBELUM apapun dibersihkan: kalau customer sudah null di sini,
     // sesi ini memang tidak pernah benar-benar login (mis. guest yang cache

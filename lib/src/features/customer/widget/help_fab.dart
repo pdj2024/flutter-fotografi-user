@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:mpjnew/src/core/services/auth_service_instance.dart';
 import 'package:mpjnew/src/core/services/default_value_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -38,6 +39,9 @@ class _HelpFabState extends State<HelpFab> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _loadChatHelp() async {
+    // Guest belum punya token → endpoint ini pasti 401 lalu memicu
+    // refresh gagal → force logout. Pakai fallback saja.
+    if (!await authService.hasValidToken()) return;
     try {
       final config = await DefaultValueService().getAppConfig();
       if (mounted) setState(() => _chatHelp = config.chatHelp);

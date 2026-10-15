@@ -1,6 +1,6 @@
 {
-    "name": "mpjnew",
-    "short_name": "mpjnew",
+    "name": "PictMax",
+    "short_name": "PictMax",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

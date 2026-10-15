@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ikon notifikasi dirujuk lewat string nama (AndroidInitializationSettings),
+     bukan @drawable, jadi shrinkResources membuangnya di release. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_pacific_data_jaya"
+    tools:shrinkMode="safe" />

@@ -308,7 +308,13 @@ class AuthService {
       // Coba hapus session di backend sebelum clear lokal
       await _deleteUserSession();
       await tokenStorage.clearAll();
-      await _googleSignIn.disconnect();
+      // Guest/sudah signed-out → disconnect() melempar PlatformException;
+      // jangan sampai membatalkan pembersihan state di bawahnya.
+      try {
+        await _googleSignIn.disconnect();
+      } catch (e) {
+        debugPrint("⚠️ [AuthService] Google disconnect dilewati: $e");
+      }
       await _clearLoginState();
       _currentUser = null;
       _hasValidTokenSession = false;
